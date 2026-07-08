@@ -65,4 +65,28 @@ export class ScamsController {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     return this.scamsService.toggleReaction(id, body.type, userId, ip as string);
   }
+
+  @Get('countries')
+  @ApiOperation({ summary: '전체 국가 목록 조회' })
+  async getCountries() {
+    return this.scamsService.getCountries();
+  }
+
+  @Get('cities/:countryCode')
+  @ApiOperation({ summary: '특정 국가의 도시 목록 조회' })
+  async getCities(@Param('countryCode') countryCode: string) {
+    return this.scamsService.getCities(countryCode);
+  }
+
+  @Get('regions/all')
+  @ApiOperation({ summary: '전체 세부 지역 목록 조회 (지도 마커 로딩용)' })
+  async getAllRegions() {
+    return this.scamsService.getAllRegions();
+  }
+
+  @Get('regions/:cityId')
+  @ApiOperation({ summary: '특정 도시의 세부 지역 목록 조회' })
+  async getRegions(@Param('cityId') cityId: string) {
+    return this.scamsService.getRegions(cityId);
+  }
 }

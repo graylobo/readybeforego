@@ -166,4 +166,42 @@ export class ScamsRepository {
       })
       .where(eq(schema.scamInfos.id, scamInfoId));
   }
+
+  async findAllCountries(tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select().from(schema.countries).orderBy(schema.countries.name);
+  }
+
+  async findCitiesByCountry(countryCode: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select()
+      .from(schema.cities)
+      .where(eq(schema.cities.countryCode, countryCode))
+      .orderBy(schema.cities.name);
+  }
+
+  async findRegionsByCity(cityId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select()
+      .from(schema.regions)
+      .where(eq(schema.regions.cityId, cityId))
+      .orderBy(schema.regions.name);
+  }
+
+  async findAllRegions(tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select({
+      id: schema.regions.id,
+      cityId: schema.regions.cityId,
+      name: schema.regions.name,
+      nameEn: schema.regions.nameEn,
+      latitude: schema.regions.latitude,
+      longitude: schema.regions.longitude,
+      cityName: schema.cities.name,
+      countryCode: schema.cities.countryCode,
+    })
+    .from(schema.regions)
+    .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
+    .orderBy(schema.regions.name);
+  }
 }

@@ -1,7 +1,399 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { scamsApi, ScamInfo, Region } from "@/lib/api/scams";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Comments } from "@/components/comments/comments";
+import { ReportDialog } from "@/components/common/report-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { 
+  AlertTriangle, 
+  MapPin, 
+  ThumbsUp, 
+  ThumbsDown, 
+  MessageSquare, 
+  Flag, 
+  ExternalLink,
+  Info,
+  Search,
+  Compass
+} from "lucide-react";
+import { toast } from "sonner";
+
+// Prevent SSR window references for Leaflet map component
+const HogaengnoMap = dynamic(() => import("@/components/map/HogaengnoMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full bg-slate-50 flex flex-col items-center justify-center gap-4 animate-pulse">
+      <Compass className="w-12 h-12 text-slate-400 animate-spin" />
+      <span className="text-sm font-semibold text-slate-500">인터랙티브 지도 불러오는 중...</span>
+    </div>
+  ),
+});
+
+// Category helper maps
+const CATEGORY_MAP: Record<string, { label: string; color: string; icon: string }> = {
+  FORCED_SHOPPING: { label: "🛍️ 호객/강매", color: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300", icon: "🛍️" },
+  DRUG_HAZARD: { label: "💊 약물 위험", color: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300", icon: "💊" },
+  LIES_TOURISM: { label: "🗣️ 가짜 관광정보", color: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300", icon: "🗣️" },
+  FAKE_TAXI: { label: "🚕 가짜 택시/바가지", color: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/30 dark:text-sky-300", icon: "🚕" },
+  OVERCHARGING: { label: "💸 바가지 요금", color: "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300", icon: "💸" },
+};
+
+function getCategoryInfo(cat: string) {
+  return CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
+}
 
 export default function Home() {
+  const queryClient = useQueryClient();
+  const {
+    selectedCountryCode,
+    selectedCityId,
+    selectedRegionId,
+    selectedRegion,
+    setSelectedCountryCode,
+    setSelectedCityId,
+    setSelectedRegionId,
+    setSelectedRegion,
+    setMapCenter,
+    setMapZoom,
+    resetSelections,
+  } = useScamMapStore();
+
+  const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
+  const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
+
+  // Queries
+  const { data: countries = [] } = useQuery({
+    queryKey: ["countries"],
+    queryFn: () => scamsApi.getCountries(),
+  });
+
+  const { data: cities = [], isPending: isCitiesPending } = useQuery({
+    queryKey: ["cities", selectedCountryCode],
+    queryFn: () => scamsApi.getCities(selectedCountryCode!),
+    enabled: !!selectedCountryCode,
+  });
+
+  const { data: regions = [], isPending: isRegionsPending } = useQuery({
+    queryKey: ["regions", selectedCityId],
+    queryFn: () => scamsApi.getRegions(selectedCityId!),
+    enabled: !!selectedCityId,
+  });
+
+  const { data: scams = [], isPending: isScamsPending } = useQuery({
+    queryKey: ["scams", selectedRegionId],
+    queryFn: () => scamsApi.getScamsByRegion(selectedRegionId!),
+    enabled: !!selectedRegionId,
+  });
+
+  // Upvote/Downvote mutation
+  const reactionMutation = useMutation({
+    mutationFn: ({ scamId, type }: { scamId: string; type: "like" | "dislike" }) =>
+      scamsApi.toggleReaction(scamId, type),
+    onSuccess: (data) => {
+      // Invalidate target region warnings list to trigger live redraw
+      queryClient.invalidateQueries({ queryKey: ["scams", selectedRegionId] });
+      toast.success("반응이 정상적으로 반영되었습니다.");
+    },
+    onError: () => {
+      toast.error("반응 처리에 실패했습니다. 로그인 상태를 확인해 주세요.");
+    },
+  });
+
+  // Handlers
+  const handleCountryChange = (code: string) => {
+    setSelectedCountryCode(code);
+    setSelectedCityId(null);
+    setSelectedRegionId(null);
+    setSelectedRegion(null);
+  };
+
+  const handleCityChange = (cityId: string) => {
+    const city = cities.find(c => c.id === cityId);
+    setSelectedCityId(cityId);
+    setSelectedRegionId(null);
+    setSelectedRegion(null);
+    if (city) {
+      setMapCenter([city.latitude, city.longitude]);
+      setMapZoom(11);
+    }
+  };
+
+  const handleRegionChange = (regionId: string) => {
+    const region = regions.find(r => r.id === regionId);
+    setSelectedRegionId(regionId);
+    if (region) {
+      setSelectedRegion(region);
+      setMapCenter([region.latitude, region.longitude]);
+      setMapZoom(14);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background font-sans">
+    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background font-sans">
+      
+      {/* Left Sidebar Panel */}
+      <div className="w-full md:w-[450px] flex flex-col border-r border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
+        
+        {/* Branding & Selector Header */}
+        <div className="p-6 border-b border-border space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🚨</span>
+              <h1 className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-red-600 to-amber-600 bg-clip-text text-transparent cursor-pointer" onClick={resetSelections}>
+                Hogaengno
+              </h1>
+            </div>
+            <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400">
+              안전 여행 가이드
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            여행지의 호객, 바가지, 소매치기 사기 사례를 지도에서 한눈에 확인하고 대처법을 공유해 보세요.
+          </p>
+
+          {/* Hierarchical selectors */}
+          <div className="grid grid-cols-3 gap-2 pt-2">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">국가</label>
+              <Select value={selectedCountryCode || ""} onValueChange={handleCountryChange}>
+                <SelectTrigger className="w-full text-xs cursor-pointer">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map((c) => (
+                    <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">도시</label>
+              <Select 
+                value={selectedCityId || ""} 
+                onValueChange={handleCityChange}
+                disabled={!selectedCountryCode || isCitiesPending}
+              >
+                <SelectTrigger className="w-full text-xs cursor-pointer">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cities.map((city) => (
+                    <SelectItem key={city.id} value={city.id} className="cursor-pointer">
+                      {city.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">세부 지역</label>
+              <Select 
+                value={selectedRegionId || ""} 
+                onValueChange={handleRegionChange}
+                disabled={!selectedCityId || isRegionsPending}
+              >
+                <SelectTrigger className="w-full text-xs cursor-pointer">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {regions.map((r) => (
+                    <SelectItem key={r.id} value={r.id} className="cursor-pointer">
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Side Content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {!selectedRegionId ? (
+            // Default Welcome View
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/20 flex items-center justify-center border border-amber-100 dark:border-amber-900/30">
+                <Compass className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-base text-card-foreground">여행할 지역을 선택해 주세요</h3>
+                <p className="text-xs text-muted-foreground max-w-[280px] leading-normal">
+                  위의 검색기 또는 지도의 붉은색 알림 마커를 클릭하여 현지 사기 경보를 확인하세요.
+                </p>
+              </div>
+            </div>
+          ) : (
+            // Region Details & Card Feed
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Active Region Header */}
+              <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center gap-2 shrink-0">
+                <MapPin className="w-4 h-4 text-red-600" />
+                <h2 className="font-bold text-sm text-card-foreground">
+                  {selectedRegion?.name} <span className="text-xs font-normal text-muted-foreground">주의 정보</span>
+                </h2>
+              </div>
+
+              {/* Feed Container */}
+              <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-200">
+                {isScamsPending ? (
+                  // Card Loading Skeletons
+                  <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                      <Card key={i} className="border-border">
+                        <CardHeader className="space-y-2 p-4">
+                          <Skeleton className="h-4 w-1/4" />
+                          <Skeleton className="h-6 w-3/4" />
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0 space-y-2">
+                          <Skeleton className="h-16 w-full" />
+                          <Skeleton className="h-10 w-full" />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : scams.length === 0 ? (
+                  // Empty Warnings List
+                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
+                    <Info className="w-8 h-8 text-slate-300" />
+                    <p className="text-xs text-muted-foreground">이 지역에 제보된 사기 피해 사실이 없습니다.</p>
+                  </div>
+                ) : (
+                  // Warnings Feed
+                  <div className="space-y-4 pb-8">
+                    {scams.map((scam) => {
+                      const cat = getCategoryInfo(scam.scamCategory);
+                      return (
+                        <Card key={scam.id} className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md">
+                          <CardHeader className="p-4 pb-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                                {cat.label}
+                              </Badge>
+                              {scam.sourceUrl && (
+                                <a 
+                                  href={scam.sourceUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                                >
+                                  출처 보기 <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                            </div>
+                            <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
+                          </CardHeader>
+                          
+                          <CardContent className="p-4 pt-0 pb-3 space-y-3">
+                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                              {scam.description}
+                            </p>
+
+                            {scam.avoidanceTip && (
+                              <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
+                                <h4 className="font-bold flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
+                                  대처법 & 예방법
+                                </h4>
+                                <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
+                              </div>
+                            )}
+
+                            {/* Card Footer Actions */}
+                            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
+                              
+                              {/* Reactions (Likes/Dislikes) */}
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
+                                  onClick={() => reactionMutation.mutate({ scamId: scam.id, type: "like" })}
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5 text-slate-500" />
+                                </Button>
+                                <span className="font-bold text-[11px] text-slate-700 min-w-[12px] text-center">{scam.upvoteCount}</span>
+
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
+                                  onClick={() => reactionMutation.mutate({ scamId: scam.id, type: "dislike" })}
+                                >
+                                  <ThumbsDown className="w-3.5 h-3.5 text-slate-500" />
+                                </Button>
+                                <span className="text-[11px] text-slate-500 min-w-[12px] text-center">{scam.downvoteCount}</span>
+                              </div>
+
+                              {/* Comment and Report triggers */}
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-7 gap-1 text-slate-600 cursor-pointer hover:bg-slate-100"
+                                  onClick={() => setActiveCommentScamId(activeCommentScamId === scam.id ? null : scam.id)}
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  의견 나누기
+                                </Button>
+                                
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full text-slate-400 hover:text-red-500 hover:bg-slate-100 cursor-pointer"
+                                  onClick={() => setActiveReportScamId(scam.id)}
+                                >
+                                  <Flag className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Collapsible Discussion Panel */}
+                            {activeCommentScamId === scam.id && (
+                              <div className="border-t border-slate-100 dark:border-slate-800 pt-2 transition-all duration-300">
+                                <Comments 
+                                  targetType="scam_info" 
+                                  targetId={scam.id} 
+                                  allowAnonymous={true} 
+                                />
+                              </div>
+                            )}
+                          </CardContent>
+
+                          {/* Flag Dialog */}
+                          <ReportDialog
+                            isOpen={activeReportScamId === scam.id}
+                            onClose={() => setActiveReportScamId(null)}
+                            targetType="SCAM_INFO"
+                            targetId={scam.id}
+                          />
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Map Canvas */}
+      <div className="flex-1 h-[50vh] md:h-full relative z-0">
+        <HogaengnoMap />
+      </div>
+
     </div>
   );
 }

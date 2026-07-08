@@ -79,4 +79,20 @@ export class ScamsService {
       return this.scamsRepository.findById(scamInfoId, tx);
     });
   }
+
+  async getCountries() {
+    return this.scamsRepository.findAllCountries();
+  }
+
+  async getCities(countryCode: string) {
+    return this.scamsRepository.findCitiesByCountry(countryCode);
+  }
+
+  async getRegions(cityId: string) {
+    return this.scamsRepository.findRegionsByCity(cityId);
+  }
+
+  async getAllRegions() {
+    return this.scamsRepository.findAllRegions();
+  }
 }
