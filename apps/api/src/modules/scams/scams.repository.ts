@@ -1,0 +1,169 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { SQL, and, desc, eq, sql } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DATABASE_CONNECTION } from '../../database/database.module';
+import * as schema from '../../database/schema';
+
+export type Transaction = any;
+
+@Injectable()
+export class ScamsRepository {
+  constructor(
+    @Inject(DATABASE_CONNECTION)
+    private readonly db: NodePgDatabase<typeof schema>,
+  ) {}
+
+  async transaction<T>(cb: (tx: Transaction) => Promise<T>): Promise<T> {
+    return this.db.transaction(cb);
+  }
+
+  async create(data: typeof schema.scamInfos.$inferInsert, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db.insert(schema.scamInfos).values(data).returning();
+    return result;
+  }
+
+  async update(id: string, data: Partial<typeof schema.scamInfos.$inferInsert>, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db
+      .update(schema.scamInfos)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.scamInfos.id, id))
+      .returning();
+    return result;
+  }
+
+  async findById(id: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.scamInfos.findFirst({
+      where: and(eq(schema.scamInfos.id, id), sql`${schema.scamInfos.deletedAt} is null`),
+      with: {
+        region: {
+          with: {
+            city: {
+              with: {
+                country: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findByRegion(
+    regionId: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    return db.query.scamInfos.findMany({
+      where: and(eq(schema.scamInfos.regionId, regionId), sql`${schema.scamInfos.deletedAt} is null`),
+      orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
+      with: {
+        reactions: userId
+          ? {
+              where: eq(schema.scamInfoReactions.userId, userId),
+            }
+          : ipAddress
+          ? {
+              where: and(
+                sql`${schema.scamInfoReactions.userId} is null`,
+                eq(schema.scamInfoReactions.ipAddress, ipAddress)
+              ),
+            }
+          : undefined,
+      },
+    });
+  }
+
+  async findReaction(
+    scamInfoId: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    let whereClause;
+    
+    if (userId) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        eq(schema.scamInfoReactions.userId, userId)
+      );
+    } else if (ipAddress) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        sql`${schema.scamInfoReactions.userId} is null`,
+        eq(schema.scamInfoReactions.ipAddress, ipAddress)
+      );
+    } else {
+      return null;
+    }
+
+    return db.query.scamInfoReactions.findFirst({
+      where: whereClause,
+    });
+  }
+
+  async addReaction(
+    data: typeof schema.scamInfoReactions.$inferInsert,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    const [result] = await db.insert(schema.scamInfoReactions).values(data).returning();
+    return result;
+  }
+
+  async updateReaction(
+    id: string,
+    type: 'like' | 'dislike',
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    const [result] = await db
+      .update(schema.scamInfoReactions)
+      .set({ type })
+      .where(eq(schema.scamInfoReactions.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteReaction(id: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    await db.delete(schema.scamInfoReactions).where(eq(schema.scamInfoReactions.id, id));
+  }
+
+  async recalculateReactionCounts(scamInfoId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+
+    const [upvoteRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.scamInfoReactions)
+      .where(
+        and(
+          eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+          eq(schema.scamInfoReactions.type, 'like')
+        )
+      );
+
+    const [downvoteRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.scamInfoReactions)
+      .where(
+        and(
+          eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+          eq(schema.scamInfoReactions.type, 'dislike')
+        )
+      );
+
+    await db
+      .update(schema.scamInfos)
+      .set({
+        upvoteCount: upvoteRes.count,
+        downvoteCount: downvoteRes.count,
+      })
+      .where(eq(schema.scamInfos.id, scamInfoId));
+  }
+}

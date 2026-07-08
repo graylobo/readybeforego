@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { AnyPgColumn, boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { AnyPgColumn, boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid, doublePrecision } from 'drizzle-orm/pg-core';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['user', 'moderator', 'admin', 'super_admin']);
@@ -353,6 +353,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   purchasedEmoticons: many(userEmoticonPacks),
   reports: many(reports, { relationName: 'user_reports' }),
   resolvedReports: many(reports, { relationName: 'resolved_reports' }),
+  scamReactions: many(scamInfoReactions),
 }));
 
 export const userLogsRelations = relations(userLogs, ({ one }) => ({
@@ -501,4 +502,121 @@ export const siteSettings = pgTable('site_settings', {
   showSidebarAds: boolean('show_sidebar_ads').default(true).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// Countries table
+export const countries = pgTable('countries', {
+  code: text('code').primaryKey(), // ISO 2-letter country code, e.g., 'TH', 'KR'
+  name: text('name').notNull(),    // '태국', '대한민국'
+  nameEn: text('name_en').notNull(), // 'Thailand', 'South Korea'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Cities table
+export const cities = pgTable('cities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code')
+    .notNull()
+    .references(() => countries.code, { onDelete: 'cascade' }),
+  name: text('name').notNull(),    // '방콕', '서울'
+  nameEn: text('name_en').notNull(), // 'Bangkok', 'Seoul'
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  countryIdx: index('cities_country_idx').on(table.countryCode),
+}));
+
+// Regions table (e.g., Khaosan Road)
+export const regions = pgTable('regions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  cityId: uuid('city_id')
+    .notNull()
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),    // '카오산로드', '명동'
+  nameEn: text('name_en').notNull(), // 'Khaosan Road', 'Myeongdong'
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  cityIdx: index('regions_city_idx').on(table.cityId),
+}));
+
+// Scam Infos table
+export const scamInfos = pgTable('scam_infos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  regionId: uuid('region_id')
+    .notNull()
+    .references(() => regions.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  avoidanceTip: text('avoidance_tip'),
+  scamCategory: text('scam_category').notNull(),
+  sourceUrl: text('source_url'),
+  viewCount: integer('view_count').default(0).notNull(),
+  upvoteCount: integer('upvote_count').default(0).notNull(),
+  downvoteCount: integer('downvote_count').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (table) => ({
+  regionIdx: index('scam_infos_region_idx').on(table.regionId),
+  upvoteIdx: index('scam_infos_upvote_idx').on(table.upvoteCount),
+}));
+
+// Scam Info Reactions table
+export const scamInfoReactions = pgTable('scam_info_reactions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  scamInfoId: uuid('scam_info_id')
+    .notNull()
+    .references(() => scamInfos.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  ipAddress: text('ip_address'),
+  type: reactionTypeEnum('type').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  scamUserIdx: index('scam_info_reactions_idx').on(table.scamInfoId, table.userId, table.ipAddress),
+}));
+
+// Relations
+export const countriesRelations = relations(countries, ({ many }) => ({
+  cities: many(cities),
+}));
+
+export const citiesRelations = relations(cities, ({ one, many }) => ({
+  country: one(countries, {
+    fields: [cities.countryCode],
+    references: [countries.code],
+  }),
+  regions: many(regions),
+}));
+
+export const regionsRelations = relations(regions, ({ one, many }) => ({
+  city: one(cities, {
+    fields: [regions.cityId],
+    references: [cities.id],
+  }),
+  scamInfos: many(scamInfos),
+}));
+
+export const scamInfosRelations = relations(scamInfos, ({ one, many }) => ({
+  region: one(regions, {
+    fields: [scamInfos.regionId],
+    references: [regions.id],
+  }),
+  reactions: many(scamInfoReactions),
+}));
+
+export const scamInfoReactionsRelations = relations(scamInfoReactions, ({ one }) => ({
+  scamInfo: one(scamInfos, {
+    fields: [scamInfoReactions.scamInfoId],
+    references: [scamInfos.id],
+  }),
+  user: one(users, {
+    fields: [scamInfoReactions.userId],
+    references: [users.id],
+  }),
+}));
 

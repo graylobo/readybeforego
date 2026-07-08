@@ -30,6 +30,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { ScamsModule } from './modules/scams/scams.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     EmoticonsModule,
     SettingsModule,
     ReportsModule,
+    ScamsModule,
   ],
   controllers: [AppController],
   providers: [
