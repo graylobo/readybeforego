@@ -108,7 +108,7 @@ function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
 }
 
 export default function HogaengnoMap() {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const {
     mapCenter,
     mapZoom,
@@ -236,8 +236,8 @@ export default function HogaengnoMap() {
         zoomControl={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
+          url={`https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}`}
         />
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
