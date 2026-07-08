@@ -89,9 +89,16 @@ interface MapEventsHandlerProps {
 }
 
 function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
+  const { setMapZoom, setMapCenter } = useScamMapStore();
   const map = useMapEvents({
     zoomend() {
-      onZoomChange(map.getZoom());
+      const z = map.getZoom();
+      onZoomChange(z);
+      setMapZoom(z);
+    },
+    moveend() {
+      const center = map.getCenter();
+      setMapCenter([center.lat, center.lng]);
     },
     click(e) {
       onMapClick(e.latlng.lat, e.latlng.lng);

@@ -183,8 +183,13 @@ export default function Home() {
   return (
     <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background font-sans">
       
-      {/* Left Sidebar Panel */}
-      <div className="w-full md:w-[450px] flex flex-col border-r border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
+      {/* Left Map Canvas */}
+      <div className="flex-1 h-[50vh] md:h-full relative z-0">
+        <HogaengnoMap />
+      </div>
+
+      {/* Right Sidebar Panel */}
+      <div className="w-full md:w-[450px] flex flex-col border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
         
         {/* Branding & Selector Header */}
         <div className="p-6 border-b border-border space-y-4">
@@ -331,7 +336,7 @@ export default function Home() {
           ) : (
             // Region Details & Card Feed
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Active Region Header */}
+              {/* Active Scope Header */}
               <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center gap-2 shrink-0">
                 <MapPin className="w-4 h-4 text-red-600" />
                 <h2 className="font-bold text-sm text-card-foreground">
@@ -511,18 +516,13 @@ export default function Home() {
                 )}
               </div>
             </div>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* 실시간 사용자 직접 제보 모달 */}
+        <ScamReportModal />
+
       </div>
-
-      {/* Right Map Canvas */}
-      <div className="flex-1 h-[50vh] md:h-full relative z-0">
-        <HogaengnoMap />
-      </div>
-
-      {/* 실시간 사용자 직접 제보 모달 */}
-      <ScamReportModal />
-
-    </div>
-  );
+    );
 }
