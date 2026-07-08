@@ -20,20 +20,35 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow.src,
 });
 
-// Custom animated alert warning pin for Hogaengno UI
-const createWarningIcon = () => {
+// "직방" 스타일의 수량 비례형 원형 뱃지 마커 및 위치 이름 라벨 오버레이 생성
+const createClusterIcon = (count: number, name: string) => {
+  let sizeClass = "w-9 h-9 text-xs";
+  let colorClass = "from-amber-400 to-orange-500";
+  let pulseClass = "";
+
+  if (count >= 6) {
+    sizeClass = "w-13 h-13 text-sm border-rose-400";
+    colorClass = "from-red-600 to-rose-600";
+    pulseClass = "animate-pulse";
+  } else if (count >= 3) {
+    sizeClass = "w-11 h-11 text-xs border-orange-300";
+    colorClass = "from-orange-500 to-red-500";
+  }
+
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center">
-        <div class="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-rose-400 opacity-75"></div>
-        <div class="relative inline-flex rounded-full h-5 w-5 bg-rose-600 border border-white items-center justify-center shadow-lg">
-          <span class="text-white text-[10px] font-bold">⚠️</span>
+      <div class="flex flex-col items-center justify-center select-none group cursor-pointer">
+        <div class="flex items-center justify-center rounded-full text-white font-black shadow-md border-2 border-white bg-gradient-to-br transition-all duration-200 group-hover:scale-110 group-hover:shadow-lg ${colorClass} ${sizeClass} ${pulseClass}">
+          ${count}
+        </div>
+        <div class="mt-1 bg-slate-900/90 dark:bg-slate-950/90 text-[10px] font-bold text-white px-2 py-0.5 rounded-full shadow border border-white/10 whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors">
+          ${name}
         </div>
       </div>
     `,
-    className: "custom-pin-icon",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    className: "custom-cluster-icon",
+    iconSize: [60, 60],
+    iconAnchor: [30, 30], // 아이콘 중심을 핀 포인트에 매핑
   });
 };
 
@@ -92,6 +107,7 @@ export default function HogaengnoMap() {
     reportCoords,
   } = useScamMapStore();
 
+  // 실시간 핀 수량 갱신을 위해 쿼리 호출
   const { data: regions = [] } = useQuery<Region[]>({
     queryKey: ["scam-regions"],
     queryFn: () => scamsApi.getAllRegions(),
@@ -105,6 +121,9 @@ export default function HogaengnoMap() {
     setMapCenter([region.latitude, region.longitude]);
     setMapZoom(14);
   };
+
+  // 사기가 최소 1건 이상 제보된 지역만 지도에 마커로 표시합니다. (직방 마커 필터링)
+  const activeRegions = regions.filter((r) => (r.scamCount || 0) > 0);
 
   return (
     <div className="h-full w-full relative rounded-2xl overflow-hidden shadow-inner border border-border bg-muted">
@@ -122,27 +141,34 @@ export default function HogaengnoMap() {
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
         <MapClickHandler />
 
+        {/* 제보 중인 임시 타겟 포인트 */}
         {reportCoords && (
           <Marker position={reportCoords} icon={createTempReportIcon()} />
         )}
 
-        {regions.map((region) => (
-          <Marker
-            key={region.id}
-            position={[region.latitude, region.longitude]}
-            icon={createWarningIcon()}
-            eventHandlers={{
-              click: () => handleMarkerClick(region),
-            }}
-          >
-            <Popup className="custom-popup">
-              <div className="p-1 font-sans">
-                <h4 className="font-bold text-slate-800 text-sm">{region.name}</h4>
-                <p className="text-xs text-rose-600 font-semibold mt-0.5">⚠️ 주의 필요 지역</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {/* 사기 경보 핫스팟 원형 마커들 */}
+        {activeRegions.map((region) => {
+          const count = region.scamCount || 0;
+          return (
+            <Marker
+              key={region.id}
+              position={[region.latitude, region.longitude]}
+              icon={createClusterIcon(count, region.name)}
+              eventHandlers={{
+                click: () => handleMarkerClick(region),
+              }}
+            >
+              <Popup className="custom-popup">
+                <div className="p-1 font-sans text-center">
+                  <h4 className="font-bold text-slate-800 text-sm">{region.name}</h4>
+                  <p className="text-xs text-rose-600 font-semibold mt-0.5">
+                    ⚠️ {count}건의 사기 위험 주의 정보
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </div>
   );

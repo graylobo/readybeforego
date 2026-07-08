@@ -26,8 +26,9 @@ export interface Region {
   nameEn: string;
   latitude: number;
   longitude: number;
-  cityName?: string;
-  countryCode?: string;
+  cityName?: string | null;
+  countryCode?: string | null;
+  scamCount?: number;
   createdAt: string;
   updatedAt: string;
 }

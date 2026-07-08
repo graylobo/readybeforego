@@ -199,9 +199,21 @@ export class ScamsRepository {
       longitude: schema.regions.longitude,
       cityName: schema.cities.name,
       countryCode: schema.cities.countryCode,
+      scamCount: sql<number>`count(${schema.scamInfos.id})::int`,
     })
     .from(schema.regions)
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
+    .leftJoin(schema.scamInfos, eq(schema.scamInfos.regionId, schema.regions.id))
+    .groupBy(
+      schema.regions.id,
+      schema.regions.cityId,
+      schema.regions.name,
+      schema.regions.nameEn,
+      schema.regions.latitude,
+      schema.regions.longitude,
+      schema.cities.name,
+      schema.cities.countryCode
+    )
     .orderBy(schema.regions.name);
   }
 
