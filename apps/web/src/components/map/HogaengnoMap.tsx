@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { useTranslation } from "@/hooks/use-translation";
 import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import "leaflet/dist/leaflet.css";
@@ -48,7 +49,7 @@ const createClusterIcon = (count: number, name: string) => {
     `,
     className: "custom-cluster-icon",
     iconSize: [60, 60],
-    iconAnchor: [30, 30], // 아이콘 중심을 핀 포인트에 매핑
+    iconAnchor: [30, 30],
   });
 };
 
@@ -69,6 +70,7 @@ const createTempReportIcon = () => {
   });
 };
 
+// 지도 제어 및 카메라 뷰 핸들러
 function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   useEffect(() => {
@@ -80,21 +82,26 @@ function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: numb
   return null;
 }
 
-// 지도 클릭 이벤트를 캡처하여 위경도를 획득하기 위한 핸들러
-function MapClickHandler() {
-  const { isReportMode, setReportCoords, setReportModalOpen } = useScamMapStore();
-  useMapEvents({
+// 지도 줌 리스너 및 클릭 감지 핸들러 통합
+interface MapEventsHandlerProps {
+  onZoomChange: (zoom: number) => void;
+  onMapClick: (lat: number, lng: number) => void;
+}
+
+function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
+  const map = useMapEvents({
+    zoomend() {
+      onZoomChange(map.getZoom());
+    },
     click(e) {
-      if (isReportMode) {
-        setReportCoords([e.latlng.lat, e.latlng.lng]);
-        setReportModalOpen(true);
-      }
+      onMapClick(e.latlng.lat, e.latlng.lng);
     },
   });
   return null;
 }
 
 export default function HogaengnoMap() {
+  const { t } = useTranslation();
   const {
     mapCenter,
     mapZoom,
@@ -105,15 +112,101 @@ export default function HogaengnoMap() {
     setMapCenter,
     setMapZoom,
     reportCoords,
+    isReportMode,
+    setReportCoords,
+    setReportModalOpen,
   } = useScamMapStore();
 
-  // 실시간 핀 수량 갱신을 위해 쿼리 호출
+  const [currentZoom, setCurrentZoom] = useState(mapZoom);
+
+  // Sync state when store mapZoom updates
+  useEffect(() => {
+    setCurrentZoom(mapZoom);
+  }, [mapZoom]);
+
   const { data: regions = [] } = useQuery<Region[]>({
     queryKey: ["scam-regions"],
     queryFn: () => scamsApi.getAllRegions(),
   });
 
-  const handleMarkerClick = (region: Region) => {
+  // 1. 국가 레벨 클러스터 연산 (줌 <= 7)
+  const countryClusters = Object.values(
+    regions.reduce((acc, region) => {
+      const code = region.countryCode || "UNKNOWN";
+      if (!acc[code]) {
+        acc[code] = {
+          id: `country-${code}`,
+          name: t(`countries_list.${code}`, { defaultValue: code }),
+          countryCode: code,
+          latitude: 0,
+          longitude: 0,
+          scamCount: 0,
+          count: 0,
+        };
+      }
+      acc[code].latitude += region.latitude;
+      acc[code].longitude += region.longitude;
+      acc[code].scamCount += (region.scamCount || 0);
+      acc[code].count += 1;
+      return acc;
+    }, {} as Record<string, any>)
+  ).map((c: any) => ({
+    ...c,
+    latitude: c.latitude / c.count,
+    longitude: c.longitude / c.count,
+  })).filter(c => c.scamCount > 0);
+
+  // 2. 도시 레벨 클러스터 연산 (7 < 줌 <= 11)
+  const cityClusters = Object.values(
+    regions.reduce((acc, region) => {
+      const cityId = region.cityId || "UNKNOWN";
+      if (!acc[cityId]) {
+        acc[cityId] = {
+          id: `city-${cityId}`,
+          name: t(`cities_list.${region.cityName}`, { defaultValue: region.cityName || "City" }),
+          cityId,
+          countryCode: region.countryCode,
+          latitude: 0,
+          longitude: 0,
+          scamCount: 0,
+          count: 0,
+        };
+      }
+      acc[cityId].latitude += region.latitude;
+      acc[cityId].longitude += region.longitude;
+      acc[cityId].scamCount += (region.scamCount || 0);
+      acc[cityId].count += 1;
+      return acc;
+    }, {} as Record<string, any>)
+  ).map((c: any) => ({
+    ...c,
+    latitude: c.latitude / c.count,
+    longitude: c.longitude / c.count,
+  })).filter(c => c.scamCount > 0);
+
+  // 3. 세부 지역 레벨 연산 (줌 > 11)
+  const regionMarkers = regions.filter((r) => (r.scamCount || 0) > 0);
+
+  // 국가 클러스터 클릭 시 ➔ 도시 레벨(9)로 부드럽게 줌인
+  const handleCountryClick = (c: any) => {
+    setSelectedCountryCode(c.countryCode);
+    setSelectedCityId(null);
+    setSelectedRegionId(null);
+    setMapCenter([c.latitude, c.longitude]);
+    setMapZoom(9);
+  };
+
+  // 도시 클러스터 클릭 시 ➔ 세부지역 레벨(13)로 부드럽게 줌인
+  const handleCityClick = (c: any) => {
+    setSelectedCountryCode(c.countryCode);
+    setSelectedCityId(c.cityId);
+    setSelectedRegionId(null);
+    setMapCenter([c.latitude, c.longitude]);
+    setMapZoom(13);
+  };
+
+  // 개별 지역 마커 클릭 시
+  const handleRegionClick = (region: Region) => {
     setSelectedRegionId(region.id);
     setSelectedRegion(region);
     if (region.cityId) setSelectedCityId(region.cityId);
@@ -122,8 +215,13 @@ export default function HogaengnoMap() {
     setMapZoom(14);
   };
 
-  // 사기가 최소 1건 이상 제보된 지역만 지도에 마커로 표시합니다. (직방 마커 필터링)
-  const activeRegions = regions.filter((r) => (r.scamCount || 0) > 0);
+  // 제보 모드 상태에서의 지도 클릭 핸들러
+  const handleMapClick = (lat: number, lng: number) => {
+    if (isReportMode) {
+      setReportCoords([lat, lng]);
+      setReportModalOpen(true);
+    }
+  };
 
   return (
     <div className="h-full w-full relative rounded-2xl overflow-hidden shadow-inner border border-border bg-muted">
@@ -139,36 +237,68 @@ export default function HogaengnoMap() {
         />
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
-        <MapClickHandler />
+        
+        <MapEventsHandler 
+          onZoomChange={(zoom) => setCurrentZoom(zoom)} 
+          onMapClick={handleMapClick} 
+        />
 
         {/* 제보 중인 임시 타겟 포인트 */}
         {reportCoords && (
           <Marker position={reportCoords} icon={createTempReportIcon()} />
         )}
 
-        {/* 사기 경보 핫스팟 원형 마커들 */}
-        {activeRegions.map((region) => {
-          const count = region.scamCount || 0;
-          return (
+        {/* 줌 레벨에 따라 동적 클러스터 렌더링 분기 */}
+        {currentZoom <= 7 && (
+          // 1단계: 국가 레벨 렌더링
+          countryClusters.map((c: any) => (
+            <Marker
+              key={c.id}
+              position={[c.latitude, c.longitude]}
+              icon={createClusterIcon(c.scamCount, c.name)}
+              eventHandlers={{
+                click: () => handleCountryClick(c),
+              }}
+            />
+          ))
+        )}
+
+        {currentZoom > 7 && currentZoom <= 11 && (
+          // 2단계: 도시 레벨 렌더링
+          cityClusters.map((c: any) => (
+            <Marker
+              key={c.id}
+              position={[c.latitude, c.longitude]}
+              icon={createClusterIcon(c.scamCount, c.name)}
+              eventHandlers={{
+                click: () => handleCityClick(c),
+              }}
+            />
+          ))
+        )}
+
+        {currentZoom > 11 && (
+          // 3단계: 개별 장소 레벨 렌더링
+          regionMarkers.map((region) => (
             <Marker
               key={region.id}
               position={[region.latitude, region.longitude]}
-              icon={createClusterIcon(count, region.name)}
+              icon={createClusterIcon(region.scamCount || 0, region.name)}
               eventHandlers={{
-                click: () => handleMarkerClick(region),
+                click: () => handleRegionClick(region),
               }}
             >
               <Popup className="custom-popup">
                 <div className="p-1 font-sans text-center">
                   <h4 className="font-bold text-slate-800 text-sm">{region.name}</h4>
                   <p className="text-xs text-rose-600 font-semibold mt-0.5">
-                    ⚠️ {count}건의 사기 위험 주의 정보
+                    ⚠️ {(region.scamCount || 0)}건의 위험 정보
                   </p>
                 </div>
               </Popup>
             </Marker>
-          );
-        })}
+          ))
+        )}
       </MapContainer>
     </div>
   );

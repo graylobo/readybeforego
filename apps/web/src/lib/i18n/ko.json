@@ -50,5 +50,16 @@
     "submit": "제보 완료",
     "submitting": "제보 등록 중...",
     "uploading_images": "사진 전송 중..."
+  },
+  "countries_list": {
+    "KR": "대한민국",
+    "TH": "태국",
+    "VN": "베트남"
+  },
+  "cities_list": {
+    "Bangkok": "방콕",
+    "Chiang Mai": "치앙마이",
+    "Da Nang": "다낭",
+    "Seoul": "서울"
   }
 }

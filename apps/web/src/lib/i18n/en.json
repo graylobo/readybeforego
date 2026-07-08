@@ -50,5 +50,16 @@
     "submit": "Report",
     "submitting": "Submitting...",
     "uploading_images": "Uploading images..."
+  },
+  "countries_list": {
+    "KR": "South Korea",
+    "TH": "Thailand",
+    "VN": "Vietnam"
+  },
+  "cities_list": {
+    "Bangkok": "Bangkok",
+    "Chiang Mai": "Chiang Mai",
+    "Da Nang": "Da Nang",
+    "Seoul": "Seoul"
   }
 }
