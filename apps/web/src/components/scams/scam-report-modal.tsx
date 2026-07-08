@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi } from "@/lib/api/scams";
 import { uploadsApi } from "@/lib/api/uploads";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 
 export function ScamReportModal() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const {
     selectedCountryCode,
     selectedCityId,
@@ -38,7 +40,6 @@ export function ScamReportModal() {
   const [avoidanceTip, setAvoidanceTip] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
 
-  // 이미지 첨부 관련 상태
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -60,7 +61,6 @@ export function ScamReportModal() {
   }, [isReportModalOpen, selectedCountryCode, selectedCityId]);
 
   useEffect(() => {
-    // 메모리 누수 방지를 위한 Cleanup
     return () => {
       imagePreviews.forEach((url) => URL.revokeObjectURL(url));
     };
@@ -81,7 +81,7 @@ export function ScamReportModal() {
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof scamsApi.createScam>[0]) => scamsApi.createScam(data),
     onSuccess: (newScam) => {
-      toast.success("사기 제보가 성공적으로 등록되었습니다!");
+      toast.success(t("report_modal.submit") + " " + "성공");
       
       queryClient.invalidateQueries({ queryKey: ["scam-regions"] });
       if (cityId) {
@@ -104,7 +104,7 @@ export function ScamReportModal() {
       }
     },
     onError: (err: any) => {
-      const msg = err.response?.data?.message || "제보 등록에 실패했습니다.";
+      const msg = err.response?.data?.message || "Error";
       toast.error(msg);
       setUploading(false);
     },
@@ -115,7 +115,7 @@ export function ScamReportModal() {
       const selectedFiles = Array.from(e.target.files);
       
       if (imageFiles.length + selectedFiles.length > 5) {
-        toast.error("이미지는 최대 5장까지 첨부할 수 있습니다.");
+        toast.error(t("report_modal.attachments_label"));
         return;
       }
 
@@ -134,23 +134,22 @@ export function ScamReportModal() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cityId) {
-      toast.error("도시를 선택해 주세요.");
+      toast.error(t("report_modal.city_select"));
       return;
     }
     if (!regionName.trim()) {
-      toast.error("세부 장소/지역명을 입력해 주세요.");
+      toast.error(t("report_modal.place_name_placeholder"));
       return;
     }
     if (!scamCategory) {
-      toast.error("사기 카테고리를 선택해 주세요.");
+      toast.error(t("report_modal.category_select"));
       return;
     }
     if (!title.trim() || !description.trim()) {
-      toast.error("제목과 상세 내용은 필수입니다.");
+      toast.error("Required fields empty.");
       return;
     }
     if (!reportCoords) {
-      toast.error("지도에서 좌표를 획득하지 못했습니다.");
       return;
     }
 
@@ -175,7 +174,7 @@ export function ScamReportModal() {
         imageUrls: urls,
       });
     } catch (error) {
-      toast.error("이미지 업로드 중 오류가 발생했습니다.");
+      toast.error("Upload Error");
       setUploading(false);
     }
   };
@@ -191,10 +190,13 @@ export function ScamReportModal() {
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <PlusCircle className="w-5 h-5 text-red-600" />
-            실시간 사기/위험 제보하기
+            {t("report_modal.title")}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground pt-1">
-            지도에서 선택하신 좌표 ({reportCoords?.[0].toFixed(5)}, {reportCoords?.[1].toFixed(5)}) 에 새로운 위험 장소 정보와 피해 사례를 제보합니다.
+            {t("report_modal.desc", {
+              lat: reportCoords?.[0].toFixed(5) || 0,
+              lng: reportCoords?.[1].toFixed(5) || 0,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -202,10 +204,10 @@ export function ScamReportModal() {
           
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">국가</Label>
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.country")}</Label>
               <Select value={countryCode} onValueChange={(val) => { setCountryCode(val); setCityId(""); }} disabled={uploading}>
                 <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder="국가 선택" />
+                  <SelectValue placeholder={t("report_modal.country_select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {countries.map((c) => (
@@ -218,14 +220,14 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">도시</Label>
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.city")}</Label>
               <Select 
                 value={cityId} 
                 onValueChange={setCityId}
                 disabled={!countryCode || isCitiesPending || uploading}
               >
                 <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder="도시 선택" />
+                  <SelectValue placeholder={t("report_modal.city_select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {cities.map((city) => (
@@ -239,44 +241,43 @@ export function ScamReportModal() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">세부 장소/지역명</Label>
+            <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.place_name")}</Label>
             <Input
               id="regionName"
-              placeholder="예: 카오산로드 스타벅스 맞은편 노점"
+              placeholder={t("report_modal.place_name_placeholder")}
               value={regionName}
               onChange={(e) => setRegionName(e.target.value)}
               className="text-xs"
               required
               disabled={uploading}
             />
-            <p className="text-[10px] text-muted-foreground">지도에 핀 마커의 이름으로 등록되며 다른 제보들과 공유됩니다.</p>
+            <p className="text-[10px] text-muted-foreground">{t("report_modal.place_name_desc")}</p>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">사기 유형 카테고리</Label>
+            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.category")}</Label>
             <Select value={scamCategory} onValueChange={setScamCategory} disabled={uploading}>
               <SelectTrigger className="w-full text-xs cursor-pointer">
-                <SelectValue placeholder="카테고리 선택" />
+                <SelectValue placeholder={t("report_modal.category_select")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="FORCED_SHOPPING" className="cursor-pointer">🛍️ 호객 행위 및 구매 강요</SelectItem>
-                <SelectItem value="DRUG_HAZARD" className="cursor-pointer">💊 마약 및 유해물질 위험</SelectItem>
-                <SelectItem value="LIES_TOURISM" className="cursor-pointer">🗣️ 가짜 정보/사칭 사기</SelectItem>
-                <SelectItem value="FAKE_TAXI" className="cursor-pointer">🚕 가짜 택시/바가지 요금</SelectItem>
-                <SelectItem value="OVERCHARGING" className="cursor-pointer">💸 바가지 및 과다 청구</SelectItem>
+                <SelectItem value="FORCED_SHOPPING" className="cursor-pointer">{t("categories.FORCED_SHOPPING")}</SelectItem>
+                <SelectItem value="DRUG_HAZARD" className="cursor-pointer">{t("categories.DRUG_HAZARD")}</SelectItem>
+                <SelectItem value="LIES_TOURISM" className="cursor-pointer">{t("categories.LIES_TOURISM")}</SelectItem>
+                <SelectItem value="FAKE_TAXI" className="cursor-pointer">{t("categories.FAKE_TAXI")}</SelectItem>
+                <SelectItem value="OVERCHARGING" className="cursor-pointer">{t("categories.OVERCHARGING")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* 이미지 업로드 컨트롤 추가 */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">증거 사진 첨부 (영수증, 간판, 현장 등 - 최대 5장)</Label>
+            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.attachments_label")}</Label>
             <div className="flex flex-wrap gap-2 items-center pt-1">
               
               {imagePreviews.length < 5 && (
                 <label className="w-16 h-16 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 hover:border-slate-400 bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 gap-1 text-[10px] text-muted-foreground">
                   <ImageIcon className="w-4 h-4 text-slate-500" />
-                  사진 추가
+                  {t("report_modal.add_photo")}
                   <input
                     type="file"
                     multiple
@@ -308,10 +309,10 @@ export function ScamReportModal() {
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="title" className="text-xs font-bold text-slate-700 dark:text-slate-300">제보 제목</Label>
+              <Label htmlFor="title" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.title_label")}</Label>
               <Input
                 id="title"
-                placeholder="예: 툭툭 10바트 투어 사기"
+                placeholder={t("report_modal.title_placeholder")}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="text-xs"
@@ -321,10 +322,10 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="description" className="text-xs font-bold text-slate-700 dark:text-slate-300">상세 피해 내용</Label>
+              <Label htmlFor="description" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.desc_label")}</Label>
               <Textarea
                 id="description"
-                placeholder="구체적으로 어떤 상황에서 호객을 당했는지, 피해 금액과 장소 특성 등을 자세히 설명해 주세요. (최소 10자)"
+                placeholder={t("report_modal.desc_placeholder")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="text-xs min-h-[90px] resize-none"
@@ -334,10 +335,10 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="avoidanceTip" className="text-xs font-bold text-slate-700 dark:text-slate-300">대처 및 예방법 (선택)</Label>
+              <Label htmlFor="avoidanceTip" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.avoidance_label")}</Label>
               <Textarea
                 id="avoidanceTip"
-                placeholder="다른 여행자들에게 도움이 될 만한 거절 요령, 대체 교통수단 팁 등을 적어주세요."
+                placeholder={t("report_modal.avoidance_placeholder")}
                 value={avoidanceTip}
                 onChange={(e) => setAvoidanceTip(e.target.value)}
                 className="text-xs min-h-[70px] resize-none"
@@ -346,10 +347,10 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="sourceUrl" className="text-xs font-bold text-slate-700 dark:text-slate-300">관련 참고 출처 링크 (선택)</Label>
+              <Label htmlFor="sourceUrl" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.source_label")}</Label>
               <Input
                 id="sourceUrl"
-                placeholder="예: https://..."
+                placeholder={t("report_modal.source_placeholder")}
                 value={sourceUrl}
                 onChange={(e) => setSourceUrl(e.target.value)}
                 className="text-xs"
@@ -360,7 +361,7 @@ export function ScamReportModal() {
 
           <DialogFooter className="pt-3 gap-2 sm:gap-0 border-t border-border">
             <Button type="button" variant="outline" size="sm" onClick={handleClose} className="cursor-pointer" disabled={uploading}>
-              취소
+              {t("report_modal.cancel")}
             </Button>
             <Button 
               type="submit" 
@@ -371,12 +372,12 @@ export function ScamReportModal() {
               {uploading ? (
                 <span className="flex items-center gap-1">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  사진 전송 중...
+                  {t("report_modal.uploading_images")}
                 </span>
               ) : createMutation.isPending ? (
-                "제보 등록 중..."
+                t("report_modal.submitting")
               ) : (
-                "제보 완료"
+                t("report_modal.submit")
               )}
             </Button>
           </DialogFooter>

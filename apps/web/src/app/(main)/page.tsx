@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, ScamInfo, Region } from "@/lib/api/scams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,7 +23,6 @@ import {
   Flag, 
   ExternalLink,
   Info,
-  Search,
   Compass
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ const HogaengnoMap = dynamic(() => import("@/components/map/HogaengnoMap"), {
   loading: () => (
     <div className="h-full w-full bg-slate-50 flex flex-col items-center justify-center gap-4 animate-pulse">
       <Compass className="w-12 h-12 text-slate-400 animate-spin" />
-      <span className="text-sm font-semibold text-slate-500">인터랙티브 지도 불러오는 중...</span>
+      <span className="text-sm font-semibold text-slate-500">interactive map loading...</span>
     </div>
   ),
 });
@@ -47,12 +47,24 @@ const CATEGORY_MAP: Record<string, { label: string; color: string; icon: string 
   OVERCHARGING: { label: "💸 바가지 요금", color: "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300", icon: "💸" },
 };
 
-function getCategoryInfo(cat: string) {
-  return CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
+function getCategoryInfo(cat: string, t: any) {
+  const info = CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
+  return {
+    ...info,
+    label: t(`categories.${cat}`, { defaultValue: info.label })
+  };
 }
 
 export default function Home() {
   const queryClient = useQueryClient();
+  const { t, lang, setLang } = useTranslation();
+  
+  // Mismatch hydration guard for persistent localstorage lang
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const {
     selectedCountryCode,
     selectedCityId,
@@ -74,12 +86,12 @@ export default function Home() {
 
   // Trigger toast guide when user activates reporting mode
   useEffect(() => {
-    if (isReportMode) {
-      toast.info("제보 모드가 활성화되었습니다. 사기가 일어난 지도 상의 위치를 직접 클릭해 주세요!", {
+    if (isReportMode && mounted) {
+      toast.info(t("report_modal.desc", { lat: "", lng: "" }).split("(")[0] + " Map Click!", {
         duration: 4000,
       });
     }
-  }, [isReportMode]);
+  }, [isReportMode, mounted]);
 
   // Queries
   const { data: countries = [] } = useQuery({
@@ -109,13 +121,12 @@ export default function Home() {
   const reactionMutation = useMutation({
     mutationFn: ({ scamId, type }: { scamId: string; type: "like" | "dislike" }) =>
       scamsApi.toggleReaction(scamId, type),
-    onSuccess: (data) => {
-      // Invalidate target region warnings list to trigger live redraw
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scams", selectedRegionId] });
-      toast.success("반응이 정상적으로 반영되었습니다.");
+      toast.success("Done!");
     },
     onError: () => {
-      toast.error("반응 처리에 실패했습니다. 로그인 상태를 확인해 주세요.");
+      toast.error("Auth required or failed.");
     },
   });
 
@@ -148,6 +159,15 @@ export default function Home() {
     }
   };
 
+  // Prevent rendering dynamic values during SSR to avoid Hydration Error
+  if (!mounted) {
+    return (
+      <div className="h-screen w-screen bg-background flex items-center justify-center">
+        <Compass className="w-12 h-12 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background font-sans">
       
@@ -159,18 +179,44 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🚨</span>
-              <h1 className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-red-600 to-amber-600 bg-clip-text text-transparent cursor-pointer" onClick={resetSelections}>
-                Hogaengno
+              <h1 
+                className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-red-600 to-amber-600 bg-clip-text text-transparent cursor-pointer" 
+                onClick={resetSelections}
+              >
+                {t("common.app_name")}
               </h1>
             </div>
-            <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400">
-              안전 여행 가이드
-            </Badge>
+            
+            <div className="flex items-center gap-3">
+              {/* i18n Language Toggle Switch */}
+              <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-muted/60 shrink-0">
+                <Button
+                  size="sm"
+                  variant={lang === "ko" ? "default" : "ghost"}
+                  className="h-6 px-2 text-[10px] font-bold cursor-pointer"
+                  onClick={() => setLang("ko")}
+                >
+                  KO
+                </Button>
+                <Button
+                  size="sm"
+                  variant={lang === "en" ? "default" : "ghost"}
+                  className="h-6 px-2 text-[10px] font-bold cursor-pointer"
+                  onClick={() => setLang("en")}
+                >
+                  EN
+                </Button>
+              </div>
+
+              <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 shrink-0">
+                {t("common.tagline")}
+              </Badge>
+            </div>
           </div>
-          
+
           {/* Direct UGC report mode switch button */}
           <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/30 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">위험 지역 직접 제보하기</span>
+            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{t("common.report_direct")}</span>
             <Button
               size="sm"
               variant={isReportMode ? "destructive" : "outline"}
@@ -181,21 +227,23 @@ export default function Home() {
               }`}
               onClick={() => setIsReportMode(!isReportMode)}
             >
-              {isReportMode ? "제보 중단" : "🚨 제보하기"}
+              {isReportMode ? t("common.report_cancel_btn") : t("common.report_direct_btn")}
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            여행지의 호객, 바가지, 소매치기 사기 사례를 지도에서 한눈에 확인하고 대처법을 공유해 보세요.
+            {t("common.description")}
           </p>
 
           {/* Hierarchical selectors */}
           <div className="grid grid-cols-3 gap-2 pt-2">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">국가</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("report_modal.country")}
+              </label>
               <Select value={selectedCountryCode || ""} onValueChange={handleCountryChange}>
                 <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder="선택" />
+                  <SelectValue placeholder={t("report_modal.country_select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {countries.map((c) => (
@@ -208,14 +256,16 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">도시</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("report_modal.city")}
+              </label>
               <Select 
                 value={selectedCityId || ""} 
                 onValueChange={handleCityChange}
                 disabled={!selectedCountryCode || isCitiesPending}
               >
                 <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder="선택" />
+                  <SelectValue placeholder={t("report_modal.city_select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {cities.map((city) => (
@@ -228,7 +278,9 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">세부 지역</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("report_modal.place_name")}
+              </label>
               <Select 
                 value={selectedRegionId || ""} 
                 onValueChange={handleRegionChange}
@@ -258,9 +310,9 @@ export default function Home() {
                 <Compass className="w-8 h-8 text-amber-600" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-bold text-base text-card-foreground">여행할 지역을 선택해 주세요</h3>
+                <h3 className="font-bold text-base text-card-foreground">{t("common.welcome_title")}</h3>
                 <p className="text-xs text-muted-foreground max-w-[280px] leading-normal">
-                  위의 검색기 또는 지도의 붉은색 알림 마커를 클릭하여 현지 사기 경보를 확인하세요.
+                  {t("common.welcome_desc")}
                 </p>
               </div>
             </div>
@@ -271,7 +323,7 @@ export default function Home() {
               <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center gap-2 shrink-0">
                 <MapPin className="w-4 h-4 text-red-600" />
                 <h2 className="font-bold text-sm text-card-foreground">
-                  {selectedRegion?.name} <span className="text-xs font-normal text-muted-foreground">주의 정보</span>
+                  {selectedRegion?.name} <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
                 </h2>
               </div>
 
@@ -297,13 +349,13 @@ export default function Home() {
                   // Empty Warnings List
                   <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
                     <Info className="w-8 h-8 text-slate-300" />
-                    <p className="text-xs text-muted-foreground">이 지역에 제보된 사기 피해 사실이 없습니다.</p>
+                    <p className="text-xs text-muted-foreground">{t("common.empty_warnings")}</p>
                   </div>
                 ) : (
                   // Warnings Feed
                   <div className="space-y-4 pb-8">
                     {scams.map((scam) => {
-                      const cat = getCategoryInfo(scam.scamCategory);
+                      const cat = getCategoryInfo(scam.scamCategory, t);
                       return (
                         <Card key={scam.id} className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md">
                           <CardHeader className="p-4 pb-2 space-y-2">
@@ -318,7 +370,7 @@ export default function Home() {
                                   rel="noopener noreferrer" 
                                   className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
                                 >
-                                  출처 보기 <ExternalLink className="w-2.5 h-2.5" />
+                                  {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
                                 </a>
                               )}
                             </div>
@@ -361,7 +413,7 @@ export default function Home() {
                               <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
                                 <h4 className="font-bold flex items-center gap-1">
                                   <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
-                                  대처법 & 예방법
+                                  {t("common.avoidance_title")}
                                 </h4>
                                 <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
                               </div>
@@ -402,7 +454,7 @@ export default function Home() {
                                   onClick={() => setActiveCommentScamId(activeCommentScamId === scam.id ? null : scam.id)}
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" />
-                                  의견 나누기
+                                  {t("common.discussion")}
                                 </Button>
                                 
                                 <Button 
