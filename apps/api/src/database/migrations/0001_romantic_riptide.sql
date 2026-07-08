@@ -1,0 +1,1 @@
+ALTER TABLE "scam_infos" ADD COLUMN "image_urls" json;

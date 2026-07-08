@@ -32,6 +32,7 @@ export class ScamsService {
         avoidanceTip: createDto.avoidanceTip ?? null,
         scamCategory: createDto.scamCategory,
         sourceUrl: createDto.sourceUrl ?? null,
+        imageUrls: createDto.imageUrls ?? [],
       }, tx);
     });
   }

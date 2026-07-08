@@ -47,6 +47,7 @@ export interface ScamInfo {
   updatedAt: string;
   deletedAt?: string | null;
   reactions?: Array<{ id: string; type: 'like' | 'dislike' }>;
+  imageUrls?: string[] | null;
 }
 
 export const scamsApi = {
@@ -91,6 +92,7 @@ export const scamsApi = {
     avoidanceTip?: string;
     scamCategory: string;
     sourceUrl?: string;
+    imageUrls?: string[];
   }): Promise<ScamInfo> => {
     const response = await apiClient.post('/scams', data);
     return response.data;

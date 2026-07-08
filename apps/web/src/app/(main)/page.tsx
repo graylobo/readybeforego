@@ -330,6 +330,33 @@ export default function Home() {
                               {scam.description}
                             </p>
 
+                            {/* Attached image gallery layout */}
+                            {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
+                              <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
+                                scam.imageUrls.length === 1 
+                                  ? 'grid-cols-1' 
+                                  : scam.imageUrls.length === 2 
+                                    ? 'grid-cols-2' 
+                                    : 'grid-cols-3'
+                              }`}>
+                                {scam.imageUrls.map((url, idx) => (
+                                  <a 
+                                    key={idx} 
+                                    href={url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
+                                  >
+                                    <img 
+                                      src={url} 
+                                      alt={`scam-attachment-${idx}`} 
+                                      className="w-full h-full object-cover" 
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+
                             {scam.avoidanceTip && (
                               <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
                                 <h4 className="font-bold flex items-center gap-1">

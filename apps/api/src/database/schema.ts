@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { AnyPgColumn, boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid, doublePrecision } from 'drizzle-orm/pg-core';
+import { AnyPgColumn, boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid, doublePrecision, json } from 'drizzle-orm/pg-core';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['user', 'moderator', 'admin', 'super_admin']);
@@ -555,6 +555,7 @@ export const scamInfos = pgTable('scam_infos', {
   avoidanceTip: text('avoidance_tip'),
   scamCategory: text('scam_category').notNull(),
   sourceUrl: text('source_url'),
+  imageUrls: json('image_urls'), // 다중 이미지 URL 저장을 위한 JSON 컬럼 추가
   viewCount: integer('view_count').default(0).notNull(),
   upvoteCount: integer('upvote_count').default(0).notNull(),
   downvoteCount: integer('downvote_count').default(0).notNull(),
