@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SQL, and, desc, eq, sql } from 'drizzle-orm';
+import { SQL, and, desc, eq, sql, inArray } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -60,6 +60,75 @@ export class ScamsRepository {
     const db = tx ?? this.db;
     return db.query.scamInfos.findMany({
       where: and(eq(schema.scamInfos.regionId, regionId), sql`${schema.scamInfos.deletedAt} is null`),
+      orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
+      with: {
+        reactions: userId
+          ? {
+              where: eq(schema.scamInfoReactions.userId, userId),
+            }
+          : ipAddress
+          ? {
+              where: and(
+                sql`${schema.scamInfoReactions.userId} is null`,
+                eq(schema.scamInfoReactions.ipAddress, ipAddress)
+              ),
+            }
+          : undefined,
+      },
+    });
+  }
+
+  async findByCity(
+    cityId: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    const regionIdsSubquery = db.select({ id: schema.regions.id })
+      .from(schema.regions)
+      .where(eq(schema.regions.cityId, cityId));
+
+    return db.query.scamInfos.findMany({
+      where: and(
+        inArray(schema.scamInfos.regionId, regionIdsSubquery),
+        sql`${schema.scamInfos.deletedAt} is null`
+      ),
+      orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
+      with: {
+        reactions: userId
+          ? {
+              where: eq(schema.scamInfoReactions.userId, userId),
+            }
+          : ipAddress
+          ? {
+              where: and(
+                sql`${schema.scamInfoReactions.userId} is null`,
+                eq(schema.scamInfoReactions.ipAddress, ipAddress)
+              ),
+            }
+          : undefined,
+      },
+    });
+  }
+
+  async findByCountry(
+    countryCode: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    const regionIdsSubquery = db.select({ id: schema.regions.id })
+      .from(schema.regions)
+      .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
+      .where(eq(schema.cities.countryCode, countryCode));
+
+    return db.query.scamInfos.findMany({
+      where: and(
+        inArray(schema.scamInfos.regionId, regionIdsSubquery),
+        sql`${schema.scamInfos.deletedAt} is null`
+      ),
       orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
       with: {
         reactions: userId

@@ -57,6 +57,14 @@ export class ScamsService {
     return this.scamsRepository.findByRegion(regionId, userId, ipAddress);
   }
 
+  async getScamsByCity(cityId: string, userId?: string, ipAddress?: string) {
+    return this.scamsRepository.findByCity(cityId, userId, ipAddress);
+  }
+
+  async getScamsByCountry(countryCode: string, userId?: string, ipAddress?: string) {
+    return this.scamsRepository.findByCountry(countryCode, userId, ipAddress);
+  }
+
   async toggleReaction(
     scamInfoId: string,
     type: 'like' | 'dislike',

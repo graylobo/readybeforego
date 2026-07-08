@@ -33,6 +33,30 @@ export class ScamsController {
     return this.scamsService.getScamsByRegion(regionId, userId, ip as string);
   }
 
+  @Get('city/:cityId')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: '특정 도시의 모든 사기 경고 정보 목록 조회' })
+  async getByCity(
+    @Param('cityId') cityId: string,
+    @Req() req: any
+  ) {
+    const userId = req.user?.id;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    return this.scamsService.getScamsByCity(cityId, userId, ip as string);
+  }
+
+  @Get('country/:countryCode')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: '특정 국가의 모든 사기 경고 정보 목록 조회' })
+  async getByCountry(
+    @Param('countryCode') countryCode: string,
+    @Req() req: any
+  ) {
+    const userId = req.user?.id;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    return this.scamsService.getScamsByCountry(countryCode, userId, ip as string);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '사기 경고 정보 상세 조회' })
   async getById(@Param('id') id: string) {

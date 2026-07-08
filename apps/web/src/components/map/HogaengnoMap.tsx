@@ -187,22 +187,20 @@ export default function HogaengnoMap() {
   // 3. 세부 지역 레벨 연산 (줌 > 11)
   const regionMarkers = regions.filter((r) => (r.scamCount || 0) > 0);
 
-  // 국가 클러스터 클릭 시 ➔ 도시 레벨(9)로 부드럽게 줌인
+  // 국가 클러스터 클릭 시
   const handleCountryClick = (c: any) => {
     setSelectedCountryCode(c.countryCode);
     setSelectedCityId(null);
     setSelectedRegionId(null);
     setMapCenter([c.latitude, c.longitude]);
-    setMapZoom(9);
   };
 
-  // 도시 클러스터 클릭 시 ➔ 세부지역 레벨(13)로 부드럽게 줌인
+  // 도시 클러스터 클릭 시
   const handleCityClick = (c: any) => {
     setSelectedCountryCode(c.countryCode);
     setSelectedCityId(c.cityId);
     setSelectedRegionId(null);
     setMapCenter([c.latitude, c.longitude]);
-    setMapZoom(13);
   };
 
   // 개별 지역 마커 클릭 시
@@ -212,7 +210,6 @@ export default function HogaengnoMap() {
     if (region.cityId) setSelectedCityId(region.cityId);
     if (region.countryCode) setSelectedCountryCode(region.countryCode);
     setMapCenter([region.latitude, region.longitude]);
-    setMapZoom(14);
   };
 
   // 제보 모드 상태에서의 지도 클릭 핸들러

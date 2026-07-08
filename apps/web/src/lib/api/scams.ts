@@ -77,6 +77,16 @@ export const scamsApi = {
     return response.data;
   },
 
+  getScamsByCity: async (cityId: string): Promise<ScamInfo[]> => {
+    const response = await apiClient.get(`/scams/city/${cityId}`);
+    return response.data;
+  },
+
+  getScamsByCountry: async (countryCode: string): Promise<ScamInfo[]> => {
+    const response = await apiClient.get(`/scams/country/${countryCode}`);
+    return response.data;
+  },
+
   getScamById: async (id: string): Promise<ScamInfo> => {
     const response = await apiClient.get(`/scams/${id}`);
     return response.data;

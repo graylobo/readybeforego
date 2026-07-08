@@ -111,10 +111,22 @@ export default function Home() {
     enabled: !!selectedCityId,
   });
 
+  // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
   const { data: scams = [], isPending: isScamsPending } = useQuery({
-    queryKey: ["scams", selectedRegionId],
-    queryFn: () => scamsApi.getScamsByRegion(selectedRegionId!),
-    enabled: !!selectedRegionId,
+    queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId],
+    queryFn: () => {
+      if (selectedRegionId) {
+        return scamsApi.getScamsByRegion(selectedRegionId);
+      }
+      if (selectedCityId) {
+        return scamsApi.getScamsByCity(selectedCityId);
+      }
+      if (selectedCountryCode) {
+        return scamsApi.getScamsByCountry(selectedCountryCode);
+      }
+      return [];
+    },
+    enabled: !!selectedRegionId || !!selectedCityId || !!selectedCountryCode,
   });
 
   // Upvote/Downvote mutation
@@ -122,7 +134,7 @@ export default function Home() {
     mutationFn: ({ scamId, type }: { scamId: string; type: "like" | "dislike" }) =>
       scamsApi.toggleReaction(scamId, type),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scams", selectedRegionId] });
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
       toast.success("Done!");
     },
     onError: () => {
@@ -303,7 +315,7 @@ export default function Home() {
 
         {/* Dynamic Side Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {!selectedRegionId ? (
+          {!(selectedRegionId || selectedCityId || selectedCountryCode) ? (
             // Default Welcome View
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
               <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/20 flex items-center justify-center border border-amber-100 dark:border-amber-900/30">
@@ -323,7 +335,12 @@ export default function Home() {
               <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center gap-2 shrink-0">
                 <MapPin className="w-4 h-4 text-red-600" />
                 <h2 className="font-bold text-sm text-card-foreground">
-                  {selectedRegion?.name} <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
+                  {selectedRegionId 
+                    ? selectedRegion?.name 
+                    : selectedCityId 
+                      ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                      : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+                  } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
                 </h2>
               </div>
 
