@@ -1,0 +1,14 @@
+# pnpm workspace 설정 파일
+# 이 파일이 있으면 pnpm이 모노레포로 인식하고 workspace 패키지를 관리함
+#
+# 동작 방식:
+# 1. pnpm이 이 파일을 읽음
+# 2. packages 아래 패턴에 매칭되는 디렉토리들을 찾음
+# 3. 각 디렉토리에 package.json이 있으면 workspace 패키지로 등록
+# 4. 다른 패키지에서 "workspace:*"로 참조 시 심볼릭 링크 생성
+#
+# ⚠️ 중요: packages/shared-types가 workspace 패키지로 인식되려면
+# 반드시 packages/shared-types/package.json 파일이 존재해야 함
+packages:
+  - "apps/*" # apps 아래 모든 package.json이 있는 디렉토리
+  - "packages/*" # packages 아래 모든 package.json이 있는 디렉토리
