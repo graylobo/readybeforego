@@ -81,7 +81,11 @@ export const scamsApi = {
   },
 
   createScam: async (data: {
-    regionId: string;
+    regionId?: string;
+    regionName?: string;
+    cityId?: string;
+    latitude?: number;
+    longitude?: number;
     title: string;
     description: string;
     avoidanceTip?: string;

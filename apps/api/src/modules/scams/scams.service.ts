@@ -7,13 +7,32 @@ export class ScamsService {
   constructor(private readonly scamsRepository: ScamsRepository) {}
 
   async create(createDto: CreateScamInfoZodDto) {
-    return this.scamsRepository.create({
-      regionId: createDto.regionId,
-      title: createDto.title,
-      description: createDto.description,
-      avoidanceTip: createDto.avoidanceTip ?? null,
-      scamCategory: createDto.scamCategory,
-      sourceUrl: createDto.sourceUrl ?? null,
+    return this.scamsRepository.transaction(async (tx) => {
+      let regionId = createDto.regionId;
+
+      if (!regionId && createDto.regionName && createDto.cityId && createDto.latitude !== undefined && createDto.longitude !== undefined) {
+        const newRegion = await this.scamsRepository.createRegion({
+          cityId: createDto.cityId,
+          name: createDto.regionName,
+          nameEn: createDto.regionName,
+          latitude: createDto.latitude,
+          longitude: createDto.longitude,
+        }, tx);
+        regionId = newRegion.id;
+      }
+
+      if (!regionId) {
+        throw new Error('올바른 지역 정보가 지정되지 않았습니다.');
+      }
+
+      return this.scamsRepository.create({
+        regionId: regionId,
+        title: createDto.title,
+        description: createDto.description,
+        avoidanceTip: createDto.avoidanceTip ?? null,
+        scamCategory: createDto.scamCategory,
+        sourceUrl: createDto.sourceUrl ?? null,
+      }, tx);
     });
   }
 

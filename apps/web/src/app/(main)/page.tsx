@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Comments } from "@/components/comments/comments";
 import { ReportDialog } from "@/components/common/report-dialog";
+import { ScamReportModal } from "@/components/scams/scam-report-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   AlertTriangle, 
@@ -64,10 +65,21 @@ export default function Home() {
     setMapCenter,
     setMapZoom,
     resetSelections,
+    isReportMode,
+    setIsReportMode,
   } = useScamMapStore();
 
   const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
+
+  // Trigger toast guide when user activates reporting mode
+  useEffect(() => {
+    if (isReportMode) {
+      toast.info("제보 모드가 활성화되었습니다. 사기가 일어난 지도 상의 위치를 직접 클릭해 주세요!", {
+        duration: 4000,
+      });
+    }
+  }, [isReportMode]);
 
   // Queries
   const { data: countries = [] } = useQuery({
@@ -155,6 +167,24 @@ export default function Home() {
               안전 여행 가이드
             </Badge>
           </div>
+          
+          {/* Direct UGC report mode switch button */}
+          <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/30 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">위험 지역 직접 제보하기</span>
+            <Button
+              size="sm"
+              variant={isReportMode ? "destructive" : "outline"}
+              className={`text-[10px] font-bold h-7 px-3 cursor-pointer ${
+                isReportMode 
+                  ? "animate-pulse" 
+                  : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400"
+              }`}
+              onClick={() => setIsReportMode(!isReportMode)}
+            >
+              {isReportMode ? "제보 중단" : "🚨 제보하기"}
+            </Button>
+          </div>
+
           <p className="text-xs text-muted-foreground leading-relaxed">
             여행지의 호객, 바가지, 소매치기 사기 사례를 지도에서 한눈에 확인하고 대처법을 공유해 보세요.
           </p>
@@ -393,6 +423,9 @@ export default function Home() {
       <div className="flex-1 h-[50vh] md:h-full relative z-0">
         <HogaengnoMap />
       </div>
+
+      {/* 실시간 사용자 직접 제보 모달 */}
+      <ScamReportModal />
 
     </div>
   );

@@ -204,4 +204,10 @@ export class ScamsRepository {
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
     .orderBy(schema.regions.name);
   }
+
+  async createRegion(data: typeof schema.regions.$inferInsert, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db.insert(schema.regions).values(data).returning();
+    return result;
+  }
 }
