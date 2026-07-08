@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SQL, and, desc, eq, sql, inArray } from 'drizzle-orm';
+import { SQL, and, asc, desc, eq, sql, inArray } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -238,7 +238,7 @@ export class ScamsRepository {
 
   async findAllCountries(tx?: Transaction) {
     const db = tx ?? this.db;
-    return db.select().from(schema.countries).orderBy(schema.countries.name);
+    return db.select().from(schema.countries).orderBy(asc(schema.countries.name));
   }
 
   async findCitiesByCountry(countryCode: string, tx?: Transaction) {
@@ -246,7 +246,7 @@ export class ScamsRepository {
     return db.select()
       .from(schema.cities)
       .where(eq(schema.cities.countryCode, countryCode))
-      .orderBy(schema.cities.name);
+      .orderBy(asc(schema.cities.name));
   }
 
   async findRegionsByCity(cityId: string, tx?: Transaction) {
@@ -254,7 +254,7 @@ export class ScamsRepository {
     return db.select()
       .from(schema.regions)
       .where(eq(schema.regions.cityId, cityId))
-      .orderBy(schema.regions.name);
+      .orderBy(asc(schema.regions.name));
   }
 
   async findAllRegions(tx?: Transaction) {

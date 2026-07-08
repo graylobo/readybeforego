@@ -21,6 +21,32 @@ export class ScamsController {
     return this.scamsService.create(createDto);
   }
 
+  // --- Static Routes (Must be declared before wildcard routes to prevent masking) ---
+
+  @Get('countries')
+  @ApiOperation({ summary: '전체 국가 목록 조회' })
+  async getCountries() {
+    return this.scamsService.getCountries();
+  }
+
+  @Get('cities/:countryCode')
+  @ApiOperation({ summary: '특정 국가의 도시 목록 조회' })
+  async getCities(@Param('countryCode') countryCode: string) {
+    return this.scamsService.getCities(countryCode);
+  }
+
+  @Get('regions/all')
+  @ApiOperation({ summary: '전체 세부 지역 목록 조회 (지도 마커 로딩용)' })
+  async getAllRegions() {
+    return this.scamsService.getAllRegions();
+  }
+
+  @Get('regions/:cityId')
+  @ApiOperation({ summary: '특정 도시의 세부 지역 목록 조회' })
+  async getRegions(@Param('cityId') cityId: string) {
+    return this.scamsService.getRegions(cityId);
+  }
+
   @Get('region/:regionId')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: '특정 지역의 사기 경고 정보 목록 조회' })
@@ -57,6 +83,8 @@ export class ScamsController {
     return this.scamsService.getScamsByCountry(countryCode, userId, ip as string);
   }
 
+  // --- Dynamic Wildcard Routes (Must be declared at the bottom) ---
+
   @Get(':id')
   @ApiOperation({ summary: '사기 경고 정보 상세 조회' })
   async getById(@Param('id') id: string) {
@@ -88,29 +116,5 @@ export class ScamsController {
     const userId = req.user?.id;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     return this.scamsService.toggleReaction(id, body.type, userId, ip as string);
-  }
-
-  @Get('countries')
-  @ApiOperation({ summary: '전체 국가 목록 조회' })
-  async getCountries() {
-    return this.scamsService.getCountries();
-  }
-
-  @Get('cities/:countryCode')
-  @ApiOperation({ summary: '특정 국가의 도시 목록 조회' })
-  async getCities(@Param('countryCode') countryCode: string) {
-    return this.scamsService.getCities(countryCode);
-  }
-
-  @Get('regions/all')
-  @ApiOperation({ summary: '전체 세부 지역 목록 조회 (지도 마커 로딩용)' })
-  async getAllRegions() {
-    return this.scamsService.getAllRegions();
-  }
-
-  @Get('regions/:cityId')
-  @ApiOperation({ summary: '특정 도시의 세부 지역 목록 조회' })
-  async getRegions(@Param('cityId') cityId: string) {
-    return this.scamsService.getRegions(cityId);
   }
 }
