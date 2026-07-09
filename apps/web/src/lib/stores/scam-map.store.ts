@@ -8,11 +8,14 @@ interface ScamMapStore {
   selectedRegion: Region | null;
   mapCenter: [number, number];
   mapZoom: number;
-  // 제보 모드 상태 추가
   isReportMode: boolean;
   reportCoords: [number, number] | null;
   isReportModalOpen: boolean;
   
+  // UGC Select Type Modal and Type states
+  isSelectTypeModalOpen: boolean;
+  reportType: "new" | "existing";
+
   // 모바일 전용 뷰포트 상태 추가
   isMobileFeedOpen: boolean;
   isFilterModalOpen: boolean;
@@ -26,9 +29,12 @@ interface ScamMapStore {
   setIsReportMode: (val: boolean) => void;
   setReportCoords: (coords: [number, number] | null) => void;
   setReportModalOpen: (val: boolean) => void;
+  setSelectTypeModalOpen: (val: boolean) => void;
+  setReportType: (type: "new" | "existing") => void;
   setIsMobileFeedOpen: (val: boolean) => void;
   setIsFilterModalOpen: (val: boolean) => void;
   resetSelections: () => void;
+  resetFeedSelections: () => void;
 }
 
 export const useScamMapStore = create<ScamMapStore>((set) => ({
@@ -36,11 +42,13 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   selectedCityId: null,
   selectedRegionId: null,
   selectedRegion: null,
-  mapCenter: [13.7563, 100.5018], // Default to Bangkok coords
+  mapCenter: [13.7563, 100.5018],
   mapZoom: 5,
   isReportMode: false,
   reportCoords: null,
   isReportModalOpen: false,
+  isSelectTypeModalOpen: false,
+  reportType: "new",
   isMobileFeedOpen: false,
   isFilterModalOpen: false,
   setSelectedCountryCode: (code) => set({ selectedCountryCode: code }),
@@ -52,6 +60,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setIsReportMode: (val) => set({ isReportMode: val }),
   setReportCoords: (coords) => set({ reportCoords: coords }),
   setReportModalOpen: (val) => set({ isReportModalOpen: val }),
+  setSelectTypeModalOpen: (val) => set({ isSelectTypeModalOpen: val }),
+  setReportType: (type) => set({ reportType: type }),
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
   setIsFilterModalOpen: (val) => set({ isFilterModalOpen: val }),
   resetSelections: () => set({
@@ -64,7 +74,15 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isReportMode: false,
     reportCoords: null,
     isReportModalOpen: false,
+    isSelectTypeModalOpen: false,
+    reportType: "new",
     isMobileFeedOpen: false,
     isFilterModalOpen: false,
+  }),
+  resetFeedSelections: () => set({
+    selectedCountryCode: null,
+    selectedCityId: null,
+    selectedRegionId: null,
+    selectedRegion: null,
   }),
 }));

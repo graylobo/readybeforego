@@ -291,4 +291,40 @@ export class ScamsRepository {
     const [result] = await db.insert(schema.regions).values(data).returning();
     return result;
   }
+
+  async findCountryByName(name: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.countries.findFirst({
+      where: eq(schema.countries.name, name),
+    });
+  }
+
+  async findCountryByCode(code: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.countries.findFirst({
+      where: eq(schema.countries.code, code),
+    });
+  }
+
+  async createCountry(data: typeof schema.countries.$inferInsert, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db.insert(schema.countries).values(data).returning();
+    return result;
+  }
+
+  async findCityByName(name: string, countryCode: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.cities.findFirst({
+      where: and(
+        eq(schema.cities.name, name),
+        eq(schema.cities.countryCode, countryCode)
+      ),
+    });
+  }
+
+  async createCity(data: typeof schema.cities.$inferInsert, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db.insert(schema.cities).values(data).returning();
+    return result;
+  }
 }

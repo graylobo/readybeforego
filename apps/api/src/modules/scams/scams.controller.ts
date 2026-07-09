@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -81,6 +81,15 @@ export class ScamsController {
     const userId = req.user?.id;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     return this.scamsService.getScamsByCountry(countryCode, userId, ip as string);
+  }
+
+  @Get('reverse-geocode')
+  @ApiOperation({ summary: '위경도 좌표 기반 리버스 지오코딩 (OSM Nominatim 우회)' })
+  async reverseGeocode(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string
+  ) {
+    return this.scamsService.reverseGeocode(Number(lat), Number(lng));
   }
 
   // --- Dynamic Wildcard Routes (Must be declared at the bottom) ---

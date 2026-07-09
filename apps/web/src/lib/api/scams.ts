@@ -96,6 +96,9 @@ export const scamsApi = {
     regionId?: string;
     regionName?: string;
     cityId?: string;
+    countryCode?: string;
+    countryName?: string;
+    cityName?: string;
     latitude?: number;
     longitude?: number;
     title: string;
@@ -111,6 +114,11 @@ export const scamsApi = {
 
   toggleReaction: async (id: string, type: 'like' | 'dislike'): Promise<ScamInfo> => {
     const response = await apiClient.post(`/scams/${id}/reaction`, { type });
+    return response.data;
+  },
+
+  reverseGeocode: async (lat: number, lng: number): Promise<any> => {
+    const response = await apiClient.get('/scams/reverse-geocode', { params: { lat, lng } });
     return response.data;
   }
 };

@@ -90,6 +90,11 @@ export default function Home() {
     setIsMobileFeedOpen,
     isFilterModalOpen,
     setIsFilterModalOpen,
+    isSelectTypeModalOpen,
+    setSelectTypeModalOpen,
+    setReportType,
+    setReportModalOpen,
+    setReportCoords,
   } = useScamMapStore();
 
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
@@ -99,6 +104,7 @@ export default function Home() {
   useEffect(() => {
     if (isReportMode) {
       toast.info(t("report_modal.guide_toast", { defaultValue: "지도에서 피해 발생 위치를 클릭해 주세요! 📍 핀이 생성되며 제보 입력창이 열립니다." }), {
+        id: "report-mode-guide",
         duration: 5000,
       });
     }
@@ -120,6 +126,12 @@ export default function Home() {
     queryKey: ["regions", selectedCityId],
     queryFn: () => scamsApi.getRegions(selectedCityId!),
     enabled: !!selectedCityId,
+  });
+
+  // 지도 이동을 위한 전역 지역 정보 목록 조회
+  const { data: allRegions = [] } = useQuery<Region[]>({
+    queryKey: ["scam-regions"],
+    queryFn: () => scamsApi.getAllRegions(),
   });
 
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
@@ -148,6 +160,19 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["scams"] });
     },
   });
+
+  // 제보 카드 클릭 시 해당 제보 위치로 지도 이동 및 최대 확대
+  const handleCardClick = (scam: ScamInfo) => {
+    const region = allRegions.find(r => r.id === scam.regionId);
+    if (region) {
+      setMapCenter([region.latitude, region.longitude]);
+      setMapZoom(18);
+      // 모바일 기기인 경우 카드를 눌렀을 때 지도가 잘 보이게 바텀 시트를 닫아줌
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        setIsMobileFeedOpen(false);
+      }
+    }
+  };
 
   // Location selector change handlers
   const handleCountryChange = (code: string) => {
@@ -213,7 +238,11 @@ export default function Home() {
         {scams.map((scam) => {
           const cat = getCategoryInfo(scam.scamCategory, t);
           return (
-            <Card key={scam.id} className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md">
+            <Card 
+              key={scam.id} 
+              className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer active:scale-[0.99]"
+              onClick={() => handleCardClick(scam)}
+            >
               <CardHeader className="p-4 pb-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
@@ -473,7 +502,13 @@ export default function Home() {
                   ? "animate-pulse" 
                   : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400"
               }`}
-              onClick={() => setIsReportMode(!isReportMode)}
+              onClick={() => {
+                if (isReportMode) {
+                  setIsReportMode(false);
+                } else {
+                  setSelectTypeModalOpen(true);
+                }
+              }}
             >
               {isReportMode ? t("common.report_cancel_btn") : t("common.report_direct_btn")}
             </Button>
@@ -568,16 +603,34 @@ export default function Home() {
             // Region Details & Card Feed
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Active Scope Header */}
-              <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center gap-2 shrink-0">
-                <MapPin className="w-4 h-4 text-red-600" />
-                <h2 className="font-bold text-sm text-card-foreground">
-                  {selectedRegionId 
-                    ? selectedRegion?.name 
-                    : selectedCityId 
-                      ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                      : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
-                  } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
-                </h2>
+              <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-red-600" />
+                  <h2 className="font-bold text-sm text-card-foreground">
+                    {selectedRegionId 
+                      ? selectedRegion?.name 
+                      : selectedCityId 
+                        ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                        : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+                    } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
+                  </h2>
+                </div>
+
+                {selectedRegionId && (
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-8 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95"
+                    onClick={() => {
+                      setIsReportMode(true);
+                      setReportType("existing");
+                      setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
+                      setReportModalOpen(true);
+                    }}
+                  >
+                    <span>➕</span>
+                    <span>여기에 제보하기</span>
+                  </Button>
+                )}
               </div>
 
               {/* Feed Container */}
@@ -592,16 +645,35 @@ export default function Home() {
       {/* --- 모바일 전용 바텀 시트 (마커 클릭 시 아래서 올라오는 팝업 카드) --- */}
       <Dialog open={isMobileFeedOpen} onOpenChange={setIsMobileFeedOpen}>
         <DialogContent className="md:hidden sm:max-w-[480px] h-[75vh] bottom-0 top-auto translate-y-0 rounded-t-2xl rounded-b-none p-0 overflow-hidden flex flex-col gap-0 border-t border-border bg-card/98 backdrop-blur-lg">
-          <DialogHeader className="px-6 py-4 bg-muted/40 border-b border-border flex flex-row items-center gap-2 shrink-0 space-y-0">
-            <MapPin className="w-4 h-4 text-red-600" />
-            <DialogTitle className="font-bold text-sm text-card-foreground">
-              {selectedRegionId 
-                ? selectedRegion?.name 
-                : selectedCityId 
-                  ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                  : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
-              } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
-            </DialogTitle>
+          <DialogHeader className="px-6 py-4 bg-muted/40 border-b border-border flex flex-row items-center justify-between gap-2 shrink-0 space-y-0">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-red-600" />
+              <DialogTitle className="font-bold text-sm text-card-foreground">
+                {selectedRegionId 
+                  ? selectedRegion?.name 
+                  : selectedCityId 
+                    ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                    : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+                } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
+              </DialogTitle>
+            </div>
+
+            {selectedRegionId && (
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95 mr-6"
+                onClick={() => {
+                  setIsReportMode(true);
+                  setReportType("existing");
+                  setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
+                  setReportModalOpen(true);
+                  setIsMobileFeedOpen(false);
+                }}
+              >
+                <span>➕</span>
+                <span>제보하기</span>
+              </Button>
+            )}
           </DialogHeader>
           
           <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
@@ -699,8 +771,12 @@ export default function Home() {
                     : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400"
                 }`}
                 onClick={() => {
-                  setIsReportMode(!isReportMode);
                   setIsFilterModalOpen(false);
+                  if (isReportMode) {
+                    setIsReportMode(false);
+                  } else {
+                    setSelectTypeModalOpen(true);
+                  }
                 }}
               >
                 {isReportMode ? t("common.report_cancel_btn") : t("common.report_direct_btn")}
@@ -719,6 +795,73 @@ export default function Home() {
 
       {/* 실시간 사용자 직접 제보 모달 (UGC 폼) */}
       <ScamReportModal />
+
+      {/* 제보 방식 분기 다이얼로그 */}
+      <Dialog open={isSelectTypeModalOpen} onOpenChange={setSelectTypeModalOpen}>
+        <DialogContent className="w-[90%] max-w-[420px] p-6 rounded-2xl bg-card border border-border shadow-2xl">
+          <DialogHeader className="space-y-1.5 text-center">
+            <DialogTitle className="text-lg font-black tracking-tight flex items-center justify-center gap-1.5 text-foreground">
+              🧭 피해 제보 위치 지정
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              제보 등록을 위한 위치 지정 방식을 선택해 주세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3.5 pt-3">
+            <button
+              type="button"
+              className="flex items-start gap-3.5 p-4 rounded-xl border border-border bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-all text-left group cursor-pointer shadow-sm hover:shadow"
+              onClick={() => {
+                setReportType("new");
+                setIsReportMode(true);
+                setSelectTypeModalOpen(false);
+              }}
+            >
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 group-hover:scale-110 transition-transform shrink-0">
+                📍
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">지도에서 직접 핀 찍기</h4>
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  지도의 특정 지점을 콕 찝어 새로운 피해 상권이나 랜드마크 이름을 작명하여 제보합니다.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="flex items-start gap-3.5 p-4 rounded-xl border border-border bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-all text-left group cursor-pointer shadow-sm hover:shadow"
+              onClick={() => {
+                setReportType("existing");
+                setReportModalOpen(true);
+                setSelectTypeModalOpen(false);
+              }}
+            >
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0">
+                🏢
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">등록된 기존 장소에서 선택</h4>
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  이미 등록된 검증된 국가/도시/세부 구역 목록 중 하나를 골라 간편하게 피해를 제보합니다.
+                </p>
+              </div>
+            </button>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-8 cursor-pointer text-muted-foreground hover:text-foreground"
+              onClick={() => setSelectTypeModalOpen(false)}
+            >
+              취소
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

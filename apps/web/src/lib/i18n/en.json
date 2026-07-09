@@ -56,7 +56,11 @@
   "countries_list": {
     "KR": "South Korea",
     "TH": "Thailand",
-    "VN": "Vietnam"
+    "VN": "Vietnam",
+    "SG": "Singapore",
+    "MY": "Malaysia",
+    "JP": "Japan",
+    "KH": "Cambodia"
   },
   "cities_list": {
     "서울": "Seoul",

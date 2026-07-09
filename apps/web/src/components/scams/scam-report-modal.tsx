@@ -29,6 +29,10 @@ export function ScamReportModal() {
     setSelectedRegionId,
     setMapCenter,
     setMapZoom,
+    reportType,
+    setReportType,
+    selectedRegionId,
+    selectedRegion,
   } = useScamMapStore();
 
   const [countryCode, setCountryCode] = useState("");
@@ -44,59 +48,19 @@ export function ScamReportModal() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (isReportModalOpen) {
-      // 오프라인 도시 대표 좌표 맵 (시드 데이터 매핑용)
-      const OFFLINE_CITIES = [
-        { id: 'a1b2c3d4-e5f6-4a8b-8c0d-1e2f3a4b5c6d', countryCode: 'TH', name: '방콕', lat: 13.7563, lng: 100.5018 },
-        { id: 'b2c3d4e5-f6a7-4b9c-8d1e-2f3a4b5c6d7e', countryCode: 'TH', name: '치앙마이', lat: 18.7883, lng: 98.9853 },
-        { id: 'c3d4e5f6-a7b8-4c0d-8e2f-3a4b5c6d7e8f', countryCode: 'VN', name: '다낭', lat: 16.0544, lng: 108.2022 },
-        { id: 'd4e5f6a7-b8c9-4d1e-8f3a-4b5c6d7e8f9a', countryCode: 'KR', name: '서울', lat: 37.5665, lng: 126.9780 }
-      ];
+  // 로컬 상태로 regionId만 관리
+  const [regionId, setRegionId] = useState("");
 
-      let targetCountry = "";
-      let targetCity = "";
+  // Dynamic Reverse Geocoding States
+  const [detectedCountryName, setDetectedCountryName] = useState("");
+  const [detectedCountryCode, setDetectedCountryCode] = useState("");
+  const [detectedCityName, setDetectedCityName] = useState("");
+  const [isLoadingGeo, setIsLoadingGeo] = useState(false);
 
-      // 핀포인트 클릭 위경도 좌표가 주어지면 가장 가까운 도시를 자동으로 식별하되 임계값 적용
-      if (reportCoords) {
-        let minD = Infinity;
-        let closestCity = OFFLINE_CITIES[0];
-        for (const city of OFFLINE_CITIES) {
-          const d = (reportCoords[0] - city.lat) ** 2 + (reportCoords[1] - city.lng) ** 2;
-          if (d < minD) {
-            minD = d;
-            closestCity = city;
-          }
-        }
-        
-        // 약 1.6도 (약 180km 거리) 이내인 경우에만 자동 매핑을 활성화하여 태국/베트남/한국 인접 영역만 자동 처리
-        const DISTANCE_LIMIT = 2.5; 
-        if (minD < DISTANCE_LIMIT) {
-          targetCountry = closestCity.countryCode;
-          targetCity = closestCity.id;
-        }
-      }
+  // Form Inline Validation Error States
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-      setCountryCode(targetCountry);
-      setCityId(targetCity);
-      setRegionName("");
-      setScamCategory("");
-      setTitle("");
-      setDescription("");
-      setAvoidanceTip("");
-      setSourceUrl("");
-      setImageFiles([]);
-      setImagePreviews([]);
-      setUploading(false);
-    }
-  }, [isReportModalOpen, selectedCountryCode, selectedCityId, reportCoords]);
-
-  useEffect(() => {
-    return () => {
-      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [imagePreviews]);
-
+  // useQuery hooks moved here to be referenced inside useEffect
   const { data: countries = [] } = useQuery({
     queryKey: ["countries"],
     queryFn: () => scamsApi.getCountries(),
@@ -108,6 +72,157 @@ export function ScamReportModal() {
     queryFn: () => scamsApi.getCities(countryCode),
     enabled: isReportModalOpen && !!countryCode,
   });
+
+  const { data: cityRegions = [], isPending: isRegionsPending } = useQuery({
+    queryKey: ["city-regions", cityId],
+    queryFn: () => scamsApi.getRegions(cityId),
+    enabled: isReportModalOpen && !!cityId && cityId !== "NEW_CITY",
+  });
+
+  useEffect(() => {
+    if (isReportModalOpen) {
+      setRegionName("");
+      setScamCategory("");
+      setTitle("");
+      setDescription("");
+      setAvoidanceTip("");
+      setSourceUrl("");
+      setImageFiles([]);
+      setImagePreviews([]);
+      setUploading(false);
+      setErrors({});
+
+      if (reportType === "existing" && selectedRegionId) {
+        setRegionId(selectedRegionId);
+        if (selectedRegion) {
+          if (selectedRegion.countryCode) setCountryCode(selectedRegion.countryCode);
+          if (selectedRegion.cityId) setCityId(selectedRegion.cityId);
+        }
+      } else {
+        setRegionId("");
+      }
+      
+      // A. 신규 핀 제보인 경우에만 Nominatim Geocoding API 기동
+      if (reportType === "new" && reportCoords) {
+        setIsLoadingGeo(true);
+        // 백엔드 우회 reverse-geocode API 활용 (CORS 및 차단 방지)
+        scamsApi.reverseGeocode(reportCoords[0], reportCoords[1])
+          .then((data) => {
+            if (data && data.address) {
+              const addr = data.address;
+              const country = addr.country || "";
+              const countryCodeVal = (addr.country_code || "").toUpperCase();
+              const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 지역";
+
+              // 1. 광역/기초 자치단체 필터 함수 정의
+              const isBroadArea = (name: string) => {
+                if (!name) return true;
+                const isGenericName = 
+                  name.toLowerCase() === country.toLowerCase() || 
+                  name.toLowerCase() === city.toLowerCase() ||
+                  /^\d+$/.test(name) ||
+                  name.includes("대한민국") ||
+                  name.includes("Korea") ||
+                  name === "기타 지역";
+                
+                const isDistrictOrCounty = 
+                  /^[a-zA-Z0-9가-힣\s\-]{1,10}(구|군|시)$/.test(name) ||
+                  name.toLowerCase().endsWith("gu") ||
+                  name.toLowerCase().endsWith("gun") ||
+                  name.toLowerCase().endsWith("si") ||
+                  name.toLowerCase().includes("district") ||
+                  name.toLowerCase().includes("county");
+
+                return isGenericName || isDistrictOrCounty;
+              };
+
+              // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
+              const landmark = addr.amenity || addr.tourism || addr.historic || addr.attraction || addr.place || addr.religion || addr.shop || addr.building || "";
+              
+              // 만약 1순위 지물이 광범위 행정구역이 아니라면 바로 채택!
+              if (landmark && !isBroadArea(landmark)) {
+                setRegionName(landmark);
+              } else {
+                // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출 (기장읍, 용호동, 시랑리 등)
+                let fallbackName = "";
+                if (data.name) {
+                  fallbackName = data.name;
+                } else if (data.display_name) {
+                  const parts = data.display_name.split(",");
+                  if (parts.length > 0) {
+                    fallbackName = parts[0].trim();
+                  }
+                }
+
+                // 2순위 지물이 광범위 행정구역이 아니라면 채택!
+                if (fallbackName && !isBroadArea(fallbackName)) {
+                  setRegionName(fallbackName);
+                } else {
+                  // 4. 3순위 (동/리/도로명 폴백): address 내부의 상세 세부 지명 추출 (neighbourhood, suburb, road 등)
+                  const subLandmark = addr.neighbourhood || addr.suburb || addr.road || "";
+                  if (subLandmark && !isBroadArea(subLandmark)) {
+                    setRegionName(subLandmark);
+                  } else {
+                    setRegionName("");
+                  }
+                }
+              }
+
+              setDetectedCountryName(country);
+              setDetectedCountryCode(countryCodeVal);
+              setDetectedCityName(city);
+
+              // 기등록 국가 목록 매칭 검사
+              const existingCountry = countries.find(c => c.code === countryCodeVal);
+              if (existingCountry) {
+                setCountryCode(existingCountry.code);
+                
+                // 해당 국가의 기등록 도시 목록 비동기 매칭
+                scamsApi.getCities(existingCountry.code)
+                  .then((cityList) => {
+                    const matchedCity = cityList.find((c: any) => 
+                      c.name.includes(city) || city.includes(c.name)
+                    );
+                    if (matchedCity) {
+                      setCityId(matchedCity.id);
+                    } else {
+                      setCityId("NEW_CITY");
+                    }
+                  })
+                  .catch(() => {
+                    setCityId("NEW_CITY");
+                  });
+              } else {
+                setCountryCode("NEW_COUNTRY");
+                setCityId("NEW_CITY");
+              }
+            }
+          })
+          .catch((err) => {
+            console.error("Nominatim Reverse Geocoding Error:", err);
+            setCountryCode("");
+            setCityId("");
+          })
+          .finally(() => {
+            setIsLoadingGeo(false);
+          });
+      } else {
+        // B. 기존 장소 목록 제보인 경우: 현재 맵 및 스토어에 바인딩된 국가/도시를 프리필하여 세팅
+        setCountryCode(selectedCountryCode || "");
+        setCityId(selectedCityId || "");
+        setDetectedCountryName("");
+        setDetectedCountryCode("");
+        setDetectedCityName("");
+        setIsLoadingGeo(false);
+      }
+    }
+  }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries]);
+
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imagePreviews]);
 
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof scamsApi.createScam>[0]) => scamsApi.createScam(data),
@@ -164,23 +279,50 @@ export function ScamReportModal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cityId) {
-      toast.error(t("report_modal.city_select"));
-      return;
+    const newErrors: Record<string, string> = {};
+
+    // A. 국가/도시 매칭 검증
+    if (!cityId && (!detectedCountryName || !detectedCityName)) {
+      newErrors.cityId = "제보할 국가와 도시를 선택해 주세요.";
     }
-    if (!regionName.trim()) {
-      toast.error(t("report_modal.place_name_placeholder"));
-      return;
+    
+    // B. 제보 위치 지정 방식별 검증
+    if (reportType === "new") {
+      if (!regionName.trim()) {
+        newErrors.regionName = t("report_modal.place_name_placeholder");
+      } else if (regionName.trim().length < 2) {
+        newErrors.regionName = "세부 장소명은 최소 2자 이상이어야 합니다.";
+      }
+      if (!reportCoords) {
+        newErrors.coords = "지정된 좌표 정보가 없습니다.";
+      }
+    } else {
+      // 기존 등록 장소 제보인 경우 검사
+      if (!regionId) {
+        newErrors.regionId = "기존에 등록된 장소를 선택해 주세요.";
+      }
     }
+
     if (!scamCategory) {
-      toast.error(t("report_modal.category_select"));
-      return;
+      newErrors.scamCategory = "사기 피해 카테고리를 선택해 주세요.";
     }
-    if (!title.trim() || !description.trim()) {
-      toast.error("Required fields empty.");
-      return;
+    
+    if (!title.trim()) {
+      newErrors.title = "제보 제목을 입력해 주세요.";
+    } else if (title.trim().length < 2) {
+      newErrors.title = "제목은 최소 2자 이상이어야 합니다.";
     }
-    if (!reportCoords) {
+
+    if (!description.trim()) {
+      newErrors.description = "피해 상황 상세 설명을 입력해 주세요.";
+    } else if (description.trim().length < 10) {
+      newErrors.description = "설명은 최소 10자 이상 자세히 설명해 주세요.";
+    }
+
+    // 에러 존재 시 제출 가드
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error("입력한 제보 정보에 유효하지 않은 항목이 있습니다. 빨간색 안내를 확인해 주세요.");
       return;
     }
 
@@ -192,18 +334,33 @@ export function ScamReportModal() {
         urls.push(url);
       }
 
-      createMutation.mutate({
-        cityId,
-        regionName: regionName.trim(),
-        latitude: reportCoords[0],
-        longitude: reportCoords[1],
-        scamCategory,
-        title: title.trim(),
-        description: description.trim(),
-        avoidanceTip: avoidanceTip.trim() || undefined,
-        sourceUrl: sourceUrl.trim() || undefined,
-        imageUrls: urls,
-      });
+      if (reportType === "new" && reportCoords) {
+        createMutation.mutate({
+          cityId: cityId === "NEW_CITY" ? undefined : cityId,
+          countryCode: countryCode === "NEW_COUNTRY" ? detectedCountryCode : countryCode || undefined,
+          countryName: countryCode === "NEW_COUNTRY" ? detectedCountryName : undefined,
+          cityName: cityId === "NEW_CITY" ? detectedCityName : undefined,
+          regionName: regionName.trim(),
+          latitude: reportCoords[0],
+          longitude: reportCoords[1],
+          scamCategory,
+          title: title.trim(),
+          description: description.trim(),
+          avoidanceTip: avoidanceTip.trim() || undefined,
+          sourceUrl: sourceUrl.trim() || undefined,
+          imageUrls: urls,
+        });
+      } else {
+        createMutation.mutate({
+          regionId,
+          scamCategory,
+          title: title.trim(),
+          description: description.trim(),
+          avoidanceTip: avoidanceTip.trim() || undefined,
+          sourceUrl: sourceUrl.trim() || undefined,
+          imageUrls: urls,
+        });
+      }
     } catch (error) {
       toast.error("Upload Error");
       setUploading(false);
@@ -235,10 +392,27 @@ export function ScamReportModal() {
           
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.country")}</Label>
-              <Select value={countryCode} onValueChange={(val) => { setCountryCode(val); setCityId(""); }} disabled={uploading}>
-                <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder={t("report_modal.country_select")} />
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {t("report_modal.country")}
+              </Label>
+              <Select 
+                value={countryCode} 
+                onValueChange={(val) => { 
+                  setCountryCode(val); 
+                  setCityId(""); 
+                  if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                }} 
+                disabled={uploading || isLoadingGeo || reportType === "existing"}
+              >
+                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                  {isLoadingGeo ? (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      위치 감지 중...
+                    </span>
+                  ) : (
+                    <SelectValue placeholder={t("report_modal.country_select")} />
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   {countries.map((c) => (
@@ -246,19 +420,36 @@ export function ScamReportModal() {
                       {c.name}
                     </SelectItem>
                   ))}
+                  {detectedCountryName && (
+                    <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
+                      {detectedCountryName} (자동 감지)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.city")}</Label>
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {t("report_modal.city")}
+              </Label>
               <Select 
                 value={cityId} 
-                onValueChange={setCityId}
-                disabled={!countryCode || isCitiesPending || uploading}
+                onValueChange={(val) => {
+                  setCityId(val);
+                  if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                }}
+                disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
               >
-                <SelectTrigger className="w-full text-xs cursor-pointer">
-                  <SelectValue placeholder={t("report_modal.city_select")} />
+                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                  {isLoadingGeo ? (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      도시 감지 중...
+                    </span>
+                  ) : (
+                    <SelectValue placeholder={t("report_modal.city_select")} />
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   {cities.map((city) => (
@@ -266,29 +457,92 @@ export function ScamReportModal() {
                       {city.name}
                     </SelectItem>
                   ))}
+                  {detectedCityName && (
+                    <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
+                      {detectedCityName} (자동 감지)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
+          {errors.cityId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.cityId}</p>}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.place_name")}</Label>
-            <Input
-              id="regionName"
-              placeholder={t("report_modal.place_name_placeholder")}
-              value={regionName}
-              onChange={(e) => setRegionName(e.target.value)}
-              className="text-xs"
-              required
-              disabled={uploading}
-            />
-            <p className="text-[10px] text-muted-foreground">{t("report_modal.place_name_desc")}</p>
-          </div>
+
+
+          {/* 제보 폼 분기 */}
+          {reportType === "new" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {t("report_modal.place_name")} (새로 등록할 세부 장소명)
+              </Label>
+              <Input
+                id="regionName"
+                placeholder={t("report_modal.place_name_placeholder")}
+                value={regionName}
+                onChange={(e) => {
+                  setRegionName(e.target.value);
+                  if (errors.regionName) setErrors(prev => ({ ...prev, regionName: "" }));
+                }}
+                className={`text-xs transition-all ${errors.regionName ? "border-red-500 focus-visible:ring-red-400 focus-visible:border-red-500" : ""}`}
+                required
+                disabled={uploading}
+              />
+              {errors.regionName ? (
+                <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionName}</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">{t("report_modal.place_name_desc")}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">기존 등록 장소 선택</Label>
+              <Select 
+                value={regionId} 
+                onValueChange={(val) => {
+                  setRegionId(val);
+                  if (errors.regionId) setErrors(prev => ({ ...prev, regionId: "" }));
+                }} 
+                disabled={isRegionsPending || uploading || reportType === "existing"}
+              >
+                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.regionId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                  {isRegionsPending ? (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      지역 목록 불러오는 중...
+                    </span>
+                  ) : (
+                    <SelectValue placeholder="등록된 기존 장소를 선택해 주세요" />
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  {cityRegions.map((r) => (
+                    <SelectItem key={r.id} value={r.id} className="cursor-pointer">
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                  {cityRegions.length === 0 && !isRegionsPending && (
+                    <SelectItem value="NO_REGIONS" disabled className="text-muted-foreground text-xs text-center py-2">
+                      등록된 기존 장소가 없습니다.
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {errors.regionId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionId}</p>}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.category")}</Label>
-            <Select value={scamCategory} onValueChange={setScamCategory} disabled={uploading}>
-              <SelectTrigger className="w-full text-xs cursor-pointer">
+            <Select 
+              value={scamCategory} 
+              onValueChange={(val) => {
+                setScamCategory(val);
+                if (errors.scamCategory) setErrors(prev => ({ ...prev, scamCategory: "" }));
+              }} 
+              disabled={uploading}
+            >
+              <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.scamCategory ? "border-red-500 focus:ring-red-400" : ""}`}>
                 <SelectValue placeholder={t("report_modal.category_select")} />
               </SelectTrigger>
               <SelectContent>
@@ -299,6 +553,7 @@ export function ScamReportModal() {
                 <SelectItem value="OVERCHARGING" className="cursor-pointer">{t("categories.OVERCHARGING")}</SelectItem>
               </SelectContent>
             </Select>
+            {errors.scamCategory && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.scamCategory}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -345,11 +600,15 @@ export function ScamReportModal() {
                 id="title"
                 placeholder={t("report_modal.title_placeholder")}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-xs"
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (errors.title) setErrors(prev => ({ ...prev, title: "" }));
+                }}
+                className={`text-xs transition-all ${errors.title ? "border-red-500 focus-visible:ring-red-400 focus-visible:border-red-500" : ""}`}
                 required
                 disabled={uploading}
               />
+              {errors.title && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.title}</p>}
             </div>
 
             <div className="space-y-1.5">
@@ -358,11 +617,15 @@ export function ScamReportModal() {
                 id="description"
                 placeholder={t("report_modal.desc_placeholder")}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="text-xs min-h-[90px] resize-none"
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (errors.description) setErrors(prev => ({ ...prev, description: "" }));
+                }}
+                className={`text-xs min-h-[90px] resize-none transition-all ${errors.description ? "border-red-500 focus-visible:ring-red-400 focus-visible:border-red-500" : ""}`}
                 required
                 disabled={uploading}
               />
+              {errors.description && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.description}</p>}
             </div>
 
             <div className="space-y-1.5">
