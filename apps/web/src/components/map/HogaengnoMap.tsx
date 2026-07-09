@@ -122,6 +122,7 @@ export default function HogaengnoMap() {
     isReportMode,
     setReportCoords,
     setReportModalOpen,
+    setIsMobileFeedOpen,
   } = useScamMapStore();
 
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
@@ -200,6 +201,7 @@ export default function HogaengnoMap() {
     setSelectedCityId(null);
     setSelectedRegionId(null);
     setMapCenter([c.latitude, c.longitude]);
+    setIsMobileFeedOpen(true);
   };
 
   // 도시 클러스터 클릭 시
@@ -208,6 +210,7 @@ export default function HogaengnoMap() {
     setSelectedCityId(c.cityId);
     setSelectedRegionId(null);
     setMapCenter([c.latitude, c.longitude]);
+    setIsMobileFeedOpen(true);
   };
 
   // 개별 지역 마커 클릭 시
@@ -217,6 +220,7 @@ export default function HogaengnoMap() {
     if (region.cityId) setSelectedCityId(region.cityId);
     if (region.countryCode) setSelectedCountryCode(region.countryCode);
     setMapCenter([region.latitude, region.longitude]);
+    setIsMobileFeedOpen(true);
   };
 
   // 제보 모드 상태에서의 지도 클릭 핸들러

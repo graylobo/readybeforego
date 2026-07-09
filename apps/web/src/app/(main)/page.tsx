@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Comments } from "@/components/comments/comments";
 import { ReportDialog } from "@/components/common/report-dialog";
 import { ScamReportModal } from "@/components/scams/scam-report-modal";
@@ -78,26 +79,32 @@ export default function Home() {
     setSelectedCityId,
     setSelectedRegionId,
     setSelectedRegion,
+    mapCenter,
     setMapCenter,
+    mapZoom,
     setMapZoom,
     resetSelections,
     isReportMode,
     setIsReportMode,
+    isMobileFeedOpen,
+    setIsMobileFeedOpen,
+    isFilterModalOpen,
+    setIsFilterModalOpen,
   } = useScamMapStore();
 
-  const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
+  const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
 
   // Trigger toast guide when user activates reporting mode
   useEffect(() => {
-    if (isReportMode && mounted) {
-      toast.info(t("report_modal.desc", { lat: "", lng: "" }).split("(")[0] + " Map Click!", {
-        duration: 4000,
+    if (isReportMode) {
+      toast.info(t("report_modal.desc_placeholder", { defaultValue: "지도의 임의의 지점을 클릭하여 📍 핀을 지정해 제보하세요!" }), {
+        duration: 5000,
       });
     }
-  }, [isReportMode, mounted]);
+  }, [isReportMode, t]);
 
-  // Queries
+  // Countries / Cities / Regions Query definitions
   const { data: countries = [] } = useQuery({
     queryKey: ["countries"],
     queryFn: () => scamsApi.getCountries(),
@@ -146,7 +153,7 @@ export default function Home() {
     },
   });
 
-  // Handlers
+  // Location selector change handlers
   const handleCountryChange = (code: string) => {
     setSelectedCountryCode(code);
     setSelectedCityId(null);
@@ -175,6 +182,194 @@ export default function Home() {
     }
   };
 
+  // Common warning feed renderer shared between Desktop sidebar and Mobile sheet
+  const renderFeedContent = () => {
+    if (isScamsPending) {
+      return (
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <Card key={i} className="border-border">
+              <CardHeader className="space-y-2 p-4">
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-6 w-3/4" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0 space-y-2">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+
+    if (scams.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
+          <Info className="w-8 h-8 text-slate-300" />
+          <p className="text-xs text-muted-foreground">{t("common.empty_warnings")}</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4 pb-8">
+        {scams.map((scam) => {
+          const cat = getCategoryInfo(scam.scamCategory, t);
+          return (
+            <Card key={scam.id} className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md">
+              <CardHeader className="p-4 pb-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                    {cat.label}
+                  </Badge>
+                  {scam.sourceUrl && (
+                    <a 
+                      href={scam.sourceUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                    >
+                      {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
+                <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
+              </CardHeader>
+              
+              <CardContent className="p-4 pt-0 pb-3 space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  {scam.description}
+                </p>
+
+                {/* Attached image gallery layout */}
+                {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
+                  <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
+                    scam.imageUrls.length === 1 
+                      ? 'grid-cols-1' 
+                      : scam.imageUrls.length === 2 
+                        ? 'grid-cols-2' 
+                        : 'grid-cols-3'
+                  }`}>
+                    {scam.imageUrls.map((url, idx) => (
+                      <a 
+                        key={idx} 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
+                      >
+                        <img 
+                          src={url} 
+                          alt={`scam-attachment-${idx}`} 
+                          className="w-full h-full object-cover" 
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {scam.avoidanceTip && (
+                  <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
+                    <h4 className="font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
+                      {t("common.avoidance_title")}
+                    </h4>
+                    <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
+                  </div>
+                )}
+
+                {/* Card Footer Actions */}
+                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
+                  
+                  {/* Reactions (Likes/Dislikes) */}
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
+                      onClick={() => {
+                        if (!isAuthenticated) {
+                          if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                            router.push("/login");
+                          }
+                          return;
+                        }
+                        reactionMutation.mutate({ scamId: scam.id, type: "like" });
+                      }}
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5 text-slate-500" />
+                    </Button>
+                    <span className="font-bold text-[11px] text-slate-700 min-w-[12px] text-center">{scam.upvoteCount}</span>
+
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
+                      onClick={() => {
+                        if (!isAuthenticated) {
+                          if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                            router.push("/login");
+                          }
+                          return;
+                        }
+                        reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
+                      }}
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5 text-slate-500" />
+                    </Button>
+                    <span className="text-[11px] text-slate-500 min-w-[12px] text-center">{scam.downvoteCount}</span>
+                  </div>
+
+                  {/* Comment and Report triggers */}
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 gap-1 text-slate-600 cursor-pointer hover:bg-slate-100"
+                      onClick={() => setActiveCommentScamId(activeCommentScamId === scam.id ? null : scam.id)}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      {t("common.discussion")}
+                    </Button>
+                    
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 rounded-full text-slate-400 hover:text-red-500 hover:bg-slate-100 cursor-pointer"
+                      onClick={() => setActiveReportScamId(scam.id)}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Collapsible Discussion Panel */}
+                {activeCommentScamId === scam.id && (
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-2 transition-all duration-300">
+                    <Comments 
+                      targetType="scam_info" 
+                      targetId={scam.id} 
+                      allowAnonymous={true} 
+                    />
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Flag Dialog */}
+              <ReportDialog
+                isOpen={activeReportScamId === scam.id}
+                onClose={() => setActiveReportScamId(null)}
+                targetType="SCAM_INFO"
+                targetId={scam.id}
+              />
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   // Prevent rendering dynamic values during SSR to avoid Hydration Error
   if (!mounted) {
     return (
@@ -185,18 +380,44 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background font-sans">
+    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background font-sans relative">
       
-      {/* Left Map Canvas */}
-      <div className="flex-1 h-[50vh] md:h-full relative z-0">
+      {/* Left Map Canvas (Occupies full viewport on mobile) */}
+      <div className="flex-1 h-[100vh] md:h-full relative z-0">
         <HogaengnoMap />
+
+        {/* 모바일 전용 플로팅 검색/필터 바 (구글맵/배달앱 스타일) */}
+        <div className="absolute top-4 left-4 right-4 z-10 md:hidden flex items-center justify-between bg-card/95 backdrop-blur-md px-4 py-2.5 rounded-full shadow-lg border border-border">
+          <div 
+            className="flex items-center gap-1.5 text-xs font-bold text-card-foreground cursor-pointer flex-1"
+            onClick={() => setIsFilterModalOpen(true)}
+          >
+            <span>🧭</span>
+            <span className="truncate">
+              {selectedRegionId 
+                ? selectedRegion?.name 
+                : selectedCityId 
+                  ? (cities.find(c => c.id === selectedCityId)?.name || t("report_modal.city_select"))
+                  : (countries.find(c => c.code === selectedCountryCode)?.name || t("report_modal.country_select"))
+              }
+            </span>
+          </div>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-7 text-[10px] font-black text-red-600 hover:text-red-700 p-0 cursor-pointer shrink-0 ml-2"
+            onClick={() => setIsFilterModalOpen(true)}
+          >
+            🔍 {t("report_modal.city_select")}
+          </Button>
+        </div>
       </div>
 
-      {/* Right Sidebar Panel */}
-      <div className="w-full md:w-[450px] h-[50vh] md:h-full flex flex-col border-t md:border-t-0 md:border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
+      {/* Right Sidebar Panel (Hidden on mobile, only desktop) */}
+      <div className="hidden md:flex w-[450px] h-full flex-col border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
         
         {/* Branding & Selector Header */}
-        <div className="p-4 md:p-6 border-b border-border space-y-3">
+        <div className="p-6 border-b border-border space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🚨</span>
@@ -229,7 +450,9 @@ export default function Home() {
                 </Button>
               </div>
 
-           
+              <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 shrink-0">
+                {t("common.tagline")}
+              </Badge>
             </div>
           </div>
 
@@ -353,194 +576,144 @@ export default function Home() {
 
               {/* Feed Container */}
               <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-200">
-                {isScamsPending ? (
-                  // Card Loading Skeletons
-                  <div className="space-y-4">
-                    {[1, 2].map((i) => (
-                      <Card key={i} className="border-border">
-                        <CardHeader className="space-y-2 p-4">
-                          <Skeleton className="h-4 w-1/4" />
-                          <Skeleton className="h-6 w-3/4" />
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0 space-y-2">
-                          <Skeleton className="h-16 w-full" />
-                          <Skeleton className="h-10 w-full" />
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : scams.length === 0 ? (
-                  // Empty Warnings List
-                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
-                    <Info className="w-8 h-8 text-slate-300" />
-                    <p className="text-xs text-muted-foreground">{t("common.empty_warnings")}</p>
-                  </div>
-                ) : (
-                  // Warnings Feed
-                  <div className="space-y-4 pb-8">
-                    {scams.map((scam) => {
-                      const cat = getCategoryInfo(scam.scamCategory, t);
-                      return (
-                        <Card key={scam.id} className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md">
-                          <CardHeader className="p-4 pb-2 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
-                                {cat.label}
-                              </Badge>
-                              {scam.sourceUrl && (
-                                <a 
-                                  href={scam.sourceUrl} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
-                                >
-                                  {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
-                                </a>
-                              )}
-                            </div>
-                            <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
-                          </CardHeader>
-                          
-                          <CardContent className="p-4 pt-0 pb-3 space-y-3">
-                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                              {scam.description}
-                            </p>
-
-                            {/* Attached image gallery layout */}
-                            {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
-                              <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
-                                scam.imageUrls.length === 1 
-                                  ? 'grid-cols-1' 
-                                  : scam.imageUrls.length === 2 
-                                    ? 'grid-cols-2' 
-                                    : 'grid-cols-3'
-                              }`}>
-                                {scam.imageUrls.map((url, idx) => (
-                                  <a 
-                                    key={idx} 
-                                    href={url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
-                                  >
-                                    <img 
-                                      src={url} 
-                                      alt={`scam-attachment-${idx}`} 
-                                      className="w-full h-full object-cover" 
-                                    />
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-
-                            {scam.avoidanceTip && (
-                              <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
-                                <h4 className="font-bold flex items-center gap-1">
-                                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
-                                  {t("common.avoidance_title")}
-                                </h4>
-                                <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
-                              </div>
-                            )}
-
-                            {/* Card Footer Actions */}
-                            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
-                              
-                              {/* Reactions (Likes/Dislikes) */}
-                              <div className="flex items-center gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                                  onClick={() => {
-                                    if (!isAuthenticated) {
-                                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                                        router.push("/login");
-                                      }
-                                      return;
-                                    }
-                                    reactionMutation.mutate({ scamId: scam.id, type: "like" });
-                                  }}
-                                >
-                                  <ThumbsUp className="w-3.5 h-3.5 text-slate-500" />
-                                </Button>
-                                <span className="font-bold text-[11px] text-slate-700 min-w-[12px] text-center">{scam.upvoteCount}</span>
-
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                                  onClick={() => {
-                                    if (!isAuthenticated) {
-                                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                                        router.push("/login");
-                                      }
-                                      return;
-                                    }
-                                    reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
-                                  }}
-                                >
-                                  <ThumbsDown className="w-3.5 h-3.5 text-slate-500" />
-                                </Button>
-                                <span className="text-[11px] text-slate-500 min-w-[12px] text-center">{scam.downvoteCount}</span>
-                              </div>
-
-                              {/* Comment and Report triggers */}
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-7 gap-1 text-slate-600 cursor-pointer hover:bg-slate-100"
-                                  onClick={() => setActiveCommentScamId(activeCommentScamId === scam.id ? null : scam.id)}
-                                >
-                                  <MessageSquare className="w-3.5 h-3.5" />
-                                  {t("common.discussion")}
-                                </Button>
-                                
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 rounded-full text-slate-400 hover:text-red-500 hover:bg-slate-100 cursor-pointer"
-                                  onClick={() => setActiveReportScamId(scam.id)}
-                                >
-                                  <Flag className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </div>
-
-                            {/* Collapsible Discussion Panel */}
-                            {activeCommentScamId === scam.id && (
-                              <div className="border-t border-slate-100 dark:border-slate-800 pt-2 transition-all duration-300">
-                                <Comments 
-                                  targetType="scam_info" 
-                                  targetId={scam.id} 
-                                  allowAnonymous={true} 
-                                />
-                              </div>
-                            )}
-                          </CardContent>
-
-                          {/* Flag Dialog */}
-                          <ReportDialog
-                            isOpen={activeReportScamId === scam.id}
-                            onClose={() => setActiveReportScamId(null)}
-                            targetType="SCAM_INFO"
-                            targetId={scam.id}
-                          />
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+                {renderFeedContent()}
               </div>
             </div>
-            )}
-          </div>
+          )}
         </div>
-
-        {/* 실시간 사용자 직접 제보 모달 */}
-        <ScamReportModal />
-
       </div>
-    );
+
+      {/* --- 모바일 전용 바텀 시트 (마커 클릭 시 아래서 올라오는 팝업 카드) --- */}
+      <Dialog open={isMobileFeedOpen} onOpenChange={setIsMobileFeedOpen}>
+        <DialogContent className="md:hidden sm:max-w-[480px] h-[75vh] bottom-0 top-auto translate-y-0 rounded-t-2xl rounded-b-none p-0 overflow-hidden flex flex-col gap-0 border-t border-border bg-card/98 backdrop-blur-lg">
+          <DialogHeader className="px-6 py-4 bg-muted/40 border-b border-border flex flex-row items-center gap-2 shrink-0 space-y-0">
+            <MapPin className="w-4 h-4 text-red-600" />
+            <DialogTitle className="font-bold text-sm text-card-foreground">
+              {selectedRegionId 
+                ? selectedRegion?.name 
+                : selectedCityId 
+                  ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                  : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+              } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+            {renderFeedContent()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- 모바일 전용 필터 다이얼로그 (상단 둥둥 검색바 터치 시 팝업) --- */}
+      <Dialog open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen}>
+        <DialogContent className="md:hidden w-[90%] max-w-[360px] p-5 rounded-2xl bg-card border border-border">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base font-extrabold flex items-center gap-1.5">
+              🧭 {t("common.welcome_title")}
+            </DialogTitle>
+            <DialogDescription className="text-[11px]">
+              필터를 변경해 타겟 지역의 사기 주의보를 확인하세요.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-2">
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  {t("report_modal.country")}
+                </label>
+                <Select value={selectedCountryCode || ""} onValueChange={handleCountryChange}>
+                  <SelectTrigger className="w-full text-xs cursor-pointer">
+                    <SelectValue placeholder={t("report_modal.country_select")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {countries.map((c) => (
+                      <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  {t("report_modal.city")}
+                </label>
+                <Select 
+                  value={selectedCityId || ""} 
+                  onValueChange={handleCityChange}
+                  disabled={!selectedCountryCode || isCitiesPending}
+                >
+                  <SelectTrigger className="w-full text-xs cursor-pointer">
+                    <SelectValue placeholder={t("report_modal.city_select")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cities.map((city) => (
+                      <SelectItem key={city.id} value={city.id} className="cursor-pointer">
+                        {city.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  {t("report_modal.place_name")}
+                </label>
+                <Select 
+                  value={selectedRegionId || ""} 
+                  onValueChange={handleRegionChange}
+                  disabled={!selectedCityId || isRegionsPending}
+                >
+                  <SelectTrigger className="w-full text-xs cursor-pointer">
+                    <SelectValue placeholder="선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regions.map((r) => (
+                      <SelectItem key={r.id} value={r.id} className="cursor-pointer">
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* 모바일 직접 제보하기 버튼 */}
+            <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/30 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">{t("common.report_direct")}</span>
+              <Button
+                size="sm"
+                variant={isReportMode ? "destructive" : "outline"}
+                className={`text-[10px] font-bold h-7 px-3 cursor-pointer ${
+                  isReportMode 
+                    ? "animate-pulse" 
+                    : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400"
+                }`}
+                onClick={() => {
+                  setIsReportMode(!isReportMode);
+                  setIsFilterModalOpen(false);
+                }}
+              >
+                {isReportMode ? t("common.report_cancel_btn") : t("common.report_direct_btn")}
+              </Button>
+            </div>
+            
+            <Button 
+              className="w-full mt-2 cursor-pointer font-bold text-xs bg-red-600 hover:bg-red-700 text-white" 
+              onClick={() => setIsFilterModalOpen(false)}
+            >
+              확인
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 실시간 사용자 직접 제보 모달 (UGC 폼) */}
+      <ScamReportModal />
+
+    </div>
+  );
 }

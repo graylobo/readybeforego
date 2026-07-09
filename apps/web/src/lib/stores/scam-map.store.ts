@@ -12,6 +12,11 @@ interface ScamMapStore {
   isReportMode: boolean;
   reportCoords: [number, number] | null;
   isReportModalOpen: boolean;
+  
+  // 모바일 전용 뷰포트 상태 추가
+  isMobileFeedOpen: boolean;
+  isFilterModalOpen: boolean;
+  
   setSelectedCountryCode: (code: string | null) => void;
   setSelectedCityId: (id: string | null) => void;
   setSelectedRegionId: (id: string | null) => void;
@@ -21,6 +26,8 @@ interface ScamMapStore {
   setIsReportMode: (val: boolean) => void;
   setReportCoords: (coords: [number, number] | null) => void;
   setReportModalOpen: (val: boolean) => void;
+  setIsMobileFeedOpen: (val: boolean) => void;
+  setIsFilterModalOpen: (val: boolean) => void;
   resetSelections: () => void;
 }
 
@@ -34,6 +41,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   isReportMode: false,
   reportCoords: null,
   isReportModalOpen: false,
+  isMobileFeedOpen: false,
+  isFilterModalOpen: false,
   setSelectedCountryCode: (code) => set({ selectedCountryCode: code }),
   setSelectedCityId: (id) => set({ selectedCityId: id }),
   setSelectedRegionId: (id) => set({ selectedRegionId: id }),
@@ -43,6 +52,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setIsReportMode: (val) => set({ isReportMode: val }),
   setReportCoords: (coords) => set({ reportCoords: coords }),
   setReportModalOpen: (val) => set({ isReportModalOpen: val }),
+  setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
+  setIsFilterModalOpen: (val) => set({ isFilterModalOpen: val }),
   resetSelections: () => set({
     selectedCountryCode: null,
     selectedCityId: null,
@@ -53,5 +64,7 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isReportMode: false,
     reportCoords: null,
     isReportModalOpen: false,
+    isMobileFeedOpen: false,
+    isFilterModalOpen: false,
   }),
 }));
