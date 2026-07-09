@@ -193,10 +193,10 @@ export default function Home() {
       </div>
 
       {/* Right Sidebar Panel */}
-      <div className="w-full md:w-[450px] flex flex-col border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
+      <div className="w-full md:w-[450px] h-[50vh] md:h-full flex flex-col border-t md:border-t-0 md:border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
         
         {/* Branding & Selector Header */}
-        <div className="p-6 border-b border-border space-y-4">
+        <div className="p-4 md:p-6 border-b border-border space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🚨</span>
@@ -255,13 +255,13 @@ export default function Home() {
           </p>
 
           {/* Hierarchical selectors */}
-          <div className="grid grid-cols-3 gap-2 pt-2">
+          <div className="grid grid-cols-3 gap-1.5 md:gap-2 pt-1 md:pt-2">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
                 {t("report_modal.country")}
               </label>
               <Select value={selectedCountryCode || ""} onValueChange={handleCountryChange}>
-                <SelectTrigger className="w-full text-xs cursor-pointer">
+                <SelectTrigger className="w-full text-[11px] md:text-xs px-2.5 cursor-pointer">
                   <SelectValue placeholder={t("report_modal.country_select")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -283,7 +283,7 @@ export default function Home() {
                 onValueChange={handleCityChange}
                 disabled={!selectedCountryCode || isCitiesPending}
               >
-                <SelectTrigger className="w-full text-xs cursor-pointer">
+                <SelectTrigger className="w-full text-[11px] md:text-xs px-2.5 cursor-pointer">
                   <SelectValue placeholder={t("report_modal.city_select")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -305,7 +305,7 @@ export default function Home() {
                 onValueChange={handleRegionChange}
                 disabled={!selectedCityId || isRegionsPending}
               >
-                <SelectTrigger className="w-full text-xs cursor-pointer">
+                <SelectTrigger className="w-full text-[11px] md:text-xs px-2.5 cursor-pointer">
                   <SelectValue placeholder="선택" />
                 </SelectTrigger>
                 <SelectContent>
