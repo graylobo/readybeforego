@@ -26,6 +26,7 @@
     "OVERCHARGING": "💸 Overcharging / Scams"
   },
   "report_modal": {
+    "guide_toast": "Please click the location on the map! 📍 A pin will be placed and the report input modal will open.",
     "title": "Report Travel Scam / Risk",
     "desc": "Submit a new warning card and location pinned at coordinates ({lat}, {lng}).",
     "country": "Country",

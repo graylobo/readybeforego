@@ -98,7 +98,7 @@ export default function Home() {
   // Trigger toast guide when user activates reporting mode
   useEffect(() => {
     if (isReportMode) {
-      toast.info(t("report_modal.desc_placeholder", { defaultValue: "지도의 임의의 지점을 클릭하여 📍 핀을 지정해 제보하세요!" }), {
+      toast.info(t("report_modal.guide_toast", { defaultValue: "지도에서 피해 발생 위치를 클릭해 주세요! 📍 핀이 생성되며 제보 입력창이 열립니다." }), {
         duration: 5000,
       });
     }
