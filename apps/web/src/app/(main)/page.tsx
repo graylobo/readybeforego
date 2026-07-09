@@ -146,10 +146,6 @@ export default function Home() {
       scamsApi.toggleReaction(scamId, type),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scams"] });
-      toast.success("Done!");
-    },
-    onError: () => {
-      toast.error("Auth required or failed.");
     },
   });
 
@@ -283,43 +279,53 @@ export default function Home() {
                 <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
                   
                   {/* Reactions (Likes/Dislikes) */}
-                  <div className="flex items-center gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                      onClick={() => {
-                        if (!isAuthenticated) {
-                          if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                            router.push("/login");
-                          }
-                          return;
-                        }
-                        reactionMutation.mutate({ scamId: scam.id, type: "like" });
-                      }}
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5 text-slate-500" />
-                    </Button>
-                    <span className="font-bold text-[11px] text-slate-700 min-w-[12px] text-center">{scam.upvoteCount}</span>
+                  {(() => {
+                    const isLiked = scam.reactions && scam.reactions.some(r => r.type === "like");
+                    const isDisliked = scam.reactions && scam.reactions.some(r => r.type === "dislike");
+                    return (
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                            isLiked ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
+                          }`}
+                          onClick={() => {
+                            if (!isAuthenticated) {
+                              if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                router.push("/login");
+                              }
+                              return;
+                            }
+                            reactionMutation.mutate({ scamId: scam.id, type: "like" });
+                          }}
+                        >
+                          <ThumbsUp className={`w-3.5 h-3.5 transition-colors ${isLiked ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
+                        </Button>
+                        <span className={`font-bold text-[11px] min-w-[12px] text-center ${isLiked ? 'text-blue-600' : 'text-slate-700'}`}>{scam.upvoteCount}</span>
 
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                      onClick={() => {
-                        if (!isAuthenticated) {
-                          if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                            router.push("/login");
-                          }
-                          return;
-                        }
-                        reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
-                      }}
-                    >
-                      <ThumbsDown className="w-3.5 h-3.5 text-slate-500" />
-                    </Button>
-                    <span className="text-[11px] text-slate-500 min-w-[12px] text-center">{scam.downvoteCount}</span>
-                  </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                            isDisliked ? 'text-red-600 bg-red-50 dark:bg-red-950/20' : ''
+                          }`}
+                          onClick={() => {
+                            if (!isAuthenticated) {
+                              if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                router.push("/login");
+                              }
+                              return;
+                            }
+                            reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
+                          }}
+                        >
+                          <ThumbsDown className={`w-3.5 h-3.5 transition-colors ${isDisliked ? 'fill-red-600 stroke-red-600 text-red-600' : 'text-slate-500 group-hover:stroke-red-600'}`} />
+                        </Button>
+                        <span className={`text-[11px] min-w-[12px] text-center ${isDisliked ? 'text-red-600 font-bold' : 'text-slate-500'}`}>{scam.downvoteCount}</span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Comment and Report triggers */}
                   <div className="flex items-center gap-2">
