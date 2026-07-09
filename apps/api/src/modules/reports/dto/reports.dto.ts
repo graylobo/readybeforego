@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const CreateReportSchema = z.object({
   targetType: z.enum(['POST', 'COMMENT', 'SCAM_INFO']),
-  targetId: z.string().uuid(),
+  targetId: z.string(),
   reason: z.string().min(1).max(1000),
 });
 export class CreateReportZodDto extends createZodDto(CreateReportSchema) {}
