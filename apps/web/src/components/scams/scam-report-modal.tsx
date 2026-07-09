@@ -54,10 +54,10 @@ export function ScamReportModal() {
         { id: 'd4e5f6a7-b8c9-4d1e-8f3a-4b5c6d7e8f9a', countryCode: 'KR', name: '서울', lat: 37.5665, lng: 126.9780 }
       ];
 
-      let targetCountry = selectedCountryCode || "";
-      let targetCity = selectedCityId || "";
+      let targetCountry = "";
+      let targetCity = "";
 
-      // 핀포인트 클릭 위경도 좌표가 주어지면 가장 가까운 도시를 자동으로 식별하여 바인딩
+      // 핀포인트 클릭 위경도 좌표가 주어지면 가장 가까운 도시를 자동으로 식별하되 임계값 적용
       if (reportCoords) {
         let minD = Infinity;
         let closestCity = OFFLINE_CITIES[0];
@@ -68,8 +68,13 @@ export function ScamReportModal() {
             closestCity = city;
           }
         }
-        targetCountry = closestCity.countryCode;
-        targetCity = closestCity.id;
+        
+        // 약 1.6도 (약 180km 거리) 이내인 경우에만 자동 매핑을 활성화하여 태국/베트남/한국 인접 영역만 자동 처리
+        const DISTANCE_LIMIT = 2.5; 
+        if (minD < DISTANCE_LIMIT) {
+          targetCountry = closestCity.countryCode;
+          targetCity = closestCity.id;
+        }
       }
 
       setCountryCode(targetCountry);
