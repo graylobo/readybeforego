@@ -46,8 +46,34 @@ export function ScamReportModal() {
 
   useEffect(() => {
     if (isReportModalOpen) {
-      setCountryCode(selectedCountryCode || "");
-      setCityId(selectedCityId || "");
+      // 오프라인 도시 대표 좌표 맵 (시드 데이터 매핑용)
+      const OFFLINE_CITIES = [
+        { id: 'a1b2c3d4-e5f6-4a8b-8c0d-1e2f3a4b5c6d', countryCode: 'TH', name: '방콕', lat: 13.7563, lng: 100.5018 },
+        { id: 'b2c3d4e5-f6a7-4b9c-8d1e-2f3a4b5c6d7e', countryCode: 'TH', name: '치앙마이', lat: 18.7883, lng: 98.9853 },
+        { id: 'c3d4e5f6-a7b8-4c0d-8e2f-3a4b5c6d7e8f', countryCode: 'VN', name: '다낭', lat: 16.0544, lng: 108.2022 },
+        { id: 'd4e5f6a7-b8c9-4d1e-8f3a-4b5c6d7e8f9a', countryCode: 'KR', name: '서울', lat: 37.5665, lng: 126.9780 }
+      ];
+
+      let targetCountry = selectedCountryCode || "";
+      let targetCity = selectedCityId || "";
+
+      // 핀포인트 클릭 위경도 좌표가 주어지면 가장 가까운 도시를 자동으로 식별하여 바인딩
+      if (reportCoords) {
+        let minD = Infinity;
+        let closestCity = OFFLINE_CITIES[0];
+        for (const city of OFFLINE_CITIES) {
+          const d = (reportCoords[0] - city.lat) ** 2 + (reportCoords[1] - city.lng) ** 2;
+          if (d < minD) {
+            minD = d;
+            closestCity = city;
+          }
+        }
+        targetCountry = closestCity.countryCode;
+        targetCity = closestCity.id;
+      }
+
+      setCountryCode(targetCountry);
+      setCityId(targetCity);
       setRegionName("");
       setScamCategory("");
       setTitle("");
@@ -58,7 +84,7 @@ export function ScamReportModal() {
       setImagePreviews([]);
       setUploading(false);
     }
-  }, [isReportModalOpen, selectedCountryCode, selectedCityId]);
+  }, [isReportModalOpen, selectedCountryCode, selectedCityId, reportCoords]);
 
   useEffect(() => {
     return () => {
