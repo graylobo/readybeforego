@@ -15,7 +15,8 @@
     "avoidance_title": "대처법 & 예방법",
     "discussion": "의견 나누기",
     "upvote": "좋아요",
-    "downvote": "싫어요"
+    "downvote": "싫어요",
+    "login_required_confirm": "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?"
   },
   "categories": {
     "FORCED_SHOPPING": "🛍️ 호객 행위 및 구매 강요",
@@ -57,9 +58,9 @@
     "VN": "베트남"
   },
   "cities_list": {
-    "Bangkok": "방콕",
-    "Chiang Mai": "치앙마이",
-    "Da Nang": "다낭",
-    "Seoul": "서울"
+    "서울": "서울",
+    "방콕": "방콕",
+    "치앙마이": "치앙마이",
+    "다낭": "다낭"
   }
 }

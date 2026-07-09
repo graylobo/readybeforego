@@ -15,7 +15,8 @@
     "avoidance_title": "Prevention & Avoidance Tips",
     "discussion": "Discuss",
     "upvote": "Like",
-    "downvote": "Dislike"
+    "downvote": "Dislike",
+    "login_required_confirm": "Login is required for this feature. Would you like to redirect to the login page?"
   },
   "categories": {
     "FORCED_SHOPPING": "🛍️ Solicitation / Forced Buy",
@@ -57,9 +58,9 @@
     "VN": "Vietnam"
   },
   "cities_list": {
-    "Bangkok": "Bangkok",
-    "Chiang Mai": "Chiang Mai",
-    "Da Nang": "Da Nang",
-    "Seoul": "Seoul"
+    "서울": "Seoul",
+    "방콕": "Bangkok",
+    "치앙마이": "Chiang Mai",
+    "다낭": "Da Nang"
   }
 }

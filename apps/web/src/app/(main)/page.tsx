@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, ScamInfo, Region } from "@/lib/api/scams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +60,8 @@ function getCategoryInfo(cat: string, t: any) {
 export default function Home() {
   const queryClient = useQueryClient();
   const { t, lang, setLang } = useTranslation();
+  const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
   
   // Mismatch hydration guard for persistent localstorage lang
   const [mounted, setMounted] = useState(false);
@@ -225,9 +229,7 @@ export default function Home() {
                 </Button>
               </div>
 
-              <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 shrink-0">
-                {t("common.tagline")}
-              </Badge>
+           
             </div>
           </div>
 
@@ -450,7 +452,15 @@ export default function Home() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                                  onClick={() => reactionMutation.mutate({ scamId: scam.id, type: "like" })}
+                                  onClick={() => {
+                                    if (!isAuthenticated) {
+                                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                        router.push("/login");
+                                      }
+                                      return;
+                                    }
+                                    reactionMutation.mutate({ scamId: scam.id, type: "like" });
+                                  }}
                                 >
                                   <ThumbsUp className="w-3.5 h-3.5 text-slate-500" />
                                 </Button>
@@ -460,7 +470,15 @@ export default function Home() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer"
-                                  onClick={() => reactionMutation.mutate({ scamId: scam.id, type: "dislike" })}
+                                  onClick={() => {
+                                    if (!isAuthenticated) {
+                                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                        router.push("/login");
+                                      }
+                                      return;
+                                    }
+                                    reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
+                                  }}
                                 >
                                   <ThumbsDown className="w-3.5 h-3.5 text-slate-500" />
                                 </Button>

@@ -170,7 +170,7 @@ export default function HogaengnoMap() {
       if (!acc[cityId]) {
         acc[cityId] = {
           id: `city-${cityId}`,
-          name: t(`cities_list.${region.cityName}`, { defaultValue: region.cityName || "City" }),
+          name: region.cityName ? t(`cities_list.${region.cityName}`, { defaultValue: region.cityName }) : "City",
           cityId,
           countryCode: region.countryCode,
           latitude: 0,
