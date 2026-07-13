@@ -14,10 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, Image as ImageIcon, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getCountryName } from "@/lib/utils/country";
 
 export function ScamReportModal() {
   const queryClient = useQueryClient();
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const {
     selectedCountryCode,
     selectedCityId,
@@ -402,7 +403,7 @@ export function ScamReportModal() {
                   setCityId(""); 
                   if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
                 }} 
-                disabled={uploading || isLoadingGeo || reportType === "existing"}
+                disabled={uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && !!detectedCountryCode)}
               >
                 <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
                   {isLoadingGeo ? (
@@ -417,7 +418,7 @@ export function ScamReportModal() {
                 <SelectContent>
                   {countries.map((c) => (
                     <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                      {c.name}
+                      {getCountryName(c.code, lang)}
                     </SelectItem>
                   ))}
                   {detectedCountryName && (
@@ -439,7 +440,7 @@ export function ScamReportModal() {
                   setCityId(val);
                   if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
                 }}
-                disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
+                disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && !!detectedCityName)}
               >
                 <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
                   {isLoadingGeo ? (

@@ -8,6 +8,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getCountryName } from "@/lib/utils/country";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -106,6 +107,20 @@ function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: numb
   return null;
 }
 
+// 제보 모드 + 최대 확대 시 커서를 핀 모양으로 변경하는 핸들러
+function MapCursorHandler({ active }: { active: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    if (active) {
+      container.classList.add("cursor-report-mode");
+    } else {
+      container.classList.remove("cursor-report-mode");
+    }
+  }, [active, map]);
+  return null;
+}
+
 // 지도 줌 리스너 및 클릭 감지 핸들러 통합
 interface MapEventsHandlerProps {
   onZoomChange: (zoom: number) => void;
@@ -163,119 +178,41 @@ export default function HogaengnoMap() {
     queryFn: () => scamsApi.getAllRegions(),
   });
 
-  // 1. 국가 레벨 클러스터 연산 (줌 <= 7)
-  const countryClusters = Object.values(
-    regions.reduce((acc, region) => {
-      const code = region.countryCode || "UNKNOWN";
-      if (!acc[code]) {
-        const rawName = t(`countries_list.${code}`);
-        const displayName = rawName.startsWith("countries_list.") ? code : rawName;
-        acc[code] = {
-          id: `country-${code}`,
-          name: displayName,
-          countryCode: code,
-          latitudeSum: 0,
-          longitudeSum: 0,
-          scamCount: 0,
-          count: 0,
-        };
-      }
-      acc[code].latitudeSum += region.latitude;
-      acc[code].longitudeSum += region.longitude;
-      acc[code].scamCount += (region.scamCount || 0);
-      acc[code].count += 1;
-      return acc;
-    }, {} as Record<string, any>)
-  ).map((c: any) => {
-    // 딕셔너리 좌표 우선 참조, 없으면 소속 리전들의 산술 평균 좌표 (폴백)
-    let coords = COUNTRY_COORDS[c.countryCode];
-    if (!coords) {
-      coords = [c.latitudeSum / c.count, c.longitudeSum / c.count];
-    }
-    return {
-      id: c.id,
-      name: c.name,
-      countryCode: c.countryCode,
-      latitude: coords[0],
-      longitude: coords[1],
-      scamCount: c.scamCount,
-    };
-  }).filter(c => c.scamCount > 0);
+  // 줌 레벨별 병합 기준 반경 설정 (위경도 단위 차이)
+  const getThresholdForZoom = (zoom: number) => {
+    if (zoom <= 3) return 20.0;
+    if (zoom === 4) return 12.0;
+    if (zoom === 5) return 6.0;
+    if (zoom === 6) return 3.0;
+    if (zoom === 7) return 1.5;
+    if (zoom === 8) return 0.8;
+    if (zoom === 9) return 0.4;
+    if (zoom === 10) return 0.2;
+    if (zoom === 11) return 0.1;
+    if (zoom === 12) return 0.04;
+    if (zoom === 13) return 0.015;
+    if (zoom === 14) return 0.008;
+    if (zoom === 15) return 0.003;
+    return 0.001; // zoom >= 16
+  };
 
-  // 2. 도시 레벨 클러스터 연산 (7 < 줌 <= 11)
-  const cityClusters = Object.values(
-    regions.reduce((acc, region) => {
-      const cityId = region.cityId || "UNKNOWN";
-      if (!acc[cityId]) {
-        acc[cityId] = {
-          id: `city-${cityId}`,
-          name: region.cityName ? t(`cities_list.${region.cityName}`, { defaultValue: region.cityName }) : "City",
-          cityNameRaw: region.cityName || "", // 딕셔너리 조회를 위한 원본명 보관
-          cityId,
-          countryCode: region.countryCode,
-          latitudeSum: 0,
-          longitudeSum: 0,
-          scamCount: 0,
-          count: 0,
-        };
-      }
-      acc[cityId].latitudeSum += region.latitude;
-      acc[cityId].longitudeSum += region.longitude;
-      acc[cityId].scamCount += (region.scamCount || 0);
-      acc[cityId].count += 1;
-      return acc;
-    }, {} as Record<string, any>)
-  ).map((c: any) => {
-    // 도시명 딕셔너리 조회
-    let coords = CITY_COORDS[c.cityNameRaw];
-    if (!coords) {
-      coords = [c.latitudeSum / c.count, c.longitudeSum / c.count];
-    }
-    return {
-      id: c.id,
-      name: c.name,
-      cityId: c.cityId,
-      countryCode: c.countryCode,
-      latitude: coords[0],
-      longitude: coords[1],
-      scamCount: c.scamCount,
-    };
-  }).filter(c => c.scamCount > 0);
-
-  // 3. 세부 지역 레벨 연산 및 줌 비례형 동적 로컬 클러스터링 (줌 > 11)
-  const getLocalClusters = () => {
-    const regionMarkers = regions.filter((r) => (r.scamCount || 0) > 0);
-    if (currentZoom > 15) {
-      return regionMarkers.map(r => ({
-        id: r.id,
-        name: r.name,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        scamCount: r.scamCount || 0,
-        isCluster: false,
-        regions: [r]
-      }));
-    }
-
-    // 줌 레벨별 병합 기준 반경 설정 (위경도 단위 차이)
-    let threshold = 0.001;
-    if (currentZoom === 12) threshold = 0.015;
-    else if (currentZoom === 13) threshold = 0.008;
-    else if (currentZoom === 14) threshold = 0.004;
-    else if (currentZoom === 15) threshold = 0.0015;
-
+  // 모든 줌 레벨 통합 동적 클러스터러
+  const getDynamicClusters = () => {
+    const activeRegions = regions.filter((r) => (r.scamCount || 0) > 0);
+    const threshold = getThresholdForZoom(currentZoom);
+    
     const clusters: any[] = [];
     const visited = new Set<string>();
 
-    for (let i = 0; i < regionMarkers.length; i++) {
-      const r1 = regionMarkers[i];
+    for (let i = 0; i < activeRegions.length; i++) {
+      const r1 = activeRegions[i];
       if (visited.has(r1.id)) continue;
 
       const group = [r1];
       visited.add(r1.id);
 
-      for (let j = i + 1; j < regionMarkers.length; j++) {
-        const r2 = regionMarkers[j];
+      for (let j = i + 1; j < activeRegions.length; j++) {
+        const r2 = activeRegions[j];
         if (visited.has(r2.id)) continue;
 
         const latDiff = Math.abs(r1.latitude - r2.latitude);
@@ -295,7 +232,7 @@ export default function HogaengnoMap() {
           longitude: r1.longitude,
           scamCount: r1.scamCount || 0,
           isCluster: false,
-          regions: group
+          regions: group,
         });
       } else {
         const sumLat = group.reduce((sum, r) => sum + r.latitude, 0);
@@ -303,8 +240,20 @@ export default function HogaengnoMap() {
         const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
         
         const sortedGroup = [...group].sort((a, b) => (b.scamCount || 0) - (a.scamCount || 0));
-        const representativeName = sortedGroup[0].name;
-        const displayName = `${representativeName} 외 ${group.length - 1}`;
+        const representative = sortedGroup[0];
+        
+        let displayName = "";
+        if (currentZoom <= 5) {
+          displayName = getCountryName(representative.countryCode, lang) || representative.name;
+        } else if (currentZoom <= 9) {
+          displayName = representative.cityName || representative.name;
+        } else {
+          displayName = representative.name;
+        }
+
+        if (group.length > 1) {
+          displayName = `${displayName} 외 ${group.length - 1}`;
+        }
 
         clusters.push({
           id: `cluster-${r1.id}`,
@@ -313,46 +262,12 @@ export default function HogaengnoMap() {
           longitude: sumLng / group.length,
           scamCount: totalScamCount,
           isCluster: true,
-          regions: group
+          regions: group,
         });
       }
     }
 
     return clusters;
-  };
-
-  // 국가 클러스터 클릭 시
-  const handleCountryClick = (c: any) => {
-    if (isReportMode) {
-      setMapCenter([c.latitude, c.longitude]);
-      setMapZoom(16);
-      toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
-      return;
-    }
-    setSelectedCountryCode(c.countryCode);
-    setSelectedCityId(null);
-    setSelectedRegionId(null);
-    setMapCenter([c.latitude, c.longitude]);
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setIsMobileFeedOpen(true);
-    }
-  };
-
-  // 도시 클러스터 클릭 시
-  const handleCityClick = (c: any) => {
-    if (isReportMode) {
-      setMapCenter([c.latitude, c.longitude]);
-      setMapZoom(16);
-      toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
-      return;
-    }
-    setSelectedCountryCode(c.countryCode);
-    setSelectedCityId(c.cityId);
-    setSelectedRegionId(null);
-    setMapCenter([c.latitude, c.longitude]);
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setIsMobileFeedOpen(true);
-    }
   };
 
   // 개별 지역 마커 클릭 시
@@ -367,12 +282,12 @@ export default function HogaengnoMap() {
     }
   };
 
-  // 로컬 클러스터 마커 클릭 시
-  const handleLocalClusterClick = (cluster: any) => {
+  // 동적 클러스터 마커 클릭 핸들러
+  const handleDynamicClusterClick = (cluster: any) => {
     if (isReportMode) {
       if (cluster.isCluster) {
         setMapCenter([cluster.latitude, cluster.longitude]);
-        setMapZoom(16);
+        setMapZoom(Math.min(currentZoom + 2, 18));
         toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
       } else {
         const region = cluster.regions[0];
@@ -388,7 +303,7 @@ export default function HogaengnoMap() {
     } else {
       if (cluster.isCluster) {
         setMapCenter([cluster.latitude, cluster.longitude]);
-        setMapZoom(Math.min(currentZoom + 1, 16));
+        setMapZoom(Math.min(currentZoom + 2, 18));
       } else {
         handleRegionClick(cluster.regions[0]);
       }
@@ -423,6 +338,16 @@ export default function HogaengnoMap() {
 
   return (
     <div className="h-full w-full relative rounded-2xl overflow-hidden shadow-inner border border-border bg-muted">
+      <style>{`
+        .cursor-report-mode,
+        .cursor-report-mode .leaflet-pane,
+        .cursor-report-mode .leaflet-grab,
+        .cursor-report-mode .leaflet-interactive,
+        .cursor-report-mode .leaflet-marker-icon,
+        .cursor-report-mode * {
+          cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23DC2626' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/%3E%3Ccircle cx='12' cy='10' r='3' fill='%23DC2626'/%3E%3C/svg%3E") 16 31, pointer !important;
+        }
+      `}</style>
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}
@@ -439,6 +364,7 @@ export default function HogaengnoMap() {
         />
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
+        <MapCursorHandler active={isReportMode && currentZoom >= 18} />
         
         <MapEventsHandler 
           onZoomChange={(zoom) => setCurrentZoom(zoom)} 
@@ -450,59 +376,17 @@ export default function HogaengnoMap() {
           <Marker position={reportCoords} icon={createTempReportIcon()} />
         )}
 
-        {/* 줌 레벨에 따라 동적 클러스터 렌더링 분기 */}
-        {currentZoom <= 7 && (
-          // 1단계: 국가 레벨 렌더링
-          countryClusters.map((c: any) => (
-            <Marker
-              key={c.id}
-              position={[c.latitude, c.longitude]}
-              icon={createClusterIcon(c.scamCount, c.name)}
-              eventHandlers={{
-                click: () => handleCountryClick(c),
-              }}
-            />
-          ))
-        )}
-
-        {currentZoom > 7 && currentZoom <= 11 && (
-          // 2단계: 도시 레벨 렌더링
-          cityClusters.map((c: any) => (
-            <Marker
-              key={c.id}
-              position={[c.latitude, c.longitude]}
-              icon={createClusterIcon(c.scamCount, c.name)}
-              eventHandlers={{
-                click: () => handleCityClick(c),
-              }}
-            />
-          ))
-        )}
-
-        {currentZoom > 11 && (
-          // 3단계: 개별 장소 레벨 렌더링 (줌 비례형 동적 로컬 클러스터러 작동)
-          getLocalClusters().map((cluster) => (
-            <Marker
-              key={cluster.id}
-              position={[cluster.latitude, cluster.longitude]}
-              icon={createClusterIcon(cluster.scamCount, cluster.name)}
-              eventHandlers={{
-                click: () => handleLocalClusterClick(cluster),
-              }}
-            >
-              {!cluster.isCluster && (
-                <Popup className="custom-popup">
-                  <div className="p-1 font-sans text-center">
-                    <h4 className="font-bold text-slate-800 text-sm">{cluster.name}</h4>
-                    <p className="text-xs text-rose-600 font-semibold mt-0.5">
-                      ⚠️ {cluster.scamCount}건의 위험 정보
-                    </p>
-                  </div>
-                </Popup>
-              )}
-            </Marker>
-          ))
-        )}
+        {/* 동적 통합 클러스터 렌더링 */}
+        {getDynamicClusters().map((cluster) => (
+          <Marker
+            key={cluster.id}
+            position={[cluster.latitude, cluster.longitude]}
+            icon={createClusterIcon(cluster.scamCount, cluster.name)}
+            eventHandlers={{
+              click: () => handleDynamicClusterClick(cluster),
+            }}
+          />
+        ))}
       </MapContainer>
     </div>
   );

@@ -8,6 +8,7 @@ import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, ScamInfo, Region } from "@/lib/api/scams";
+import { getCountryName } from "@/lib/utils/country";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -433,7 +434,7 @@ export default function Home() {
                 ? selectedRegion?.name 
                 : selectedCityId 
                   ? (cities.find(c => c.id === selectedCityId)?.name || t("report_modal.city_select"))
-                  : (countries.find(c => c.code === selectedCountryCode)?.name || t("report_modal.country_select"))
+                  : (getCountryName(selectedCountryCode, lang) || t("report_modal.country_select"))
               }
             </span>
           </div>
@@ -611,7 +612,7 @@ export default function Home() {
                       ? selectedRegion?.name 
                       : selectedCityId 
                         ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                        : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+                        : (getCountryName(selectedCountryCode, lang) || "국가")
                     } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
                   </h2>
                 </div>
@@ -653,7 +654,7 @@ export default function Home() {
                   ? selectedRegion?.name 
                   : selectedCityId 
                     ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                    : (countries.find(c => c.code === selectedCountryCode)?.name || "국가")
+                    : (getCountryName(selectedCountryCode, lang) || "국가")
                 } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
               </DialogTitle>
             </div>
