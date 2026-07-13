@@ -109,11 +109,11 @@ export function ScamReportModal() {
         // 백엔드 우회 reverse-geocode API 활용 (CORS 및 차단 방지)
         scamsApi.reverseGeocode(reportCoords[0], reportCoords[1])
           .then((data) => {
-            if (data && data.address) {
-              const addr = data.address;
-              const country = addr.country || "";
-              const countryCodeVal = (addr.country_code || "").toUpperCase();
-              const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 지역";
+            if (data) {
+              const addr = data.address || {};
+              const country = addr.country || "기타 국가";
+              const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
+              const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
 
               // 1. 광역/기초 자치단체 필터 함수 정의
               const isBroadArea = (name: string) => {
@@ -413,7 +413,7 @@ export function ScamReportModal() {
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.country")}
                   </Label>
-                  {reportType === "new" && !!detectedCountryCode ? (
+                  {reportType === "new" ? (
                     <Input
                       value={displayCountryText}
                       disabled
@@ -459,7 +459,7 @@ export function ScamReportModal() {
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.city")}
                   </Label>
-                  {reportType === "new" && !!detectedCityName ? (
+                  {reportType === "new" ? (
                     <Input
                       value={displayCityText}
                       disabled
