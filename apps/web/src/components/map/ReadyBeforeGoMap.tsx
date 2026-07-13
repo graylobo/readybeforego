@@ -197,20 +197,19 @@ export default function ReadyBeforeGoMap() {
 
   // 줌 레벨별 병합 기준 반경 설정 (위경도 단위 차이)
   const getThresholdForZoom = (zoom: number) => {
-    if (zoom <= 3) return 20.0;
-    if (zoom === 4) return 12.0;
-    if (zoom === 5) return 6.0;
-    if (zoom === 6) return 3.0;
-    if (zoom === 7) return 1.5;
-    if (zoom === 8) return 0.8;
-    if (zoom === 9) return 0.4;
-    if (zoom === 10) return 0.2;
-    if (zoom === 11) return 0.1;
-    if (zoom === 12) return 0.04;
-    if (zoom === 13) return 0.015;
-    if (zoom === 14) return 0.008;
-    if (zoom === 15) return 0.003;
-    return 0.001; // zoom >= 16
+    if (zoom <= 3) return 15.0;     // 대륙 스케일
+    if (zoom === 4) return 6.0;      // 넓은 국가 스케일
+    if (zoom === 5) return 2.5;      // 국가 스케일 (서울-부산 320km 분리)
+    if (zoom === 6) return 1.0;      // 남한 전체 스케일 (서울-공주 110km 분리)
+    if (zoom === 7) return 0.4;      // 광역 경기-충청 스케일 (수원-천안 분리)
+    if (zoom === 8) return 0.18;     // 시/도 스케일 (천안-세종 분리)
+    if (zoom === 9) return 0.08;     // 세부 시내 스케일 (서울 강북-강남 분리)
+    if (zoom === 10) return 0.03;    // 구 스케일
+    if (zoom === 11) return 0.012;   // 동 스케일
+    if (zoom === 12) return 0.005;   // 세부 구/동 스케일
+    if (zoom === 13) return 0.002;
+    if (zoom === 14) return 0.001;
+    return 0.0003; // zoom >= 15 (정밀 개별 지점 마커)
   };
 
   // 모든 줌 레벨 통합 동적 클러스터러

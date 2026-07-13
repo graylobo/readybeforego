@@ -391,82 +391,117 @@ export function ScamReportModal() {
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                {t("report_modal.country")}
-              </Label>
-              <Select 
-                value={countryCode} 
-                onValueChange={(val) => { 
-                  setCountryCode(val); 
-                  setCityId(""); 
-                  if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
-                }} 
-                disabled={uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && !!detectedCountryCode)}
-              >
-                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                  {isLoadingGeo ? (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      위치 감지 중...
-                    </span>
-                  ) : (
-                    <SelectValue placeholder={t("report_modal.country_select")} />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  {countries.map((c) => (
-                    <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                      {getCountryName(c.code, lang)}
-                    </SelectItem>
-                  ))}
-                  {detectedCountryName && (
-                    <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
-                      {detectedCountryName} (자동 감지)
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+          {(() => {
+            const matchedCountry = countries.find((c) => c.code === detectedCountryCode);
+            const matchedCity = cities.find((c) => c.id === cityId);
+            
+            const displayCountryText = matchedCountry
+              ? `${getCountryName(matchedCountry.code, lang)} (자동 감지)`
+              : detectedCountryName 
+                ? `${detectedCountryName} (자동 감지)` 
+                : "위치 정보 없음";
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                {t("report_modal.city")}
-              </Label>
-              <Select 
-                value={cityId} 
-                onValueChange={(val) => {
-                  setCityId(val);
-                  if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
-                }}
-                disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && !!detectedCityName)}
-              >
-                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                  {isLoadingGeo ? (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      도시 감지 중...
-                    </span>
+            const displayCityText = matchedCity
+              ? `${matchedCity.name} (자동 감지)`
+              : detectedCityName
+                ? `${detectedCityName} (자동 감지)`
+                : "위치 정보 없음";
+
+            return (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {t("report_modal.country")}
+                  </Label>
+                  {reportType === "new" && !!detectedCountryCode ? (
+                    <Input
+                      value={displayCountryText}
+                      disabled
+                      className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
+                    />
                   ) : (
-                    <SelectValue placeholder={t("report_modal.city_select")} />
+                    <Select 
+                      value={countryCode} 
+                      onValueChange={(val) => { 
+                        setCountryCode(val); 
+                        setCityId(""); 
+                        if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                      }} 
+                      disabled={uploading || isLoadingGeo || reportType === "existing"}
+                    >
+                      <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                        {isLoadingGeo ? (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            위치 감지 중...
+                          </span>
+                        ) : (
+                          <SelectValue placeholder={t("report_modal.country_select")} />
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        {countries.map((c) => (
+                          <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                            {getCountryName(c.code, lang)}
+                          </SelectItem>
+                        ))}
+                        {detectedCountryName && (
+                          <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
+                            {detectedCountryName} (자동 감지)
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   )}
-                </SelectTrigger>
-                <SelectContent>
-                  {cities.map((city) => (
-                    <SelectItem key={city.id} value={city.id} className="cursor-pointer">
-                      {city.name}
-                    </SelectItem>
-                  ))}
-                  {detectedCityName && (
-                    <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
-                      {detectedCityName} (자동 감지)
-                    </SelectItem>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {t("report_modal.city")}
+                  </Label>
+                  {reportType === "new" && !!detectedCityName ? (
+                    <Input
+                      value={displayCityText}
+                      disabled
+                      className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
+                    />
+                  ) : (
+                    <Select 
+                      value={cityId} 
+                      onValueChange={(val) => {
+                        setCityId(val);
+                        if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                      }}
+                      disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
+                    >
+                      <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                        {isLoadingGeo ? (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            도시 감지 중...
+                          </span>
+                        ) : (
+                          <SelectValue placeholder={t("report_modal.city_select")} />
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map((city) => (
+                          <SelectItem key={city.id} value={city.id} className="cursor-pointer">
+                            {city.name}
+                          </SelectItem>
+                        ))}
+                        {detectedCityName && (
+                          <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
+                            {detectedCityName} (자동 감지)
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                </div>
+              </div>
+            );
+          })()}
           {errors.cityId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.cityId}</p>}
 
 
