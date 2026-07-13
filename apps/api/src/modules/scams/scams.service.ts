@@ -219,4 +219,23 @@ export class ScamsService {
       return { address: {} };
     }
   }
+
+  async searchAddress(query: string) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&accept-language=ko`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'readybeforego-travel-scam-agent/1.0',
+          'Accept-Language': 'ko'
+        }
+      });
+      if (!response.ok) {
+        throw new Error('OSM Search Error');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Nominatim search bypass error:', error);
+      return [];
+    }
+  }
 }

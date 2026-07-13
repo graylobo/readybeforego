@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Comments } from "@/components/comments/comments";
 import { ReportDialog } from "@/components/common/report-dialog";
 import { ScamReportModal } from "@/components/scams/scam-report-modal";
+import GeocodeConfirmModal from "@/components/scams/scam-geocode-confirm-modal";
+import AddressSearchModal from "@/components/scams/scam-address-search-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   AlertTriangle, 
@@ -96,6 +98,7 @@ export default function Home() {
     setReportType,
     setReportModalOpen,
     setReportCoords,
+    setAddressSearchModalOpen,
   } = useScamMapStore();
 
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
@@ -796,6 +799,8 @@ export default function Home() {
 
       {/* 실시간 사용자 직접 제보 모달 (UGC 폼) */}
       <ScamReportModal />
+      <GeocodeConfirmModal />
+      <AddressSearchModal />
 
       {/* 제보 방식 분기 다이얼로그 */}
       <Dialog open={isSelectTypeModalOpen} onOpenChange={setSelectTypeModalOpen}>
@@ -834,18 +839,18 @@ export default function Home() {
               type="button"
               className="flex items-start gap-3.5 p-4 rounded-xl border border-border bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-all text-left group cursor-pointer shadow-sm hover:shadow"
               onClick={() => {
-                setReportType("existing");
-                setReportModalOpen(true);
+                setReportType("new");
+                setAddressSearchModalOpen(true);
                 setSelectTypeModalOpen(false);
               }}
             >
               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0">
-                🏢
+                🔍
               </div>
               <div className="space-y-1">
-                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">등록된 기존 장소에서 선택</h4>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">주소 검색을 통해 등록</h4>
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  이미 등록된 검증된 국가/도시/세부 구역 목록 중 하나를 골라 간편하게 피해를 제보합니다.
+                  건물명이나 도로명 주소 검색을 통해 제보할 장소를 간편하고 정확하게 찾습니다.
                 </p>
               </div>
             </button>

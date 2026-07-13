@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
@@ -181,17 +181,34 @@ export default function ReadyBeforeGoMap() {
     setIsMobileFeedOpen,
     resetFeedSelections,
     setReportType,
+    geoData,
     setGeoData,
+    setGeocodeConfirmModalOpen,
+    isReportConfirmModalOpen,
+    setReportConfirmModalOpen,
   } = useScamMapStore();
 
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
+  
+  // 임시 제보 마커 참조 레퍼런스
+  const markerRef = useRef<L.Marker>(null);
 
   // Sync state when store mapZoom updates
   useEffect(() => {
     setCurrentZoom(mapZoom);
   }, [mapZoom]);
+
+  // 주소 매칭 컨펌 모달이 켜지거나 임시 핀 좌표가 잡혔을 때 바로 팝업창을 즉각 강제 오픈 🛡️
+  useEffect(() => {
+    if (isReportConfirmModalOpen && reportCoords && markerRef.current) {
+      const timer = setTimeout(() => {
+        markerRef.current?.openPopup();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isReportConfirmModalOpen, reportCoords]);
 
   const { data: regions = [] } = useQuery<Region[]>({
     queryKey: ["scam-regions"],
@@ -358,13 +375,18 @@ export default function ReadyBeforeGoMap() {
             setReportModalOpen(true);
             toast.success("위치 분석 완료! 제보를 작성해 주세요.", { id: toastId });
           } else {
-            // 위치 정보 획득 실패 시 차단
-            toast.error("⚠️ 해당 좌표의 유효한 국가/도시 위치 정보를 가져올 수 없습니다. 육지 영역을 정확히 찍어주세요.", { id: toastId });
+            // 위치 정보 획득 실패 시, 임시 좌표 얹고 주소 수동 검색 확인 모달 기동
+            setReportCoords([lat, lng]);
+            setGeocodeConfirmModalOpen(true);
+            toast.dismiss(toastId);
           }
         })
         .catch((err) => {
           console.error("Map Geocoding Error:", err);
-          toast.error("⚠️ 위치 분석 서비스가 원활하지 않습니다. 다시 시도해 주세요.", { id: toastId });
+          // 통신 장애 시에도 주소 수동 검색 확인 모달 기동
+          setReportCoords([lat, lng]);
+          setGeocodeConfirmModalOpen(true);
+          toast.dismiss(toastId);
         })
         .finally(() => {
           setIsMapGeocoding(false);
@@ -420,6 +442,25 @@ export default function ReadyBeforeGoMap() {
         .animate-loader-progress {
           animation: loaderProgress 1.8s ease-in-out infinite alternate;
         }
+
+        /* Leaflet Popup 어두운 테마 오버라이드 🛡️ */
+        .leaflet-popup-content-wrapper {
+          background: #0f172a !important; /* slate-900 */
+          color: #f8fafc !important; /* slate-50 */
+          border-radius: 14px !important;
+          border: 1px solid #334155 !important; /* slate-700 */
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
+          padding: 2px !important;
+        }
+        .leaflet-popup-tip {
+          background: #0f172a !important;
+          border: 1px solid #334155 !important;
+          box-shadow: none !important;
+        }
+        .leaflet-popup-content {
+          margin: 12px 14px !important;
+          line-height: inherit !important;
+        }
       `}</style>
 
       {/* 우아한 백그라운드 지오코딩 로딩 바 오버레이 🛡️ */}
@@ -468,7 +509,59 @@ export default function ReadyBeforeGoMap() {
 
         {/* 제보 중인 임시 타겟 포인트 */}
         {reportCoords && (
-          <Marker position={reportCoords} icon={createTempReportIcon()} />
+          <Marker 
+            ref={markerRef}
+            position={reportCoords} 
+            icon={createTempReportIcon()}
+          >
+            {isReportConfirmModalOpen && (
+              <Popup
+                position={reportCoords}
+                closeButton={false}
+                autoClose={false}
+                closeOnClick={false}
+              >
+                <div className="p-0.5 space-y-2.5 max-w-[220px] text-slate-100 min-w-0">
+                  <div className="space-y-0.5">
+                    <p className="text-[11px] font-extrabold text-blue-400 flex items-center gap-1">
+                      🧭 제보 위치 확인
+                    </p>
+                    <p className="text-[10.5px] font-bold leading-relaxed text-slate-200">
+                      지도 위 선택하신 이 위치에 피해 사례를 제보하시겠습니까?
+                    </p>
+                    {geoData && (
+                      <p className="text-[9.5px] font-medium text-slate-300 bg-slate-950/60 border border-slate-800/80 p-1.5 rounded-md mt-1 truncate block w-full">
+                        {geoData.name || geoData.display_name.split(",")[0]}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5 pt-1 w-full flex-shrink-0">
+                    <button
+                      onClick={() => {
+                        setGeocodeConfirmModalOpen(false);
+                        setReportConfirmModalOpen(false);
+                        setReportCoords(null);
+                      }}
+                      className="flex-1 py-1 px-2 border border-slate-700 text-slate-300 rounded text-[10px] font-semibold hover:bg-slate-800 cursor-pointer text-center bg-transparent transition-colors"
+                      type="button"
+                    >
+                      아니오
+                    </button>
+                    <button
+                      onClick={() => {
+                        setReportConfirmModalOpen(false);
+                        setReportModalOpen(true);
+                      }}
+                      className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold cursor-pointer text-center transition-colors"
+                      type="button"
+                    >
+                      예
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            )}
+          </Marker>
         )}
 
         {/* 사용자 현재 위치 마커 */}

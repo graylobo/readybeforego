@@ -120,5 +120,10 @@ export const scamsApi = {
   reverseGeocode: async (lat: number, lng: number): Promise<any> => {
     const response = await apiClient.get('/scams/reverse-geocode', { params: { lat, lng } });
     return response.data;
+  },
+
+  searchAddress: async (q: string): Promise<any[]> => {
+    const response = await apiClient.get('/scams/search-address', { params: { q } });
+    return response.data;
   }
 };

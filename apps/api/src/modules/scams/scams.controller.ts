@@ -92,6 +92,14 @@ export class ScamsController {
     return this.scamsService.reverseGeocode(Number(lat), Number(lng));
   }
 
+  @Get('search-address')
+  @ApiOperation({ summary: '주소 기반 위치 검색 (OSM Nominatim 우회)' })
+  async searchAddress(
+    @Query('q') query: string
+  ) {
+    return this.scamsService.searchAddress(query);
+  }
+
   // --- Dynamic Wildcard Routes (Must be declared at the bottom) ---
 
   @Get(':id')

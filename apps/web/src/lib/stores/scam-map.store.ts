@@ -19,6 +19,11 @@ interface ScamMapStore {
   isSelectTypeModalOpen: boolean;
   reportType: "new" | "existing";
 
+  // Geocoding Fallback Modal States
+  isGeocodeConfirmModalOpen: boolean;
+  isAddressSearchModalOpen: boolean;
+  isReportConfirmModalOpen: boolean;
+
   // 모바일 전용 뷰포트 상태 추가
   isMobileFeedOpen: boolean;
   isFilterModalOpen: boolean;
@@ -33,6 +38,9 @@ interface ScamMapStore {
   setReportCoords: (coords: [number, number] | null) => void;
   setReportModalOpen: (val: boolean) => void;
   setGeoData: (data: any) => void;
+  setGeocodeConfirmModalOpen: (val: boolean) => void;
+  setAddressSearchModalOpen: (val: boolean) => void;
+  setReportConfirmModalOpen: (val: boolean) => void;
   setSelectTypeModalOpen: (val: boolean) => void;
   setReportType: (type: "new" | "existing") => void;
   setIsMobileFeedOpen: (val: boolean) => void;
@@ -54,6 +62,9 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   geoData: null,
   isSelectTypeModalOpen: false,
   reportType: "new",
+  isGeocodeConfirmModalOpen: false,
+  isAddressSearchModalOpen: false,
+  isReportConfirmModalOpen: false,
   isMobileFeedOpen: false,
   isFilterModalOpen: false,
   setSelectedCountryCode: (code) => set({ selectedCountryCode: code }),
@@ -66,6 +77,9 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setReportCoords: (coords) => set({ reportCoords: coords }),
   setReportModalOpen: (val) => set({ isReportModalOpen: val }),
   setGeoData: (data) => set({ geoData: data }),
+  setGeocodeConfirmModalOpen: (val) => set({ isGeocodeConfirmModalOpen: val }),
+  setAddressSearchModalOpen: (val) => set({ isAddressSearchModalOpen: val }),
+  setReportConfirmModalOpen: (val) => set({ isReportConfirmModalOpen: val }),
   setSelectTypeModalOpen: (val) => set({ isSelectTypeModalOpen: val }),
   setReportType: (type) => set({ reportType: type }),
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
@@ -83,6 +97,9 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     geoData: null,
     isSelectTypeModalOpen: false,
     reportType: "new",
+    isGeocodeConfirmModalOpen: false,
+    isAddressSearchModalOpen: false,
+    isReportConfirmModalOpen: false,
     isMobileFeedOpen: false,
     isFilterModalOpen: false,
   }),
