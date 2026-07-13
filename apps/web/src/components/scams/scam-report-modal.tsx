@@ -34,6 +34,7 @@ export function ScamReportModal() {
     setReportType,
     selectedRegionId,
     selectedRegion,
+    geoData,
   } = useScamMapStore();
 
   const [countryCode, setCountryCode] = useState("");
@@ -103,110 +104,111 @@ export function ScamReportModal() {
         setRegionId("");
       }
       
-      // A. 신규 핀 제보인 경우에만 Nominatim Geocoding API 기동
-      if (reportType === "new" && reportCoords) {
+      // A. 신규 핀 제보인 경우에만 cached geoData 파싱
+      if (reportType === "new" && geoData) {
         setIsLoadingGeo(true);
-        // 백엔드 우회 reverse-geocode API 활용 (CORS 및 차단 방지)
-        scamsApi.reverseGeocode(reportCoords[0], reportCoords[1])
-          .then((data) => {
-            if (data) {
-              const addr = data.address || {};
-              const country = addr.country || "기타 국가";
-              const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
-              const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
+        try {
+          const addr = geoData.address || {};
+          const country = addr.country || "기타 국가";
+          const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
+          const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
 
-              // 1. 광역/기초 자치단체 필터 함수 정의
-              const isBroadArea = (name: string) => {
-                if (!name) return true;
-                const isGenericName = 
-                  name.toLowerCase() === country.toLowerCase() || 
-                  name.toLowerCase() === city.toLowerCase() ||
-                  /^\d+$/.test(name) ||
-                  name.includes("대한민국") ||
-                  name.includes("Korea") ||
-                  name === "기타 지역";
-                
-                const isDistrictOrCounty = 
-                  /^[a-zA-Z0-9가-힣\s\-]{1,10}(구|군|시)$/.test(name) ||
-                  name.toLowerCase().endsWith("gu") ||
-                  name.toLowerCase().endsWith("gun") ||
-                  name.toLowerCase().endsWith("si") ||
-                  name.toLowerCase().includes("district") ||
-                  name.toLowerCase().includes("county");
+          // 1. 광역/기초 자치단체 필터 함수 정의
+          const isBroadArea = (name: string) => {
+            if (!name) return true;
+            const isGenericName = 
+              name.toLowerCase() === country.toLowerCase() || 
+              name.toLowerCase() === city.toLowerCase() ||
+              /^\d+$/.test(name) ||
+              name.includes("대한민국") ||
+              name.includes("Korea") ||
+              name === "기타 지역";
+            
+            const isDistrictOrCounty = 
+              /^[a-zA-Z0-9가-힣\s\-]{1,10}(구|군|시)$/.test(name) ||
+              name.toLowerCase().endsWith("gu") ||
+              name.toLowerCase().endsWith("gun") ||
+              name.toLowerCase().endsWith("si") ||
+              name.toLowerCase().includes("district") ||
+              name.toLowerCase().includes("county");
 
-                return isGenericName || isDistrictOrCounty;
-              };
+            return isGenericName || isDistrictOrCounty;
+          };
 
-              // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
-              const landmark = addr.amenity || addr.tourism || addr.historic || addr.attraction || addr.place || addr.religion || addr.shop || addr.building || "";
-              
-              // 만약 1순위 지물이 광범위 행정구역이 아니라면 바로 채택!
-              if (landmark && !isBroadArea(landmark)) {
-                setRegionName(landmark);
-              } else {
-                // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출 (기장읍, 용호동, 시랑리 등)
-                let fallbackName = "";
-                if (data.name) {
-                  fallbackName = data.name;
-                } else if (data.display_name) {
-                  const parts = data.display_name.split(",");
-                  if (parts.length > 0) {
-                    fallbackName = parts[0].trim();
-                  }
-                }
-
-                // 2순위 지물이 광범위 행정구역이 아니라면 채택!
-                if (fallbackName && !isBroadArea(fallbackName)) {
-                  setRegionName(fallbackName);
-                } else {
-                  // 4. 3순위 (동/리/도로명 폴백): address 내부의 상세 세부 지명 추출 (neighbourhood, suburb, road 등)
-                  const subLandmark = addr.neighbourhood || addr.suburb || addr.road || "";
-                  if (subLandmark && !isBroadArea(subLandmark)) {
-                    setRegionName(subLandmark);
-                  } else {
-                    setRegionName("");
-                  }
-                }
-              }
-
-              setDetectedCountryName(country);
-              setDetectedCountryCode(countryCodeVal);
-              setDetectedCityName(city);
-
-              // 기등록 국가 목록 매칭 검사
-              const existingCountry = countries.find(c => c.code === countryCodeVal);
-              if (existingCountry) {
-                setCountryCode(existingCountry.code);
-                
-                // 해당 국가의 기등록 도시 목록 비동기 매칭
-                scamsApi.getCities(existingCountry.code)
-                  .then((cityList) => {
-                    const matchedCity = cityList.find((c: any) => 
-                      c.name.includes(city) || city.includes(c.name)
-                    );
-                    if (matchedCity) {
-                      setCityId(matchedCity.id);
-                    } else {
-                      setCityId("NEW_CITY");
-                    }
-                  })
-                  .catch(() => {
-                    setCityId("NEW_CITY");
-                  });
-              } else {
-                setCountryCode("NEW_COUNTRY");
-                setCityId("NEW_CITY");
+          // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
+          const landmark = addr.amenity || addr.tourism || addr.historic || addr.attraction || addr.place || addr.religion || addr.shop || addr.building || "";
+          
+          // 만약 1순위 지물이 광범위 행정구역이 아니라면 바로 채택!
+          if (landmark && !isBroadArea(landmark)) {
+            setRegionName(landmark);
+          } else {
+            // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출 (기장읍, 용호동, 시랑리 등)
+            let fallbackName = "";
+            if (geoData.name) {
+              fallbackName = geoData.name;
+            } else if (geoData.display_name) {
+              const parts = geoData.display_name.split(",");
+              if (parts.length > 0) {
+                fallbackName = parts[0].trim();
               }
             }
-          })
-          .catch((err) => {
-            console.error("Nominatim Reverse Geocoding Error:", err);
-            setCountryCode("");
-            setCityId("");
-          })
-          .finally(() => {
-            setIsLoadingGeo(false);
-          });
+
+            // 2순위 지물이 광범위 행정구역이 아니라면 채택!
+            if (fallbackName && !isBroadArea(fallbackName)) {
+              setRegionName(fallbackName);
+            } else {
+              // 4. 3순위 (동/리/도로명 폴백): address 내부의 상세 세부 지명 추출 (neighbourhood, suburb, road 등)
+              const subLandmark = addr.neighbourhood || addr.suburb || addr.road || "";
+              if (subLandmark && !isBroadArea(subLandmark)) {
+                setRegionName(subLandmark);
+              } else {
+                setRegionName("");
+              }
+            }
+          }
+
+          setDetectedCountryName(country);
+          setDetectedCountryCode(countryCodeVal);
+          setDetectedCityName(city);
+
+          // 기등록 국가 목록 매칭 검사
+          const existingCountry = countries.find(c => c.code === countryCodeVal);
+          if (existingCountry) {
+            setCountryCode(existingCountry.code);
+            
+            // 해당 국가의 기등록 도시 목록 비동기 매칭
+            scamsApi.getCities(existingCountry.code)
+              .then((cityList) => {
+                const matchedCity = cityList.find((c: any) => 
+                  c.name.includes(city) || city.includes(c.name)
+                );
+                if (matchedCity) {
+                  setCityId(matchedCity.id);
+                } else {
+                  setCityId("NEW_CITY");
+                }
+              })
+              .catch(() => {
+                setCityId("NEW_CITY");
+              });
+          } else {
+            setCountryCode("NEW_COUNTRY");
+            setCityId("NEW_CITY");
+          }
+        } catch (err) {
+          console.error("Geocoding Parsing Error:", err);
+          setCountryCode("");
+          setCityId("");
+        } finally {
+          setIsLoadingGeo(false);
+        }
+      } else if (reportType === "new") {
+        setCountryCode("");
+        setCityId("");
+        setDetectedCountryName("");
+        setDetectedCountryCode("");
+        setDetectedCityName("");
+        setIsLoadingGeo(false);
       } else {
         // B. 기존 장소 목록 제보인 경우: 현재 맵 및 스토어에 바인딩된 국가/도시를 프리필하여 세팅
         setCountryCode(selectedCountryCode || "");
@@ -217,7 +219,7 @@ export function ScamReportModal() {
         setIsLoadingGeo(false);
       }
     }
-  }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries]);
+  }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries, geoData]);
 
   useEffect(() => {
     return () => {

@@ -9,7 +9,7 @@ import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
-import { Compass } from "lucide-react";
+import { Compass, Loader2 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -24,6 +24,7 @@ const COUNTRY_COORDS: Record<string, [number, number]> = {
   VN: [16.0544, 108.2022], // 베트남 다낭
   KH: [11.5564, 104.9282], // 캄보디아 프놈펜
   JP: [35.6762, 139.6503], // 일본 도쿄
+  PH: [12.8797, 121.7740], // 필리핀 중심
 };
 
 // 주요 도시별 표준 중심 좌표 정의
@@ -180,10 +181,12 @@ export default function ReadyBeforeGoMap() {
     setIsMobileFeedOpen,
     resetFeedSelections,
     setReportType,
+    setGeoData,
   } = useScamMapStore();
 
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isMapGeocoding, setIsMapGeocoding] = useState(false);
 
   // Sync state when store mapZoom updates
   useEffect(() => {
@@ -233,8 +236,9 @@ export default function ReadyBeforeGoMap() {
 
         const latDiff = Math.abs(r1.latitude - r2.latitude);
         const lngDiff = Math.abs(r1.longitude - r2.longitude);
+        const isSameCountry = r1.countryCode === r2.countryCode;
 
-        if (latDiff < threshold && lngDiff < threshold) {
+        if (isSameCountry && latDiff < threshold && lngDiff < threshold) {
           group.push(r2);
           visited.add(r2.id);
         }
@@ -335,8 +339,36 @@ export default function ReadyBeforeGoMap() {
         toast.info("📍 정확한 제보를 위해 최대 확대 단계(Zoom 18)로 2단계 확대합니다. 확대된 화면에서 원하는 위치를 한 번 더 클릭해 제보해 주세요!");
         return;
       }
-      setReportCoords([lat, lng]);
-      setReportModalOpen(true);
+
+      // [백그라운드 지오코딩 & 우아한 로딩바 🛡️]
+      setIsMapGeocoding(true);
+      const toastId = toast.loading("📍 선택하신 위치 정보를 분석하고 있습니다...");
+
+      scamsApi.reverseGeocode(lat, lng)
+        .then((data) => {
+          if (data && data.address && Object.keys(data.address).length > 0) {
+            const addr = data.address;
+            const country = addr.country || "기타 국가";
+            const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
+            const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
+
+            // 성공 시 스토어 데이터 바인딩 후 모달 기동
+            setReportCoords([lat, lng]);
+            setGeoData(data);
+            setReportModalOpen(true);
+            toast.success("위치 분석 완료! 제보를 작성해 주세요.", { id: toastId });
+          } else {
+            // 위치 정보 획득 실패 시 차단
+            toast.error("⚠️ 해당 좌표의 유효한 국가/도시 위치 정보를 가져올 수 없습니다. 육지 영역을 정확히 찍어주세요.", { id: toastId });
+          }
+        })
+        .catch((err) => {
+          console.error("Map Geocoding Error:", err);
+          toast.error("⚠️ 위치 분석 서비스가 원활하지 않습니다. 다시 시도해 주세요.", { id: toastId });
+        })
+        .finally(() => {
+          setIsMapGeocoding(false);
+        });
     } else {
       // 일반 조회 모드인 경우 ➔ 마커 영역 밖 빈 지도 클릭 시 선택 사항 리셋! (지도 중심과 줌은 유지!)
       resetFeedSelections();
@@ -379,7 +411,38 @@ export default function ReadyBeforeGoMap() {
         .cursor-report-mode * {
           cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23DC2626' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/%3E%3Ccircle cx='12' cy='10' r='3' fill='%23DC2626'/%3E%3C/svg%3E") 16 31, pointer !important;
         }
+
+        @keyframes loaderProgress {
+          0% { width: 0%; }
+          50% { width: 70%; }
+          100% { width: 95%; }
+        }
+        .animate-loader-progress {
+          animation: loaderProgress 1.8s ease-in-out infinite alternate;
+        }
       `}</style>
+
+      {/* 우아한 백그라운드 지오코딩 로딩 바 오버레이 🛡️ */}
+      {isMapGeocoding && (
+        <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[3px] z-[9999] flex flex-col items-center justify-center select-none">
+          <div className="bg-white/95 dark:bg-slate-900/95 border border-slate-100 dark:border-slate-800/80 rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col items-center gap-4 text-center transform scale-100 transition-all duration-300">
+            <div className="relative w-12 h-12 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+              <span className="absolute w-10 h-10 rounded-full border border-blue-500/20 animate-ping"></span>
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">위치 분석 중</h4>
+              <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                선택하신 좌표의 상세 주소 정보를<br />안전하게 분석하고 있습니다.
+              </p>
+            </div>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full animate-loader-progress"></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}

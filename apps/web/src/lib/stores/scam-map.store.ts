@@ -12,6 +12,9 @@ interface ScamMapStore {
   reportCoords: [number, number] | null;
   isReportModalOpen: boolean;
   
+  // Raw geocoded payload object from map click
+  geoData: any | null;
+  
   // UGC Select Type Modal and Type states
   isSelectTypeModalOpen: boolean;
   reportType: "new" | "existing";
@@ -29,6 +32,7 @@ interface ScamMapStore {
   setIsReportMode: (val: boolean) => void;
   setReportCoords: (coords: [number, number] | null) => void;
   setReportModalOpen: (val: boolean) => void;
+  setGeoData: (data: any) => void;
   setSelectTypeModalOpen: (val: boolean) => void;
   setReportType: (type: "new" | "existing") => void;
   setIsMobileFeedOpen: (val: boolean) => void;
@@ -47,6 +51,7 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   isReportMode: false,
   reportCoords: null,
   isReportModalOpen: false,
+  geoData: null,
   isSelectTypeModalOpen: false,
   reportType: "new",
   isMobileFeedOpen: false,
@@ -60,6 +65,7 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setIsReportMode: (val) => set({ isReportMode: val }),
   setReportCoords: (coords) => set({ reportCoords: coords }),
   setReportModalOpen: (val) => set({ isReportModalOpen: val }),
+  setGeoData: (data) => set({ geoData: data }),
   setSelectTypeModalOpen: (val) => set({ isSelectTypeModalOpen: val }),
   setReportType: (type) => set({ reportType: type }),
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
@@ -74,6 +80,7 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isReportMode: false,
     reportCoords: null,
     isReportModalOpen: false,
+    geoData: null,
     isSelectTypeModalOpen: false,
     reportType: "new",
     isMobileFeedOpen: false,
