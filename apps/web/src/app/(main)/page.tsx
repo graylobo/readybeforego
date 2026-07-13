@@ -32,7 +32,7 @@ import {
 import { toast } from "sonner";
 
 // Prevent SSR window references for Leaflet map component
-const HogaengnoMap = dynamic(() => import("@/components/map/HogaengnoMap"), {
+const ReadyBeforeGoMap = dynamic(() => import("@/components/map/ReadyBeforeGoMap"), {
   ssr: false,
   loading: () => (
     <div className="h-full w-full bg-slate-50 flex flex-col items-center justify-center gap-4 animate-pulse">
@@ -420,7 +420,7 @@ export default function Home() {
       
       {/* Left Map Canvas (Occupies full viewport on mobile) */}
       <div className="flex-1 h-[100vh] md:h-full relative z-0">
-        <HogaengnoMap />
+        <ReadyBeforeGoMap />
 
         {/* 모바일 전용 플로팅 검색/필터 바 (구글맵/배달앱 스타일) */}
         <div className="absolute top-4 left-4 right-4 z-10 md:hidden flex items-center justify-between bg-card/95 backdrop-blur-md px-4 py-2.5 rounded-full shadow-lg border border-border">

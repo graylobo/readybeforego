@@ -184,7 +184,7 @@ export class ScamsService {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&accept-language=ko`;
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'hogaengno-travel-scam-agent/1.0',
+          'User-Agent': 'readybeforego-travel-scam-agent/1.0',
           'Accept-Language': 'ko'
         }
       });

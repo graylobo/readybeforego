@@ -1,6 +1,6 @@
 {
   "common": {
-    "app_name": "Hogaengno",
+    "app_name": "ReadyBeforeGo",
     "tagline": "안전 여행 가이드",
     "description": "여행지의 호객, 바가지, 소매치기 사기 사례를 지도에서 한눈에 확인하고 대처법을 공유해 보세요.",
     "loading_map": "인터랙티브 지도 불러오는 중...",

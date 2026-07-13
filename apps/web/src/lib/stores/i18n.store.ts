@@ -13,7 +13,7 @@ export const useI18nStore = create<I18nStore>()(
       setLang: (lang) => set({ lang }),
     }),
     {
-      name: "hogaengno-lang",
+      name: "readybeforego-lang",
     }
   )
 );

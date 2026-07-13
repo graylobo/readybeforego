@@ -35,7 +35,7 @@ const pool = new Pool({
 const db = drizzle(pool, { schema });
 
 async function main() {
-  console.log('🌱 Hogaengno 데이터베이스 초기 뼈대 데이터(Seed Data) 적재 시작...');
+  console.log('🌱 ReadyBeforeGo 데이터베이스 초기 뼈대 데이터(Seed Data) 적재 시작...');
 
   try {
     const countriesData = [
@@ -261,7 +261,7 @@ async function main() {
     }
     console.log('✅ 사기 정보 경보 데이터 적재 완료');
 
-    console.log('🎉 Hogaengno 데이터베이스 시딩이 성공적으로 완료되었습니다!');
+    console.log('🎉 ReadyBeforeGo 데이터베이스 시딩이 성공적으로 완료되었습니다!');
   } catch (error) {
     console.error('❌ 시딩 중 오류 발생:', error);
   } finally {

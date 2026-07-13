@@ -162,7 +162,7 @@ function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
   return null;
 }
 
-export default function HogaengnoMap() {
+export default function ReadyBeforeGoMap() {
   const { t, lang } = useTranslation();
   const {
     mapCenter,
