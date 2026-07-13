@@ -395,6 +395,14 @@ export function ScamReportModal() {
             const matchedCountry = countries.find((c) => c.code === detectedCountryCode);
             const matchedCity = cities.find((c) => c.id === cityId);
             
+            // 지오코딩이 무사히 성공하여 유효한 위치 정보가 식별되었는가?
+            const isGeoSuccess = 
+              !!detectedCountryCode && 
+              detectedCountryCode !== "ETC" && 
+              !!detectedCityName && 
+              detectedCityName !== "기타 도시" &&
+              detectedCityName !== "기타 지역";
+
             const displayCountryText = matchedCountry
               ? `${getCountryName(matchedCountry.code, lang)} (자동 감지)`
               : detectedCountryName 
@@ -413,7 +421,7 @@ export function ScamReportModal() {
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.country")}
                   </Label>
-                  {reportType === "new" ? (
+                  {reportType === "new" && isGeoSuccess ? (
                     <Input
                       value={displayCountryText}
                       disabled
@@ -445,7 +453,7 @@ export function ScamReportModal() {
                             {getCountryName(c.code, lang)}
                           </SelectItem>
                         ))}
-                        {detectedCountryName && (
+                        {detectedCountryName && detectedCountryCode !== "ETC" && (
                           <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
                             {detectedCountryName} (자동 감지)
                           </SelectItem>
@@ -459,7 +467,7 @@ export function ScamReportModal() {
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.city")}
                   </Label>
-                  {reportType === "new" ? (
+                  {reportType === "new" && isGeoSuccess ? (
                     <Input
                       value={displayCityText}
                       disabled
@@ -490,7 +498,7 @@ export function ScamReportModal() {
                             {city.name}
                           </SelectItem>
                         ))}
-                        {detectedCityName && (
+                        {detectedCityName && detectedCityName !== "기타 도시" && detectedCityName !== "기타 지역" && (
                           <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
                             {detectedCityName} (자동 감지)
                           </SelectItem>

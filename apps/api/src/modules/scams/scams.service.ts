@@ -11,28 +11,50 @@ export class ScamsService {
       let regionId = createDto.regionId;
       let cityId = createDto.cityId;
 
-      // 1. cityId가 없는데 cityName과 국가 정보(countryCode 또는 countryName)가 제공된 경우 동적 국가 및 도시 생성 처리
+      // 1. cityId가 없는데 cityName과 국가 정보가 제공된 경우 동적 국가 및 도시 생성 처리
       if (!regionId && !cityId && createDto.cityName && (createDto.countryCode || createDto.countryName)) {
         let country: any = null;
 
-        // 1-1. countryCode가 제공되었다면 먼저 코드로 국가 검색
-        if (createDto.countryCode) {
-          country = await this.scamsRepository.findCountryByCode(createDto.countryCode, tx);
+        // [보안 가드 🛡️] 사용자가 보낸 날것의 문자열 대신, 위경도 좌표를 백엔드에서 직접 역지오코딩하여 지명 강제 검증 및 정화
+        let verifiedCountryCode = createDto.countryCode;
+        let verifiedCountryName = createDto.countryName;
+        let verifiedCityName = createDto.cityName;
+
+        if (createDto.latitude !== undefined && createDto.longitude !== undefined) {
+          try {
+            const geoData = await this.reverseGeocode(createDto.latitude, createDto.longitude);
+            if (geoData && geoData.address) {
+              const addr = geoData.address;
+              verifiedCountryName = addr.country || '기타 국가';
+              verifiedCountryCode = (addr.country_code || 'ETC').toUpperCase();
+              verifiedCityName = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || '기타 도시';
+            }
+          } catch (e) {
+            // 외부 지오코딩 실패 시 안전한 공통 기타 명칭으로 폴백
+            verifiedCountryCode = verifiedCountryCode || 'ETC';
+            verifiedCountryName = verifiedCountryName || '기타 국가';
+            verifiedCityName = verifiedCityName || '기타 도시';
+          }
+        }
+
+        // 1-1. 검증된 countryCode가 제공되었다면 코드로 국가 검색
+        if (verifiedCountryCode) {
+          country = await this.scamsRepository.findCountryByCode(verifiedCountryCode, tx);
         }
 
         // 1-2. 그래도 국가가 없거나 countryName이 제공된 경우 이름으로 국가 검색/생성
-        if (!country && createDto.countryName) {
-          const countryName = createDto.countryName.trim();
+        if (!country && verifiedCountryName) {
+          const countryName = verifiedCountryName.trim();
           country = await this.scamsRepository.findCountryByName(countryName, tx);
 
           if (!country) {
-            let code = (createDto.countryCode || countryName.substring(0, 2)).toUpperCase();
+            let code = (verifiedCountryCode || countryName.substring(0, 2)).toUpperCase();
             
             // 국가 코드 유니크 제약 중복 충돌 방지 가드
             let existingCountryByCode = await this.scamsRepository.findCountryByCode(code, tx);
             let count = 1;
             while (existingCountryByCode) {
-              code = (createDto.countryCode || countryName.substring(0, 2)).toUpperCase() + count;
+              code = (verifiedCountryCode || countryName.substring(0, 2)).toUpperCase() + count;
               existingCountryByCode = await this.scamsRepository.findCountryByCode(code, tx);
               count++;
             }
@@ -46,8 +68,8 @@ export class ScamsService {
         }
 
         // 1-3. 국가가 식별되었으면 도시 생성 진행
-        if (country) {
-          const cityName = createDto.cityName.trim();
+        if (country && verifiedCityName) {
+          const cityName = verifiedCityName.trim();
           let city = await this.scamsRepository.findCityByName(cityName, country.code, tx);
 
           // 도시 정보가 존재하지 않으면 새로 동적 생성
