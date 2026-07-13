@@ -9,6 +9,7 @@ import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
+import { Compass } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -95,6 +96,21 @@ const createTempReportIcon = () => {
   });
 };
 
+// 사용자 현재 위치 마커 아이콘 (세련된 파란색 도트)
+const createUserLocationIcon = () => {
+  return new L.DivIcon({
+    html: `
+      <div class="relative flex items-center justify-center w-5 h-5">
+        <div class="absolute w-4 h-4 rounded-full bg-blue-500 opacity-20"></div>
+        <div class="relative w-3 h-3 rounded-full bg-blue-600 border-2 border-white shadow-md"></div>
+      </div>
+    `,
+    className: "user-location-marker",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+};
+
 // 지도 제어 및 카메라 뷰 핸들러
 function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
@@ -167,6 +183,7 @@ export default function HogaengnoMap() {
   } = useScamMapStore();
 
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   // Sync state when store mapZoom updates
   useEffect(() => {
@@ -314,18 +331,9 @@ export default function HogaengnoMap() {
   const handleMapClick = (lat: number, lng: number, zoomVal: number) => {
     if (isReportMode) {
       if (zoomVal < 18) {
-        // 아직 최대 줌(18) 미만인 경우 ➔ 임시 핀포인트를 그리지 않고 1단계씩 점진적 줌인
-        setReportCoords(null);
-        
-        const targetZoom = Math.min(zoomVal + 1, 18);
         setMapCenter([lat, lng]);
-        setMapZoom(targetZoom);
-        
-        if (targetZoom < 18) {
-          toast.info(`📍 지도를 확대 중입니다 (현재 줌: ${targetZoom}/18). 정확한 위치를 위해 더 확대해 주세요!`);
-        } else {
-          toast.info("📍 지도가 최대로 확대되었습니다! 정확한 피해 지점을 최종 클릭해 주세요.");
-        }
+        setMapZoom(Math.min(zoomVal + 2, 18));
+        toast.info("📍 정확한 제보를 위해 최대 확대 단계(Zoom 18)로 2단계 확대합니다. 확대된 화면에서 원하는 위치를 한 번 더 클릭해 제보해 주세요!");
         return;
       }
       setReportCoords([lat, lng]);
@@ -334,6 +342,31 @@ export default function HogaengnoMap() {
       // 일반 조회 모드인 경우 ➔ 마커 영역 밖 빈 지도 클릭 시 선택 사항 리셋! (지도 중심과 줌은 유지!)
       resetFeedSelections();
     }
+  };
+
+  // 사용자 현재 위치 GPS 탐색 함수
+  const handleLocateUser = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      toast.error("이 브라우저에서는 현재 위치 기능을 지원하지 않습니다.");
+      return;
+    }
+
+    toast.loading("현재 위치를 확인하고 있습니다...", { id: "geolocation" });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation([latitude, longitude]);
+        setMapCenter([latitude, longitude]);
+        setMapZoom(16);
+        toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
+      },
+      (error) => {
+        console.error("Geolocation Error:", error);
+        toast.error("위치 정보 접근 권한이 거부되었거나 위치를 찾을 수 없습니다.", { id: "geolocation" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   return (
@@ -376,6 +409,11 @@ export default function HogaengnoMap() {
           <Marker position={reportCoords} icon={createTempReportIcon()} />
         )}
 
+        {/* 사용자 현재 위치 마커 */}
+        {userLocation && (
+          <Marker position={userLocation} icon={createUserLocationIcon()} />
+        )}
+
         {/* 동적 통합 클러스터 렌더링 */}
         {getDynamicClusters().map((cluster) => (
           <Marker
@@ -388,6 +426,15 @@ export default function HogaengnoMap() {
           />
         ))}
       </MapContainer>
+
+      {/* 현재 위치 이동 플로팅 버튼 */}
+      <button
+        onClick={handleLocateUser}
+        className="absolute bottom-20 right-6 z-[1000] w-11 h-11 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
+        title="현재 위치로 이동"
+      >
+        <Compass className="w-5 h-5" />
+      </button>
     </div>
   );
 }
