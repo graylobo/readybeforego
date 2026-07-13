@@ -59,7 +59,7 @@ jobs:
       - name: Build and Push Docker Image
         run: |
           IMAGE_TAG=${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_GAR_REPO }}/api:latest
-          docker build -t $IMAGE_TAG -f Dockerfile .
+          docker build --target api -t $IMAGE_TAG -f Dockerfile .
           docker push $IMAGE_TAG
 
       - name: Deploy to Cloud Run
