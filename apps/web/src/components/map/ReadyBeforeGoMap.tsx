@@ -9,7 +9,7 @@ import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
-import { Compass, Loader2 } from "lucide-react";
+import { Compass, Loader2, Locate } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -101,14 +101,14 @@ const createTempReportIcon = () => {
 const createUserLocationIcon = () => {
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center w-5 h-5">
-        <div class="absolute w-4 h-4 rounded-full bg-blue-500 opacity-20"></div>
-        <div class="relative w-3 h-3 rounded-full bg-blue-600 border-2 border-white shadow-md"></div>
+      <div class="relative flex items-center justify-center w-6 h-6">
+        <div class="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-blue-500 opacity-60"></div>
+        <div class="relative w-3.5 h-3.5 rounded-full bg-blue-600 border-2 border-white shadow-md z-10"></div>
       </div>
     `,
     className: "user-location-marker",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
   });
 };
 
@@ -358,6 +358,7 @@ export default function ReadyBeforeGoMap() {
       }
 
       // [백그라운드 지오코딩 & 우아한 로딩바 🛡️]
+      toast.dismiss();
       setIsMapGeocoding(true);
       const toastId = toast.loading("📍 선택하신 위치 정보를 분석하고 있습니다...");
 
@@ -369,11 +370,11 @@ export default function ReadyBeforeGoMap() {
             const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
             const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
 
-            // 성공 시 스토어 데이터 바인딩 후 모달 기동
+            // 성공 시 스토어 데이터 바인딩 후 지도 컨펌 팝업 기동
             setReportCoords([lat, lng]);
             setGeoData(data);
-            setReportModalOpen(true);
-            toast.success("위치 분석 완료! 제보를 작성해 주세요.", { id: toastId });
+            setReportConfirmModalOpen(true);
+            toast.success("위치 분석 완료! 제보할 위치를 확인해 주세요.", { id: toastId });
           } else {
             // 위치 정보 획득 실패 시, 임시 좌표 얹고 주소 수동 검색 확인 모달 기동
             setReportCoords([lat, lng]);
@@ -460,6 +461,11 @@ export default function ReadyBeforeGoMap() {
         .leaflet-popup-content {
           margin: 12px 14px !important;
           line-height: inherit !important;
+        }
+
+        /* 검색 버튼 아래에 줌 제어 박스 배치 🛡️ */
+        .leaflet-top.leaflet-left {
+          top: 44px !important;
         }
       `}</style>
 
@@ -585,10 +591,10 @@ export default function ReadyBeforeGoMap() {
       {/* 현재 위치 이동 플로팅 버튼 */}
       <button
         onClick={handleLocateUser}
-        className="absolute bottom-20 right-6 z-[1000] w-11 h-11 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
+        className="absolute top-[10px] left-[10px] z-[1000] w-[34px] h-[34px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[4px] shadow flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
         title="현재 위치로 이동"
       >
-        <Compass className="w-5 h-5" />
+        <Locate className="w-4.5 h-4.5" />
       </button>
     </div>
   );

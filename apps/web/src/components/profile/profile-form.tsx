@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { useUpdateProfile, useWithdrawAccount } from '@/hooks/queries/use-profile-queries';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils/cn';
 import { AlertCircle, Camera, ChevronRight, Coins, Loader2, Shield, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -30,6 +31,7 @@ const ENABLE_USER_ACTIVITY_LOG = false;
 
 export function ProfileForm() {
   const { user, checkAuth } = useAuthStore();
+  const { lang, setLang } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -348,6 +350,28 @@ export function ProfileForm() {
                     </AlertDescription>
                   </Alert>
                 )}
+              </div>
+              
+              <div className="space-y-2 pt-4 border-t">
+                <Label className="text-sm font-semibold">언어 설정 (Language Settings)</Label>
+                <div className="flex items-center gap-1 border border-border rounded-lg p-0.5 bg-muted/60 w-fit">
+                  <Button
+                    size="sm"
+                    variant={lang === "ko" ? "default" : "ghost"}
+                    className="h-7 px-3 text-xs font-bold cursor-pointer transition-all active:scale-95"
+                    onClick={() => setLang("ko")}
+                  >
+                    한국어 (KO)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={lang === "en" ? "default" : "ghost"}
+                    className="h-7 px-3 text-xs font-bold cursor-pointer transition-all active:scale-95"
+                    onClick={() => setLang("en")}
+                  >
+                    English (EN)
+                  </Button>
+                </div>
               </div>
               
                <div className="space-y-1 pt-4 border-t">

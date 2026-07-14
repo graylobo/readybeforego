@@ -107,7 +107,7 @@ export default function AddressSearchModal() {
                   placeholder="예: 서울 강남역, 방콕 카오산로드"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="pl-8 text-xs h-9.5 w-full transition-all"
+                  className="pl-8 text-xs h-9.5 w-full transition-all focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-600 dark:focus-visible:border-blue-500"
                   disabled={isSearching}
                   autoComplete="off"
                 />

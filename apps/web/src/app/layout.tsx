@@ -5,7 +5,7 @@ import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SITE_CONFIG, UI_CONFIG } from "@/lib/constants";
-import { Toaster } from 'sonner';
+import { ResponsiveToaster } from "@/components/providers/responsive-toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -115,7 +115,7 @@ export default function RootLayout({
         >
             <QueryProvider>
                 {children}
-                <Toaster richColors position="top-center" />
+                <ResponsiveToaster />
             </QueryProvider>
         </ThemeProvider>
       </body>

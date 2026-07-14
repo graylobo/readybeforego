@@ -13,6 +13,7 @@ import { useLayoutStore } from '@/lib/stores/layout.store';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { usePathname, useRouter } from 'next/navigation';
 import Loading from '@/app/(main)/loading';
+import { Map, MessageSquare, ShoppingBag, Tag, SlidersHorizontal } from 'lucide-react';
 
 function SidebarOverlay() {
   const { isOpen, toggle } = useSidebarToggleStore();
@@ -80,6 +81,7 @@ export function AppLayout({
   const isAdminVariant = variant === 'admin';
   // 어드민 영역은 top 레이아웃을 지원하지 않고 항상 사이드바 모드로 통일한다.
   const layoutMode = isAdminVariant ? 'sidebar' : storeLayoutMode;
+  const firstBoardHref = clientMenuItems[0]?.subMenu?.[0]?.href || '/board/free';
 
   React.useEffect(() => {
     setMounted(true);
@@ -108,12 +110,65 @@ export function AppLayout({
         <React.Suspense fallback={<div className="h-16 border-b bg-background" />}>
           <Header variant={variant} />
         </React.Suspense>
-        <main className="flex-1 overflow-y-auto bg-background w-full flex flex-col transition-colors duration-300">
+        <main className="flex-1 overflow-y-auto bg-background w-full flex flex-col transition-colors duration-300 pb-16 md:pb-0">
           <div className={cn("flex-1", contentClassName)}>
          {showLoading ? <Loading /> : children}
           </div>
           {showFooter && <Footer />}
         </main>
+      </div>
+
+      {/* 모바일 전용 하단 네비게이션 바 🧭 */}
+      <div className="fixed bottom-0 left-0 right-0 h-16 bg-background/95 backdrop-blur-md border-t border-border flex items-center justify-around z-40 md:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <button
+          onClick={() => router.push('/')}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
+            pathname === '/' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Map className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => router.push(firstBoardHref)}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
+            pathname.startsWith('/board') ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <MessageSquare className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => router.push('/emoticons')}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
+            pathname.startsWith('/emoticons') ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <ShoppingBag className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => router.push('/event/checkin')}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
+            pathname.startsWith('/event') || pathname.startsWith('/points') ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Tag className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => router.push('/profile')}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
+            pathname.startsWith('/profile') ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <SlidersHorizontal className="h-5 w-5" />
+        </button>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export function Footer() {
   return (
-    <footer className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground bg-background shrink-0">
+    <footer className="hidden md:block border-t border-border px-4 py-6 text-center text-xs text-muted-foreground bg-background shrink-0">
       <div className="flex justify-center items-center flex-wrap gap-2 mb-3">
         <span className="font-medium">운영팀: help@example.com</span>
         <span className="text-muted-foreground/30 select-none">|</span>
