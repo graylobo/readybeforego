@@ -12,10 +12,10 @@ export const CreateScamInfoBaseSchema = z.object({
   longitude: z.number().optional(),
   title: z.string().min(2, '제목은 2자 이상이어야 합니다.').max(100),
   description: z.string().min(10, '설명은 10자 이상이어야 합니다.'),
-  avoidanceTip: z.string().max(1000).optional(),
+  avoidanceTip: z.string().max(1000).nullable().optional(),
   scamCategory: z.string().min(1),
-  sourceUrl: z.string().url().or(z.literal('')).optional(),
-  imageUrls: z.array(z.string().url()).optional(),
+  sourceUrl: z.string().url().or(z.literal('')).nullable().optional(),
+  imageUrls: z.array(z.string().url()).nullable().optional(),
 });
 
 export const CreateScamInfoSchema = CreateScamInfoBaseSchema.refine(

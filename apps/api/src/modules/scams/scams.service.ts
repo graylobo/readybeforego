@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ScamsRepository } from './scams.repository';
 import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
 
@@ -6,7 +6,7 @@ import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
 export class ScamsService {
   constructor(private readonly scamsRepository: ScamsRepository) {}
 
-  async create(createDto: CreateScamInfoZodDto) {
+  async create(createDto: CreateScamInfoZodDto, userId?: string) {
     return this.scamsRepository.transaction(async (tx) => {
       let regionId = createDto.regionId;
       let cityId = createDto.cityId;
@@ -102,8 +102,9 @@ export class ScamsService {
         throw new Error('올바른 지역 정보가 지정되지 않았습니다.');
       }
 
-      return this.scamsRepository.create({
+       return this.scamsRepository.create({
         regionId: regionId,
+        userId: userId ?? null,
         title: createDto.title,
         description: createDto.description,
         avoidanceTip: createDto.avoidanceTip ?? null,
@@ -114,12 +115,34 @@ export class ScamsService {
     });
   }
 
-  async update(id: string, updateDto: UpdateScamInfoZodDto) {
+  async update(id: string, updateDto: UpdateScamInfoZodDto, userId: string, userRole: string) {
     const scam = await this.scamsRepository.findById(id);
     if (!scam) {
       throw new NotFoundException('해당 사기 정보를 찾을 수 없습니다.');
     }
+
+    const isSuperAdmin = userRole === 'super_admin';
+    const isOwner = scam.userId === userId;
+    if (!isSuperAdmin && !isOwner) {
+      throw new ForbiddenException('수정 권한이 없습니다.');
+    }
+
     return this.scamsRepository.update(id, updateDto);
+  }
+
+  async delete(id: string, userId: string, userRole: string) {
+    const scam = await this.scamsRepository.findById(id);
+    if (!scam) {
+      throw new NotFoundException('해당 사기 정보를 찾을 수 없습니다.');
+    }
+
+    const isSuperAdmin = userRole === 'super_admin';
+    const isOwner = scam.userId === userId;
+    if (!isSuperAdmin && !isOwner) {
+      throw new ForbiddenException('삭제 권한이 없습니다.');
+    }
+
+    return this.scamsRepository.update(id, { deletedAt: new Date() });
   }
 
   async getScamById(id: string) {

@@ -7,13 +7,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
-import { scamsApi, ScamInfo, Region } from "@/lib/api/scams";
+import { scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
 import { getCountryName } from "@/lib/utils/country";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Comments } from "@/components/comments/comments";
 import { ReportDialog } from "@/components/common/report-dialog";
 import { ScamReportModal } from "@/components/scams/scam-report-modal";
@@ -65,7 +67,7 @@ function getCategoryInfo(cat: string, t: any) {
 export default function Home() {
   const queryClient = useQueryClient();
   const { t, lang, setLang } = useTranslation();
-  const { isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
   
   // Mismatch hydration guard for persistent localstorage lang
@@ -105,6 +107,13 @@ export default function Home() {
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
   const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
 
+  const [editingScam, setEditingScam] = useState<ScamInfo | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editAvoidanceTip, setEditAvoidanceTip] = useState("");
+  const [editSourceUrl, setEditSourceUrl] = useState("");
+
   // Trigger toast guide when user activates reporting mode
   useEffect(() => {
     if (isReportMode) {
@@ -116,18 +125,18 @@ export default function Home() {
   }, [isReportMode, t]);
 
   // Countries / Cities / Regions Query definitions
-  const { data: countries = [] } = useQuery({
+  const { data: countries = [] } = useQuery<Country[]>({
     queryKey: ["countries"],
     queryFn: () => scamsApi.getCountries(),
   });
 
-  const { data: cities = [], isPending: isCitiesPending } = useQuery({
+  const { data: cities = [], isPending: isCitiesPending } = useQuery<City[]>({
     queryKey: ["cities", selectedCountryCode],
     queryFn: () => scamsApi.getCities(selectedCountryCode!),
     enabled: !!selectedCountryCode,
   });
 
-  const { data: regions = [], isPending: isRegionsPending } = useQuery({
+  const { data: regions = [], isPending: isRegionsPending } = useQuery<Region[]>({
     queryKey: ["regions", selectedCityId],
     queryFn: () => scamsApi.getRegions(selectedCityId!),
     enabled: !!selectedCityId,
@@ -140,7 +149,7 @@ export default function Home() {
   });
 
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
-  const { data: scams = [], isPending: isScamsPending } = useQuery({
+  const { data: scams = [], isPending: isScamsPending } = useQuery<ScamInfo[]>({
     queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId],
     queryFn: () => {
       if (selectedRegionId) {
@@ -165,6 +174,54 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["scams"] });
     },
   });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (scamId: string) => scamsApi.deleteScam(scamId),
+    onSuccess: () => {
+      toast.success("제보가 성공적으로 삭제되었습니다.");
+      queryClient.invalidateQueries({ queryKey: ["scam-regions"] });
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
+    },
+    onError: (error: any) => {
+      console.error(error);
+      toast.error("제보 삭제에 실패했습니다.");
+    }
+  });
+
+  // Edit mutation
+  const editMutation = useMutation({
+    mutationFn: ({ scamId, data }: { scamId: string; data: any }) =>
+      scamsApi.updateScam(scamId, data),
+    onSuccess: () => {
+      toast.success("제보가 성공적으로 수정되었습니다.");
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
+      setIsEditModalOpen(false);
+      setEditingScam(null);
+    },
+    onError: (error: any) => {
+      console.error(error);
+      toast.error("제보 수정에 실패했습니다.");
+    }
+  });
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScam) return;
+    if (editDescription.trim().length < 10) {
+      toast.error("설명은 최소 10자 이상 입력해야 합니다.");
+      return;
+    }
+    editMutation.mutate({
+      scamId: editingScam.id,
+      data: {
+        title: editTitle,
+        description: editDescription,
+        avoidanceTip: editAvoidanceTip || null,
+        sourceUrl: editSourceUrl || null,
+      }
+    });
+  };
 
   // 제보 카드 클릭 시 해당 제보 위치로 지도 이동 및 최대 확대
   const handleCardClick = (scam: ScamInfo) => {
@@ -238,10 +295,34 @@ export default function Home() {
       );
     }
 
+    const formatDate = (dateStr: string) => {
+      const d = new Date(dateStr);
+      const yy = String(d.getFullYear()).slice(-2);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    };
+
+    const formatDateTime = (dateStr: string) => {
+      const d = new Date(dateStr);
+      const yy = String(d.getFullYear()).slice(-2);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${yy}-${mm}-${dd} ${hh}:${min}`;
+    };
+
     return (
       <div className="space-y-4 pb-8">
         {scams.map((scam) => {
           const cat = getCategoryInfo(scam.scamCategory, t);
+          const isSuperAdmin = user?.role === "super_admin";
+          const isOwner = user && scam.userId === user.id;
+          const canManage = isSuperAdmin || isOwner;
+          
+          const isEdited = new Date(scam.updatedAt).getTime() - new Date(scam.createdAt).getTime() > 1000;
+
           return (
             <Card 
               key={scam.id} 
@@ -250,20 +331,61 @@ export default function Home() {
             >
               <CardHeader className="p-4 pb-2 space-y-2">
                 <div className="flex items-center justify-between">
-                  <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
-                    {cat.label}
-                  </Badge>
-                  {scam.sourceUrl && (
-                    <a 
-                      href={scam.sourceUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                      {cat.label}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground select-none">
+                      {formatDate(scam.createdAt)}
+                      {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 shrink-0">
+                    {scam.sourceUrl && (
+                      <a 
+                        href={scam.sourceUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+
+                    {canManage && (
+                      <div className="flex items-center gap-1 text-[10px] shrink-0 whitespace-nowrap">
+                        <span className="text-slate-300 select-none">|</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingScam(scam);
+                            setEditTitle(scam.title);
+                            setEditDescription(scam.description);
+                            setEditAvoidanceTip(scam.avoidanceTip || "");
+                            setEditSourceUrl(scam.sourceUrl || "");
+                            setIsEditModalOpen(true);
+                          }}
+                          className="text-slate-500 hover:text-blue-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
+                        >
+                          수정
+                        </button>
+                        <span className="text-slate-300 select-none">|</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("정말로 이 제보를 삭제하시겠습니까?")) {
+                              deleteMutation.mutate(scam.id);
+                            }
+                          }}
+                          className="text-slate-500 hover:text-red-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
               </CardHeader>
@@ -314,10 +436,11 @@ export default function Home() {
                 {/* Card Footer Actions */}
                 <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
                   
-                  {/* Reactions (Likes/Dislikes) */}
+                  {/* Reactions (Likes/Dislikes) & Comments */}
                   {(() => {
                     const isLiked = scam.reactions && scam.reactions.some(r => r.type === "like");
                     const isDisliked = scam.reactions && scam.reactions.some(r => r.type === "dislike");
+                    const isCommentsOpen = activeCommentScamId === scam.id;
                     return (
                       <div className="flex items-center gap-1">
                         <Button 
@@ -360,26 +483,29 @@ export default function Home() {
                         >
                           <ThumbsDown className={`w-3.5 h-3.5 transition-colors ${isDisliked ? 'fill-red-600 stroke-red-600 text-red-600' : 'text-slate-500 group-hover:stroke-red-600'}`} />
                         </Button>
-                        <span className={`text-[11px] min-w-[12px] text-center ${isDisliked ? 'text-red-600 font-bold' : 'text-slate-500'}`}>{scam.downvoteCount}</span>
+                        <span className={`text-[11px] min-w-[12px] text-center ${isDisliked ? 'text-red-600 font-bold' : 'text-slate-500'} mr-2`}>{scam.downvoteCount}</span>
+
+                        {/* 댓글 버튼 (싫어요 우측) */}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                            isCommentsOpen ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveCommentScamId(isCommentsOpen ? null : scam.id);
+                          }}
+                        >
+                          <MessageSquare className={`w-3.5 h-3.5 transition-colors ${isCommentsOpen ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
+                        </Button>
+                        <span className={`text-[11px] min-w-[12px] text-center ${isCommentsOpen ? 'text-blue-600 font-bold' : 'text-slate-500'}`}>{scam.commentCount || 0}</span>
                       </div>
                     );
                   })()}
 
-                  {/* Comment and Report triggers */}
+                  {/* Report (Flag) trigger */}
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 gap-1 text-slate-600 cursor-pointer hover:bg-slate-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveCommentScamId(activeCommentScamId === scam.id ? null : scam.id);
-                      }}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      {t("common.discussion")}
-                    </Button>
-                    
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -404,6 +530,9 @@ export default function Home() {
                       targetType="scam_info" 
                       targetId={scam.id} 
                       allowAnonymous={true} 
+                      onMutationSuccess={() => {
+                        queryClient.invalidateQueries({ queryKey: ["scams"] });
+                      }}
                     />
                   </div>
                 )}
@@ -510,7 +639,7 @@ export default function Home() {
                 }}
               >
                 <span>➕</span>
-                <span>여기에 제보하기</span>
+                <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
               </Button>
 
               {/* 닫기 (X) 버튼 */}
@@ -545,7 +674,7 @@ export default function Home() {
                   : selectedCityId 
                     ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
                     : (getCountryName(selectedCountryCode, lang) || "국가")
-                } <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
+                } 
               </DialogTitle>
             </div>
 
@@ -568,7 +697,7 @@ export default function Home() {
                 }}
               >
                 <span>➕</span>
-                <span>제보하기</span>
+                <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
               </Button>
             )}
           </DialogHeader>
@@ -737,6 +866,93 @@ export default function Home() {
               취소
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 제보 수정 모달 ✏️ */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="w-[95%] max-w-[500px] p-5 rounded-2xl bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold">✏️ 제보 수정하기</DialogTitle>
+            <DialogDescription className="text-xs">
+              선택한 제보 정보를 수정합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEditSubmit} className="space-y-4 pt-2">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                제목
+              </label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="제목을 입력하세요"
+                required
+                className="text-xs h-9"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                상세 설명
+              </label>
+              <Textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="상세 정보를 입력하세요 (최소 10자)"
+                required
+                rows={4}
+                className="text-xs resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                대처법 & 예방법 (선택)
+              </label>
+              <Textarea
+                value={editAvoidanceTip}
+                onChange={(e) => setEditAvoidanceTip(e.target.value)}
+                placeholder="대처법 및 예방법을 입력하세요"
+                rows={3}
+                className="text-xs resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                출처 URL (선택)
+              </label>
+              <Input
+                value={editSourceUrl}
+                onChange={(e) => setEditSourceUrl(e.target.value)}
+                placeholder="https://..."
+                className="text-xs h-9"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingScam(null);
+                }}
+                className="text-xs h-9 cursor-pointer"
+              >
+                취소
+              </Button>
+              <Button
+                type="submit"
+                disabled={editMutation.isPending}
+                className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+              >
+                {editMutation.isPending ? "저장 중..." : "저장하기"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

@@ -35,7 +35,7 @@ export class ScamsRepository {
 
   async findById(id: string, tx?: Transaction) {
     const db = tx ?? this.db;
-    return db.query.scamInfos.findFirst({
+    const scam = await db.query.scamInfos.findFirst({
       where: and(eq(schema.scamInfos.id, id), sql`${schema.scamInfos.deletedAt} is null`),
       with: {
         region: {
@@ -49,6 +49,44 @@ export class ScamsRepository {
         },
       },
     });
+    if (!scam) return null;
+
+    const [commentCountRes] = await db.select({
+      count: sql<number>`count(${schema.comments.id})::int`
+    })
+    .from(schema.comments)
+    .where(and(
+      eq(schema.comments.targetType, 'scam_info'),
+      eq(schema.comments.targetId, id),
+      sql`${schema.comments.deletedAt} is null`
+    ));
+
+    return {
+      ...scam,
+      commentCount: commentCountRes?.count || 0
+    };
+  }
+
+  private async attachCommentCounts(scams: any[], db: any) {
+    if (scams.length === 0) return [];
+    const scamIds = scams.map(s => s.id);
+    const commentCounts = await db.select({
+      targetId: schema.comments.targetId,
+      count: sql<number>`count(${schema.comments.id})::int`,
+    })
+    .from(schema.comments)
+    .where(and(
+      eq(schema.comments.targetType, 'scam_info'),
+      inArray(schema.comments.targetId, scamIds),
+      sql`${schema.comments.deletedAt} is null`
+    ))
+    .groupBy(schema.comments.targetId);
+
+    const countsMap = new Map(commentCounts.map((c: any) => [c.targetId, c.count]));
+    return scams.map(s => ({
+      ...s,
+      commentCount: countsMap.get(s.id) || 0,
+    }));
   }
 
   async findByRegion(
@@ -58,7 +96,7 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
-    return db.query.scamInfos.findMany({
+    const scams = await db.query.scamInfos.findMany({
       where: and(eq(schema.scamInfos.regionId, regionId), sql`${schema.scamInfos.deletedAt} is null`),
       orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
       with: {
@@ -76,6 +114,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
+    return this.attachCommentCounts(scams, db);
   }
 
   async findByCity(
@@ -89,7 +128,7 @@ export class ScamsRepository {
       .from(schema.regions)
       .where(eq(schema.regions.cityId, cityId));
 
-    return db.query.scamInfos.findMany({
+    const scams = await db.query.scamInfos.findMany({
       where: and(
         inArray(schema.scamInfos.regionId, regionIdsSubquery),
         sql`${schema.scamInfos.deletedAt} is null`
@@ -110,6 +149,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
+    return this.attachCommentCounts(scams, db);
   }
 
   async findByCountry(
@@ -124,7 +164,7 @@ export class ScamsRepository {
       .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
       .where(eq(schema.cities.countryCode, countryCode));
 
-    return db.query.scamInfos.findMany({
+    const scams = await db.query.scamInfos.findMany({
       where: and(
         inArray(schema.scamInfos.regionId, regionIdsSubquery),
         sql`${schema.scamInfos.deletedAt} is null`
@@ -145,6 +185,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
+    return this.attachCommentCounts(scams, db);
   }
 
   async findReaction(
@@ -272,7 +313,13 @@ export class ScamsRepository {
     })
     .from(schema.regions)
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
-    .leftJoin(schema.scamInfos, eq(schema.scamInfos.regionId, schema.regions.id))
+    .leftJoin(
+      schema.scamInfos,
+      and(
+        eq(schema.scamInfos.regionId, schema.regions.id),
+        sql`${schema.scamInfos.deletedAt} is null`
+      )
+    )
     .groupBy(
       schema.regions.id,
       schema.regions.cityId,

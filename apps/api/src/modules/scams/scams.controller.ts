@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes, Delete } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -17,8 +17,12 @@ export class ScamsController {
   @ApiOperation({ summary: '사기 경고 정보 등록' })
   @UsePipes(new ZodValidationPipe(CreateScamInfoZodDto))
   @ApiBody({ type: CreateScamInfoZodDto })
-  async create(@Body() createDto: CreateScamInfoZodDto) {
-    return this.scamsService.create(createDto);
+  async create(
+    @Body() createDto: CreateScamInfoZodDto,
+    @Req() req: any
+  ) {
+    const userId = req.user?.id;
+    return this.scamsService.create(createDto, userId);
   }
 
   // --- Static Routes (Must be declared before wildcard routes to prevent masking) ---
@@ -115,9 +119,24 @@ export class ScamsController {
   @ApiBody({ type: UpdateScamInfoZodDto })
   async update(
     @Param('id') id: string,
-    @Body() updateDto: UpdateScamInfoZodDto
+    @Body() updateDto: UpdateScamInfoZodDto,
+    @Req() req: any
   ) {
-    return this.scamsService.update(id, updateDto);
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    return this.scamsService.update(id, updateDto, userId, userRole);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '사기 경고 정보 삭제' })
+  async delete(
+    @Param('id') id: string,
+    @Req() req: any
+  ) {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    return this.scamsService.delete(id, userId, userRole);
   }
 
   @Post(':id/reaction')

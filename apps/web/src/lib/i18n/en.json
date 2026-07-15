@@ -16,7 +16,8 @@
     "discussion": "Discuss",
     "upvote": "Like",
     "downvote": "Dislike",
-    "login_required_confirm": "Login is required for this feature. Would you like to redirect to the login page?"
+    "login_required_confirm": "Login is required for this feature. Would you like to redirect to the login page?",
+    "report_here": "Add report here"
   },
   "categories": {
     "FORCED_SHOPPING": "🛍️ Solicitation / Forced Buy",

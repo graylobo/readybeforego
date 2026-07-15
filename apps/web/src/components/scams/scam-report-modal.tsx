@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useTranslation } from "@/hooks/use-translation";
-import { scamsApi } from "@/lib/api/scams";
+import { scamsApi, Country, City, Region, ScamInfo } from "@/lib/api/scams";
 import { uploadsApi } from "@/lib/api/uploads";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -63,19 +63,19 @@ export function ScamReportModal() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // useQuery hooks moved here to be referenced inside useEffect
-  const { data: countries = [] } = useQuery({
+  const { data: countries = [] } = useQuery<Country[]>({
     queryKey: ["countries"],
     queryFn: () => scamsApi.getCountries(),
     enabled: isReportModalOpen,
   });
 
-  const { data: cities = [], isPending: isCitiesPending } = useQuery({
+  const { data: cities = [], isPending: isCitiesPending } = useQuery<City[]>({
     queryKey: ["cities", countryCode],
     queryFn: () => scamsApi.getCities(countryCode),
     enabled: isReportModalOpen && !!countryCode,
   });
 
-  const { data: cityRegions = [], isPending: isRegionsPending } = useQuery({
+  const { data: cityRegions = [], isPending: isRegionsPending } = useQuery<Region[]>({
     queryKey: ["city-regions", cityId],
     queryFn: () => scamsApi.getRegions(cityId),
     enabled: isReportModalOpen && !!cityId && cityId !== "NEW_CITY",
@@ -178,7 +178,7 @@ export function ScamReportModal() {
             
             // 해당 국가의 기등록 도시 목록 비동기 매칭
             scamsApi.getCities(existingCountry.code)
-              .then((cityList) => {
+              .then((cityList: City[]) => {
                 const matchedCity = cityList.find((c: any) => 
                   c.name.includes(city) || city.includes(c.name)
                 );
@@ -227,12 +227,13 @@ export function ScamReportModal() {
     };
   }, [imagePreviews]);
 
-  const createMutation = useMutation({
+  const createMutation = useMutation<ScamInfo, Error, Parameters<typeof scamsApi.createScam>[0]>({
     mutationFn: (data: Parameters<typeof scamsApi.createScam>[0]) => scamsApi.createScam(data),
     onSuccess: (newScam) => {
       toast.success(t("report_modal.submit") + " " + "성공");
       
       queryClient.invalidateQueries({ queryKey: ["scam-regions"] });
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
       if (cityId) {
         queryClient.invalidateQueries({ queryKey: ["regions", cityId] });
       }

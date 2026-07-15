@@ -550,6 +550,7 @@ export const scamInfos = pgTable('scam_infos', {
   regionId: uuid('region_id')
     .notNull()
     .references(() => regions.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
   avoidanceTip: text('avoidance_tip'),
@@ -565,6 +566,7 @@ export const scamInfos = pgTable('scam_infos', {
 }, (table) => ({
   regionIdx: index('scam_infos_region_idx').on(table.regionId),
   upvoteIdx: index('scam_infos_upvote_idx').on(table.upvoteCount),
+  userScaleIdx: index('scam_infos_user_idx').on(table.userId),
 }));
 
 // Scam Info Reactions table
@@ -608,6 +610,10 @@ export const scamInfosRelations = relations(scamInfos, ({ one, many }) => ({
     references: [regions.id],
   }),
   reactions: many(scamInfoReactions),
+  user: one(users, {
+    fields: [scamInfos.userId],
+    references: [users.id],
+  }),
 }));
 
 export const scamInfoReactionsRelations = relations(scamInfoReactions, ({ one }) => ({

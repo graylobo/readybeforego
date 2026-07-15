@@ -363,7 +363,7 @@ export default function ReadyBeforeGoMap() {
       const toastId = toast.loading("📍 선택하신 위치 정보를 분석하고 있습니다...");
 
       scamsApi.reverseGeocode(lat, lng)
-        .then((data) => {
+        .then((data: any) => {
           if (data && data.address && Object.keys(data.address).length > 0) {
             const addr = data.address;
             const country = addr.country || "기타 국가";
@@ -382,7 +382,7 @@ export default function ReadyBeforeGoMap() {
             toast.dismiss(toastId);
           }
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error("Map Geocoding Error:", err);
           // 통신 장애 시에도 주소 수동 검색 확인 모달 기동
           setReportCoords([lat, lng]);
@@ -433,6 +433,19 @@ export default function ReadyBeforeGoMap() {
         .cursor-report-mode .leaflet-marker-icon,
         .cursor-report-mode * {
           cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23DC2626' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/%3E%3Ccircle cx='12' cy='10' r='3' fill='%23DC2626'/%3E%3C/svg%3E") 16 31, pointer !important;
+        }
+
+        /* 팝업 툴팁 안에서는 핀 아이콘이 아닌 일반 마우스 커서 및 포인터로 복원 */
+        .cursor-report-mode .leaflet-popup,
+        .cursor-report-mode .leaflet-popup * {
+          cursor: auto !important;
+        }
+
+        .cursor-report-mode .leaflet-popup button,
+        .cursor-report-mode .leaflet-popup a,
+        .cursor-report-mode .leaflet-popup [role="button"],
+        .cursor-report-mode .leaflet-popup .cursor-pointer {
+          cursor: pointer !important;
         }
 
         @keyframes loaderProgress {
@@ -543,7 +556,9 @@ export default function ReadyBeforeGoMap() {
                   </div>
                   <div className="flex gap-1.5 pt-1 w-full flex-shrink-0">
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        L.DomEvent.stopPropagation(e.nativeEvent);
                         setGeocodeConfirmModalOpen(false);
                         setReportConfirmModalOpen(false);
                         setReportCoords(null);
@@ -554,7 +569,9 @@ export default function ReadyBeforeGoMap() {
                       아니오
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        L.DomEvent.stopPropagation(e.nativeEvent);
                         setReportConfirmModalOpen(false);
                         setReportModalOpen(true);
                       }}

@@ -49,6 +49,8 @@ export interface ScamInfo {
   deletedAt?: string | null;
   reactions?: Array<{ id: string; type: 'like' | 'dislike' }>;
   imageUrls?: string[] | null;
+  commentCount?: number;
+  userId?: string | null;
 }
 
 export const scamsApi = {
@@ -110,6 +112,33 @@ export const scamsApi = {
   }): Promise<ScamInfo> => {
     const response = await apiClient.post('/scams', data);
     return response.data;
+  },
+
+  updateScam: async (
+    id: string,
+    data: Partial<{
+      regionId?: string;
+      regionName?: string;
+      cityId?: string;
+      countryCode?: string;
+      countryName?: string;
+      cityName?: string;
+      latitude?: number;
+      longitude?: number;
+      title: string;
+      description: string;
+      avoidanceTip?: string;
+      scamCategory: string;
+      sourceUrl?: string;
+      imageUrls?: string[];
+    }>
+  ): Promise<ScamInfo> => {
+    const response = await apiClient.patch(`/scams/${id}`, data);
+    return response.data;
+  },
+
+  deleteScam: async (id: string): Promise<void> => {
+    await apiClient.delete(`/scams/${id}`);
   },
 
   toggleReaction: async (id: string, type: 'like' | 'dislike'): Promise<ScamInfo> => {
