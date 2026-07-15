@@ -16,6 +16,14 @@ import { PlusCircle, Image as ImageIcon, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
 
+const CATEGORY_ITEMS = [
+  { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
+  { value: "DRUG_HAZARD", tKey: "categories.DRUG_HAZARD" },
+  { value: "LIES_TOURISM", tKey: "categories.LIES_TOURISM" },
+  { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
+  { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
+];
+
 export function ScamReportModal() {
   const queryClient = useQueryClient();
   const { t, lang } = useTranslation();
@@ -41,6 +49,7 @@ export function ScamReportModal() {
   const [cityId, setCityId] = useState("");
   const [regionName, setRegionName] = useState("");
   const [scamCategory, setScamCategory] = useState("");
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [avoidanceTip, setAvoidanceTip] = useState("");
@@ -85,6 +94,7 @@ export function ScamReportModal() {
     if (isReportModalOpen) {
       setRegionName("");
       setScamCategory("");
+      setSelectedCats([]);
       setTitle("");
       setDescription("");
       setAvoidanceTip("");
@@ -102,6 +112,8 @@ export function ScamReportModal() {
         }
       } else {
         setRegionId("");
+        setCountryCode("");
+        setCityId("");
       }
       
       // A. 신규 핀 제보인 경우에만 cached geoData 파싱
@@ -579,27 +591,61 @@ export function ScamReportModal() {
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.category")}</Label>
-            <Select 
-              value={scamCategory} 
-              onValueChange={(val) => {
-                setScamCategory(val);
-                if (errors.scamCategory) setErrors(prev => ({ ...prev, scamCategory: "" }));
-              }} 
-              disabled={uploading}
-            >
-              <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.scamCategory ? "border-red-500 focus:ring-red-400" : ""}`}>
-                <SelectValue placeholder={t("report_modal.category_select")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FORCED_SHOPPING" className="cursor-pointer">{t("categories.FORCED_SHOPPING")}</SelectItem>
-                <SelectItem value="DRUG_HAZARD" className="cursor-pointer">{t("categories.DRUG_HAZARD")}</SelectItem>
-                <SelectItem value="LIES_TOURISM" className="cursor-pointer">{t("categories.LIES_TOURISM")}</SelectItem>
-                <SelectItem value="FAKE_TAXI" className="cursor-pointer">{t("categories.FAKE_TAXI")}</SelectItem>
-                <SelectItem value="OVERCHARGING" className="cursor-pointer">{t("categories.OVERCHARGING")}</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                카테고리 (최소 1개, 최대 3개)
+              </Label>
+              <span className="text-[10px] text-muted-foreground font-semibold">
+                선택됨: {selectedCats.length}/3
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+              {CATEGORY_ITEMS.map((item) => {
+                const isChecked = selectedCats.includes(item.value);
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => {
+                      let next;
+                      if (isChecked) {
+                        next = selectedCats.filter((c) => c !== item.value);
+                      } else {
+                        if (selectedCats.length >= 3) {
+                          toast.warning("카테고리는 최대 3개까지 선택할 수 있습니다.");
+                          return;
+                        }
+                        next = [...selectedCats, item.value];
+                      }
+                      setSelectedCats(next);
+                      setScamCategory(next.join(","));
+                      if (errors.scamCategory) setErrors(prev => ({ ...prev, scamCategory: "" }));
+                    }}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                      isChecked
+                        ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 font-bold font-semibold"
+                        : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0 ${
+                      isChecked
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "border-slate-300 dark:border-slate-700 bg-transparent"
+                    }`}>
+                      {isChecked && (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="w-3 h-3">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="truncate">{t(item.tKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
             {errors.scamCategory && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.scamCategory}</p>}
           </div>
 

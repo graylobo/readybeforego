@@ -60,6 +60,14 @@ const CATEGORY_MAP: Record<string, { label: string; color: string; icon: string 
   OVERCHARGING: { label: "💸 바가지 요금", color: "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300", icon: "💸" },
 };
 
+const CATEGORY_ITEMS = [
+  { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
+  { value: "DRUG_HAZARD", tKey: "categories.DRUG_HAZARD" },
+  { value: "LIES_TOURISM", tKey: "categories.LIES_TOURISM" },
+  { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
+  { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
+];
+
 function getCategoryInfo(cat: string, t: any) {
   const info = CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
   return {
@@ -240,6 +248,10 @@ export default function Home() {
       toast.error("설명은 최소 10자 이상 입력해야 합니다.");
       return;
     }
+    if (!editScamCategory) {
+      toast.error("사기 피해 카테고리를 최소 1개 이상 선택해 주세요.");
+      return;
+    }
 
     setIsUploading(true);
     try {
@@ -375,7 +387,6 @@ export default function Home() {
     return (
       <div className="space-y-4 pb-8">
         {scams.map((scam) => {
-          const cat = getCategoryInfo(scam.scamCategory, t);
           const isSuperAdmin = user?.role === "super_admin";
           const isOwner = user && scam.userId === user.id;
           const canManage = isSuperAdmin || isOwner;
@@ -391,9 +402,14 @@ export default function Home() {
               <CardHeader className="p-4 pb-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
-                      {cat.label}
-                    </Badge>
+                    {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
+                      const cat = getCategoryInfo(catKey, t);
+                      return (
+                        <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                          {cat.label}
+                        </Badge>
+                      );
+                    })}
                     <span className="text-[10px] text-muted-foreground select-none">
                       {formatDate(scam.createdAt)}
                       {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
@@ -944,21 +960,58 @@ export default function Home() {
 
           <form onSubmit={handleEditSubmit} className="space-y-4 pt-2">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-                사기 유형 카테고리
-              </label>
-              <Select value={editScamCategory} onValueChange={setEditScamCategory}>
-                <SelectTrigger className="text-xs h-9 cursor-pointer">
-                  <SelectValue placeholder="카테고리 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OVERCHARGING" className="cursor-pointer">{t("categories.OVERCHARGING")}</SelectItem>
-                  <SelectItem value="LIES_TOURISM" className="cursor-pointer">{t("categories.LIES_TOURISM")}</SelectItem>
-                  <SelectItem value="FAKE_TAXI" className="cursor-pointer">{t("categories.FAKE_TAXI")}</SelectItem>
-                  <SelectItem value="FORCED_SHOPPING" className="cursor-pointer">{t("categories.FORCED_SHOPPING")}</SelectItem>
-                  <SelectItem value="DRUG_HAZARD" className="cursor-pointer">{t("categories.DRUG_HAZARD")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  사기 유형 카테고리 (최소 1개, 최대 3개)
+                </label>
+                <span className="text-[10px] text-muted-foreground font-semibold">
+                  선택됨: {editScamCategory ? editScamCategory.split(",").filter(Boolean).length : 0}/3
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                {CATEGORY_ITEMS.map((item) => {
+                  const selectedCats = editScamCategory ? editScamCategory.split(",").filter(Boolean) : [];
+                  const isChecked = selectedCats.includes(item.value);
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => {
+                        let next;
+                        if (isChecked) {
+                          next = selectedCats.filter((c) => c !== item.value);
+                        } else {
+                          if (selectedCats.length >= 3) {
+                            toast.error("카테고리는 최대 3개까지 선택할 수 있습니다.");
+                            return;
+                          }
+                          next = [...selectedCats, item.value];
+                        }
+                        setEditScamCategory(next.join(","));
+                      }}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                        isChecked
+                          ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 font-bold font-semibold"
+                          : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0 ${
+                        isChecked
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : "border-slate-300 dark:border-slate-700 bg-transparent"
+                      }`}>
+                        {isChecked && (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="w-3 h-3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="truncate">{t(item.tKey)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div>
