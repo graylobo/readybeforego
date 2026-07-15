@@ -9,7 +9,7 @@ import { Region, scamsApi } from "@/lib/api/scams";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
-import { Compass, Loader2, Locate } from "lucide-react";
+import { Compass, Loader2, Locate, Search, MapPin } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -124,17 +124,24 @@ function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: numb
   return null;
 }
 
-// 제보 모드 + 최대 확대 시 커서를 핀 모양으로 변경하는 핸들러
-function MapCursorHandler({ active }: { active: boolean }) {
+// 제보 모드 커서 제어 핸들러 (확대 전: 돋보기+, 확대 완료: 핀 아이콘)
+function MapCursorHandler({ active, needZoom }: { active: boolean; needZoom: boolean }) {
   const map = useMap();
   useEffect(() => {
     const container = map.getContainer();
+    
+    // 기존 커서 클래스 일괄 제거
+    container.classList.remove("cursor-report-mode");
+    container.classList.remove("cursor-zoom-in-mode");
+
     if (active) {
-      container.classList.add("cursor-report-mode");
-    } else {
-      container.classList.remove("cursor-report-mode");
+      if (needZoom) {
+        container.classList.add("cursor-zoom-in-mode");
+      } else {
+        container.classList.add("cursor-report-mode");
+      }
     }
-  }, [active, map]);
+  }, [active, needZoom, map]);
   return null;
 }
 
@@ -176,13 +183,16 @@ export default function ReadyBeforeGoMap() {
     setMapZoom,
     reportCoords,
     isReportMode,
+    setIsReportMode,
     setReportCoords,
+    isReportModalOpen,
     setReportModalOpen,
     setIsMobileFeedOpen,
     resetFeedSelections,
     setReportType,
     geoData,
     setGeoData,
+    isGeocodeConfirmModalOpen,
     setGeocodeConfirmModalOpen,
     isReportConfirmModalOpen,
     setReportConfirmModalOpen,
@@ -353,33 +363,23 @@ export default function ReadyBeforeGoMap() {
       if (zoomVal < 18) {
         setMapCenter([lat, lng]);
         setMapZoom(Math.min(zoomVal + 2, 18));
-        toast.info("📍 정확한 제보를 위해 최대 확대 단계(Zoom 18)로 2단계 확대합니다. 확대된 화면에서 원하는 위치를 한 번 더 클릭해 제보해 주세요!");
         return;
       }
 
       // [백그라운드 지오코딩 & 우아한 로딩바 🛡️]
-      toast.dismiss();
       setIsMapGeocoding(true);
-      const toastId = toast.loading("📍 선택하신 위치 정보를 분석하고 있습니다...");
 
       scamsApi.reverseGeocode(lat, lng)
         .then((data: any) => {
           if (data && data.address && Object.keys(data.address).length > 0) {
-            const addr = data.address;
-            const country = addr.country || "기타 국가";
-            const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
-            const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
-
             // 성공 시 스토어 데이터 바인딩 후 지도 컨펌 팝업 기동
             setReportCoords([lat, lng]);
             setGeoData(data);
             setReportConfirmModalOpen(true);
-            toast.success("위치 분석 완료! 제보할 위치를 확인해 주세요.", { id: toastId });
           } else {
             // 위치 정보 획득 실패 시, 임시 좌표 얹고 주소 수동 검색 확인 모달 기동
             setReportCoords([lat, lng]);
             setGeocodeConfirmModalOpen(true);
-            toast.dismiss(toastId);
           }
         })
         .catch((err: any) => {
@@ -387,7 +387,6 @@ export default function ReadyBeforeGoMap() {
           // 통신 장애 시에도 주소 수동 검색 확인 모달 기동
           setReportCoords([lat, lng]);
           setGeocodeConfirmModalOpen(true);
-          toast.dismiss(toastId);
         })
         .finally(() => {
           setIsMapGeocoding(false);
@@ -435,16 +434,31 @@ export default function ReadyBeforeGoMap() {
           cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23DC2626' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/%3E%3Ccircle cx='12' cy='10' r='3' fill='%23DC2626'/%3E%3C/svg%3E") 16 31, pointer !important;
         }
 
+        .cursor-zoom-in-mode,
+        .cursor-zoom-in-mode .leaflet-pane,
+        .cursor-zoom-in-mode .leaflet-grab,
+        .cursor-zoom-in-mode .leaflet-interactive,
+        .cursor-zoom-in-mode .leaflet-marker-icon,
+        .cursor-zoom-in-mode * {
+          cursor: zoom-in !important;
+        }
+
         /* 팝업 툴팁 안에서는 핀 아이콘이 아닌 일반 마우스 커서 및 포인터로 복원 */
         .cursor-report-mode .leaflet-popup,
-        .cursor-report-mode .leaflet-popup * {
+        .cursor-report-mode .leaflet-popup *,
+        .cursor-zoom-in-mode .leaflet-popup,
+        .cursor-zoom-in-mode .leaflet-popup * {
           cursor: auto !important;
         }
 
         .cursor-report-mode .leaflet-popup button,
         .cursor-report-mode .leaflet-popup a,
         .cursor-report-mode .leaflet-popup [role="button"],
-        .cursor-report-mode .leaflet-popup .cursor-pointer {
+        .cursor-report-mode .leaflet-popup .cursor-pointer,
+        .cursor-zoom-in-mode .leaflet-popup button,
+        .cursor-zoom-in-mode .leaflet-popup a,
+        .cursor-zoom-in-mode .leaflet-popup [role="button"],
+        .cursor-zoom-in-mode .leaflet-popup .cursor-pointer {
           cursor: pointer !important;
         }
 
@@ -503,6 +517,42 @@ export default function ReadyBeforeGoMap() {
         </div>
       )}
 
+      {/* 모바일/PC 공통 지도 상단 제보 위치 안내 가이드 플로팅 배너 📍 */}
+      {isReportMode && !isReportConfirmModalOpen && !isReportModalOpen && !isGeocodeConfirmModalOpen && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-[420px] bg-slate-900/95 dark:bg-slate-950/95 border border-slate-800 text-slate-100 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 text-blue-400 shrink-0">
+              {currentZoom < 18 ? (
+                <Search className="w-4 h-4 animate-pulse" />
+              ) : (
+                <MapPin className="w-4 h-4 animate-bounce" />
+              )}
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                {currentZoom < 18 ? "지도가 너무 축소됨" : "위치 선택 대기"}
+              </span>
+              <p className="text-xs font-semibold text-slate-200">
+                {currentZoom < 18 
+                  ? "정확한 위치를 선택하기 위해 지도를 더 확대하세요"
+                  : "제보할 정확한 지점을 지도에서 터치하세요."}
+              </p>
+            </div>
+          </div>
+          
+          <button
+            type="button"
+            onClick={() => {
+              setIsReportMode(false);
+              setReportCoords(null);
+            }}
+            className="text-[11px] bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 transition-colors shrink-0 active:scale-95 cursor-pointer"
+          >
+            취소
+          </button>
+        </div>
+      )}
+
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}
@@ -519,7 +569,7 @@ export default function ReadyBeforeGoMap() {
         />
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
-        <MapCursorHandler active={isReportMode && currentZoom >= 18} />
+        <MapCursorHandler active={isReportMode} needZoom={currentZoom < 18} />
         
         <MapEventsHandler 
           onZoomChange={(zoom) => setCurrentZoom(zoom)} 

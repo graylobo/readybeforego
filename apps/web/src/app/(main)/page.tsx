@@ -123,15 +123,7 @@ export default function Home() {
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Trigger toast guide when user activates reporting mode
-  useEffect(() => {
-    if (isReportMode) {
-      toast.info(t("report_modal.guide_toast", { defaultValue: "지도에서 피해 발생 위치를 클릭해 주세요! 📍 핀이 생성되며 제보 입력창이 열립니다." }), {
-        id: "report-mode-guide",
-        duration: 5000,
-      });
-    }
-  }, [isReportMode, t]);
+
 
   // Countries / Cities / Regions Query definitions
   const { data: countries = [] } = useQuery<Country[]>({
