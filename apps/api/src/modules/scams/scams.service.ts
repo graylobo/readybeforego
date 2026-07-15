@@ -133,7 +133,31 @@ export class ScamsService {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
 
-    return this.scamsRepository.update(id, updateDto);
+    const updateResult = await this.scamsRepository.update(id, updateDto);
+
+    // 이미지 리스트가 수정 요청에 포함되어 있는 경우 (undefined가 아닌 경우)
+    if (updateDto.imageUrls !== undefined) {
+      const oldImageUrls = (scam.imageUrls || []) as string[];
+      const newImageUrls = (updateDto.imageUrls || []) as string[];
+
+      // 기존 리스트에는 있었으나 새 리스트에는 없는 이미지 파일 찾아 삭제
+      const removedUrls = oldImageUrls.filter(url => !newImageUrls.includes(url));
+      if (removedUrls.length > 0) {
+        for (const url of removedUrls) {
+          try {
+            const imagePath = this.uploadsService.extractPathFromUrl(url);
+            if (imagePath) {
+              await this.uploadsService.deleteImage(imagePath);
+              this.logger.log(`Successfully deleted removed scam image from storage: ${url}`);
+            }
+          } catch (err) {
+            this.logger.error(`Failed to delete removed scam image from storage: ${url}`, err);
+          }
+        }
+      }
+    }
+
+    return updateResult;
   }
 
   async delete(id: string, userId: string, userRole: string) {

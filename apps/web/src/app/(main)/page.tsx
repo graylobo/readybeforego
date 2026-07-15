@@ -8,6 +8,7 @@ import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
+import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,7 +33,10 @@ import {
   ExternalLink,
   Info,
   Compass,
-  Search
+  Search,
+  ImageIcon,
+  X,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -113,6 +117,11 @@ export default function Home() {
   const [editDescription, setEditDescription] = useState("");
   const [editAvoidanceTip, setEditAvoidanceTip] = useState("");
   const [editSourceUrl, setEditSourceUrl] = useState("");
+  const [editScamCategory, setEditScamCategory] = useState("");
+  const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
+  const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
+  const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Trigger toast guide when user activates reporting mode
   useEffect(() => {
@@ -196,6 +205,9 @@ export default function Home() {
     onSuccess: () => {
       toast.success("제보가 성공적으로 수정되었습니다.");
       queryClient.invalidateQueries({ queryKey: ["scams"] });
+      editImagePreviews.forEach(url => URL.revokeObjectURL(url));
+      setEditImagePreviews([]);
+      setEditImageFiles([]);
       setIsEditModalOpen(false);
       setEditingScam(null);
     },
@@ -205,23 +217,78 @@ export default function Home() {
     }
   });
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      const totalCount = editExistingImageUrls.length + editImageFiles.length + selectedFiles.length;
+      if (totalCount > 5) {
+        toast.error("사진은 최대 5장까지 첨부할 수 있습니다.");
+        return;
+      }
+      setEditImageFiles((prev) => [...prev, ...selectedFiles]);
+      const newPreviews = selectedFiles.map((file) => URL.createObjectURL(file));
+      setEditImagePreviews((prev) => [...prev, ...newPreviews]);
+    }
+  };
+
+  const removeEditExistingImage = (index: number) => {
+    setEditExistingImageUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeEditNewImage = (index: number) => {
+    setEditImageFiles((prev) => prev.filter((_, i) => i !== index));
+    URL.revokeObjectURL(editImagePreviews[index]);
+    setEditImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingScam) return;
     if (editDescription.trim().length < 10) {
       toast.error("설명은 최소 10자 이상 입력해야 합니다.");
       return;
     }
-    editMutation.mutate({
-      scamId: editingScam.id,
-      data: {
-        title: editTitle,
-        description: editDescription,
-        avoidanceTip: editAvoidanceTip || null,
-        sourceUrl: editSourceUrl || null,
-      }
-    });
+
+    setIsUploading(true);
+    try {
+      const uploadedUrls = await Promise.all(
+        editImageFiles.map(async (file) => {
+          const isAnimated = file.type === "image/gif" || file.type === "image/webp";
+          return uploadsApi.uploadImage(file, {
+            compress: !isAnimated,
+            folder: "scams",
+          });
+        })
+      );
+
+      const finalImageUrls = [...editExistingImageUrls, ...uploadedUrls];
+
+      editMutation.mutate({
+        scamId: editingScam.id,
+        data: {
+          title: editTitle,
+          description: editDescription,
+          avoidanceTip: editAvoidanceTip || null,
+          sourceUrl: editSourceUrl || null,
+          scamCategory: editScamCategory,
+          imageUrls: finalImageUrls.length > 0 ? finalImageUrls : null,
+        }
+      });
+    } catch (err) {
+      toast.error("이미지 업로드에 실패했습니다.");
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  // Close cleanup
+  useEffect(() => {
+    if (!isEditModalOpen) {
+      editImagePreviews.forEach(url => URL.revokeObjectURL(url));
+      setEditImagePreviews([]);
+      setEditImageFiles([]);
+    }
+  }, [isEditModalOpen]);
 
   // 제보 카드 클릭 시 해당 제보 위치로 지도 이동 및 최대 확대
   const handleCardClick = (scam: ScamInfo) => {
@@ -365,6 +432,10 @@ export default function Home() {
                             setEditDescription(scam.description);
                             setEditAvoidanceTip(scam.avoidanceTip || "");
                             setEditSourceUrl(scam.sourceUrl || "");
+                            setEditScamCategory(scam.scamCategory);
+                            setEditExistingImageUrls(scam.imageUrls || []);
+                            setEditImageFiles([]);
+                            setEditImagePreviews([]);
                             setIsEditModalOpen(true);
                           }}
                           className="text-slate-500 hover:text-blue-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
@@ -871,7 +942,7 @@ export default function Home() {
 
       {/* 제보 수정 모달 ✏️ */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="w-[95%] max-w-[500px] p-5 rounded-2xl bg-card border border-border">
+        <DialogContent className="w-[95%] max-w-[500px] p-5 rounded-2xl bg-card border border-border max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-extrabold">✏️ 제보 수정하기</DialogTitle>
             <DialogDescription className="text-xs">
@@ -882,6 +953,76 @@ export default function Home() {
           <form onSubmit={handleEditSubmit} className="space-y-4 pt-2">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                사기 유형 카테고리
+              </label>
+              <Select value={editScamCategory} onValueChange={setEditScamCategory}>
+                <SelectTrigger className="text-xs h-9 cursor-pointer">
+                  <SelectValue placeholder="카테고리 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OVERCHARGING" className="cursor-pointer">{t("categories.OVERCHARGING")}</SelectItem>
+                  <SelectItem value="LIES_TOURISM" className="cursor-pointer">{t("categories.LIES_TOURISM")}</SelectItem>
+                  <SelectItem value="FAKE_TAXI" className="cursor-pointer">{t("categories.FAKE_TAXI")}</SelectItem>
+                  <SelectItem value="FORCED_SHOPPING" className="cursor-pointer">{t("categories.FORCED_SHOPPING")}</SelectItem>
+                  <SelectItem value="DRUG_HAZARD" className="cursor-pointer">{t("categories.DRUG_HAZARD")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                증거 사진 첨부 (영수증, 간판, 현장 등 - 최대 5장)
+              </label>
+              <div className="flex flex-wrap gap-2 items-center pt-1">
+                {editExistingImageUrls.length + editImageFiles.length < 5 && (
+                  <label className="w-16 h-16 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 hover:border-slate-400 bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 gap-1 text-[10px] text-muted-foreground">
+                    <ImageIcon className="w-4 h-4 text-slate-500" />
+                    사진 추가
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleEditFileChange}
+                      disabled={isUploading || editMutation.isPending}
+                    />
+                  </label>
+                )}
+
+                {/* Existing Images */}
+                {editExistingImageUrls.map((url, index) => (
+                  <div key={`existing-${index}`} className="relative w-16 h-16 rounded-xl overflow-hidden border border-border group">
+                    <img src={url} alt="existing preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeEditExistingImage(index)}
+                      className="absolute top-1 right-1 w-4.5 h-4.5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer opacity-100 transition-opacity duration-200"
+                      disabled={isUploading || editMutation.isPending}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* New Previews */}
+                {editImagePreviews.map((url, index) => (
+                  <div key={`new-${index}`} className="relative w-16 h-16 rounded-xl overflow-hidden border border-border group">
+                    <img src={url} alt="new preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeEditNewImage(index)}
+                      className="absolute top-1 right-1 w-4.5 h-4.5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer opacity-100 transition-opacity duration-200"
+                      disabled={isUploading || editMutation.isPending}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
                 제목
               </label>
               <Input
@@ -890,6 +1031,7 @@ export default function Home() {
                 placeholder="제목을 입력하세요"
                 required
                 className="text-xs h-9"
+                disabled={isUploading || editMutation.isPending}
               />
             </div>
 
@@ -904,6 +1046,7 @@ export default function Home() {
                 required
                 rows={4}
                 className="text-xs resize-none"
+                disabled={isUploading || editMutation.isPending}
               />
             </div>
 
@@ -917,6 +1060,7 @@ export default function Home() {
                 placeholder="대처법 및 예방법을 입력하세요"
                 rows={3}
                 className="text-xs resize-none"
+                disabled={isUploading || editMutation.isPending}
               />
             </div>
 
@@ -929,6 +1073,7 @@ export default function Home() {
                 onChange={(e) => setEditSourceUrl(e.target.value)}
                 placeholder="https://..."
                 className="text-xs h-9"
+                disabled={isUploading || editMutation.isPending}
               />
             </div>
 
@@ -941,15 +1086,23 @@ export default function Home() {
                   setEditingScam(null);
                 }}
                 className="text-xs h-9 cursor-pointer"
+                disabled={isUploading || editMutation.isPending}
               >
                 취소
               </Button>
               <Button
                 type="submit"
-                disabled={editMutation.isPending}
+                disabled={isUploading || editMutation.isPending}
                 className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
               >
-                {editMutation.isPending ? "저장 중..." : "저장하기"}
+                {isUploading || editMutation.isPending ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {isUploading ? "업로드 중..." : "저장 중..."}
+                  </span>
+                ) : (
+                  "저장하기"
+                )}
               </Button>
             </DialogFooter>
           </form>
