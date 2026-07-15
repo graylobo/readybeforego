@@ -149,7 +149,7 @@ CommentItem = React.memo(function CommentItem({
             <img
               src={comment.userPicture}
               alt={comment.userName || 'User'}
-              className="w-8 h-8 rounded-full hover:ring-2 hover:ring-primary transition-all shadow-sm object-cover"
+              className="w-8 h-8 rounded-full hover:ring-2 hover:ring-primary transition-all shadow-sm object-cover shrink-0"
             />
           </UserProfilePopover>
         ) : (
@@ -157,7 +157,7 @@ CommentItem = React.memo(function CommentItem({
             익
           </div>
         )}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div
             className={`comment-content-${uniqueKey} transition-all duration-500`}
             style={{ padding: '0 0' }}

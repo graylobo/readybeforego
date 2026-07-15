@@ -52,57 +52,41 @@ export function CommentEditForm({
   
   const originalImageUrl = (comment as any).imageUrl || null;
   const [imageUrl, setImageUrl] = useState<string | null>(originalImageUrl);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(originalImageUrl);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageSelect = async (file: File) => {
-    // If we already uploaded a NEW image in this editing session, delete it first
-    if (imageUrl && imageUrl !== originalImageUrl) {
-      uploadsApi.deleteImage(imageUrl);
+  const handleImageSelect = (file: File) => {
+    if (imagePreview && imagePreview !== originalImageUrl) {
+      URL.revokeObjectURL(imagePreview);
     }
-
     const preview = URL.createObjectURL(file);
     setImagePreview(preview);
-    setImageUrl(null); 
-    setImageUploading(true);
+    setImageFile(file);
+    setImageUrl(null); // new image chosen, so original URL is no longer used
     setEmoticonUrl(null); 
-
-    try {
-      const isAnimated = file.type === 'image/gif' || file.type === 'image/webp';
-      const url = await uploadsApi.uploadImage(file, {
-        compress: !isAnimated,
-        folder: 'comments',
-      });
-      setImageUrl(url);
-    } catch {
-      toast.error('이미지 업로드에 실패했습니다.');
-      setImagePreview(null);
-    } finally {
-      setImageUploading(false);
-    }
   };
 
   const handleRemoveImage = () => {
-    // If it's a NEW image uploaded during this session, delete it from storage
-    if (imageUrl && imageUrl !== originalImageUrl) {
-      uploadsApi.deleteImage(imageUrl);
+    if (imagePreview && imagePreview !== originalImageUrl) {
+      URL.revokeObjectURL(imagePreview);
     }
+    setImageFile(null);
     setImageUrl(null);
     setImagePreview(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
   const handleCancel = () => {
-    // If we have a NEW image uploaded during this session, delete it because we're cancelling
-    if (imageUrl && imageUrl !== originalImageUrl) {
-      uploadsApi.deleteImage(imageUrl);
+    if (imagePreview && imagePreview !== originalImageUrl) {
+      URL.revokeObjectURL(imagePreview);
     }
     onCancel();
   };
 
-  const handleSave = () => {
-    if (!content?.trim() && !emoticonUrl && !imageUrl) {
+  const handleSave = async () => {
+    if (!content?.trim() && !emoticonUrl && !imageUrl && !imageFile) {
         toast.error('내용, 이모티콘, 또는 이미지를 입력해주세요.');
         return;
     }
@@ -111,8 +95,23 @@ export function CommentEditForm({
     if (hasMention && parentName) {
       finalContent = `@${parentName} ${content}`;
     }
-    
-    onSave(finalContent, imageUrl, emoticonUrl);
+
+    setImageUploading(true);
+    try {
+      let finalImageUrl = imageUrl;
+      if (imageFile) {
+        const isAnimated = imageFile.type === 'image/gif' || imageFile.type === 'image/webp';
+        finalImageUrl = await uploadsApi.uploadImage(imageFile, {
+          compress: !isAnimated,
+          folder: 'comments',
+        });
+      }
+      onSave(finalContent, finalImageUrl, emoticonUrl);
+    } catch {
+      toast.error('이미지 업로드에 실패했습니다.');
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   return (

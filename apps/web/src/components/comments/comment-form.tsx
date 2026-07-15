@@ -53,7 +53,7 @@ export function CommentForm({
   // Emoticon state
   const [selectedEmoticon, setSelectedEmoticon] = useState<string | null>(null);
   // Image attachment state
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -81,51 +81,31 @@ export function CommentForm({
     setValue('emoticonUrl', selectedEmoticon ?? undefined);
   }, [selectedEmoticon, setValue]);
 
-  useEffect(() => {
-    setValue('imageUrl', imageUrl ?? undefined);
-  }, [imageUrl, setValue]);
-
   const content = watch('content');
   const guestName = watch('guestName');
 
-  // 이미지 선택 시: 이전 이미지 삭제 후 새 이미지 업로드
-  const handleImageSelect = async (file: File) => {
-    // 교체 시 이전 이미지 삭제 (고아 이미지 방지)
-    if (imageUrl) {
-      uploadsApi.deleteImage(imageUrl); // fire-and-forget
+  // 이미지 선택 시: 로컬 미리보기 생성 및 파일 보관 (업로드는 제출 시 수행)
+  const handleImageSelect = (file: File) => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
     }
-
     const preview = URL.createObjectURL(file);
     setImagePreview(preview);
-    setImageUrl(null);
-    setImageUploading(true);
-
-    try {
-      const isAnimated = file.type === 'image/gif' || file.type === 'image/webp';
-      const url = await uploadsApi.uploadImage(file, {
-        compress: !isAnimated,
-        folder: 'comments',
-      });
-      setImageUrl(url);
-    } catch {
-      toast.error('이미지 업로드에 실패했습니다.');
-      setImagePreview(null);
-    } finally {
-      setImageUploading(false);
-    }
+    setImageFile(file);
+    setSelectedEmoticon(null); // 이모티콘과 이미지 중 택일
   };
 
   const removeImage = () => {
-    if (imageUrl) {
-      uploadsApi.deleteImage(imageUrl); // fire-and-forget
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
     }
-    setImageUrl(null);
+    setImageFile(null);
     setImagePreview(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
-  const handleFormSubmit = (data: CreateCommentDto) => {
-    if (!data.content?.trim() && !selectedEmoticon && !imageUrl) {
+  const handleFormSubmit = async (data: CreateCommentDto) => {
+    if (!data.content?.trim() && !selectedEmoticon && !imageFile) {
       toast.error('내용, 이모티콘, 또는 이미지를 입력해주세요.');
       return;
     }
@@ -135,22 +115,45 @@ export function CommentForm({
     if (replyToName) {
       data = { ...data, content: `@${replyToName} ${data.content ?? ''}` };
     }
-    const finalData: CreateCommentDto = {
-      ...data,
-      emoticonUrl: selectedEmoticon ?? undefined,
-      imageUrl: imageUrl ?? undefined,
-    };
-    onSubmit(finalData);
-    if (!parentId) {
-      reset({
+
+    setImageUploading(true);
+    try {
+      let uploadedUrl: string | undefined = undefined;
+      if (imageFile) {
+        const isAnimated = imageFile.type === 'image/gif' || imageFile.type === 'image/webp';
+        uploadedUrl = await uploadsApi.uploadImage(imageFile, {
+          compress: !isAnimated,
+          folder: 'comments',
+        });
+      }
+
+      const finalData: CreateCommentDto = {
         ...data,
-        content: '',
-        guestName: !user && allowAnonymous ? generateRandomGuestName() : undefined,
-        guestPassword: !user && allowAnonymous ? '' : undefined,
-      });
-      setSelectedEmoticon(null);
-      setImageUrl(null);
-      setImagePreview(null);
+        emoticonUrl: selectedEmoticon ?? undefined,
+        imageUrl: uploadedUrl ?? undefined,
+      };
+
+      onSubmit(finalData);
+
+      if (!parentId) {
+        reset({
+          ...data,
+          content: '',
+          guestName: !user && allowAnonymous ? generateRandomGuestName() : undefined,
+          guestPassword: !user && allowAnonymous ? '' : undefined,
+        });
+        setSelectedEmoticon(null);
+        setImageFile(null);
+        if (imagePreview) {
+          URL.revokeObjectURL(imagePreview);
+        }
+        setImagePreview(null);
+        if (imageInputRef.current) imageInputRef.current.value = '';
+      }
+    } catch (err) {
+      toast.error('이미지 업로드에 실패했습니다.');
+    } finally {
+      setImageUploading(false);
     }
   };
 
@@ -281,7 +284,10 @@ export function CommentForm({
 
                 {/* Emoticon picker */}
                 <EmoticonPicker
-                  onSelect={(url) => setSelectedEmoticon(url)}
+                  onSelect={(url) => {
+                    setSelectedEmoticon(url);
+                    removeImage();
+                  }}
                   disabled={isPending}
                 />
               </>

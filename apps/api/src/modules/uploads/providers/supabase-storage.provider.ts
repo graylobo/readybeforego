@@ -23,7 +23,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       .upload(filePath, file, {
         contentType: mimeType,
         cacheControl: '3600',
-        upsert: false,
+        upsert: true,
       });
 
     if (error) {

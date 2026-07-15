@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { ScamsRepository } from './scams.repository';
 import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
+import { UploadsService } from '../uploads/uploads.service';
 
 @Injectable()
 export class ScamsService {
-  constructor(private readonly scamsRepository: ScamsRepository) {}
+  private readonly logger = new Logger(ScamsService.name);
+
+  constructor(
+    private readonly scamsRepository: ScamsRepository,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async create(createDto: CreateScamInfoZodDto, userId?: string) {
     return this.scamsRepository.transaction(async (tx) => {
@@ -142,7 +148,25 @@ export class ScamsService {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
 
-    return this.scamsRepository.update(id, { deletedAt: new Date() });
+    const deleteResult = await this.scamsRepository.update(id, { deletedAt: new Date() });
+
+    // 제보 삭제 완료 후, 업로드된 이미지가 있으면 스토리지에서 비동기 삭제
+    if (scam.imageUrls && Array.isArray(scam.imageUrls)) {
+      const urls = scam.imageUrls as string[];
+      for (const url of urls) {
+        try {
+          const imagePath = this.uploadsService.extractPathFromUrl(url);
+          if (imagePath) {
+            await this.uploadsService.deleteImage(imagePath);
+            this.logger.log(`Successfully deleted scam image from storage: ${url}`);
+          }
+        } catch (err) {
+          this.logger.error(`Failed to delete scam image from storage: ${url}`, err);
+        }
+      }
+    }
+
+    return deleteResult;
   }
 
   async getScamById(id: string) {

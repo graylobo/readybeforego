@@ -7,6 +7,7 @@ import { sanitizeContent } from '../../common/utils/html-sanitizer';
 import { CommentsRepository } from './comments.repository';
 import { CommentDeletedEvent, CommentReactionEvent, CommentUpdatedEvent } from './events/comment-actions.events';
 import { CommentCreatedEvent } from './events/comment-created.event';
+import { UploadsService } from '../uploads/uploads.service';
 
 const BEST_COMMENT_MIN_UPVOTES = 10;
 const BEST_COMMENT_MAX_COUNT = 3;
@@ -17,6 +18,7 @@ export class CommentsService {
   constructor(
     private readonly commentsRepo: CommentsRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   private hashPassword(password: string): string {
@@ -367,6 +369,19 @@ export class CommentsService {
         return { success: true, commentCount };
 
     });
+
+    // 댓글 삭제 완료 후, 업로드된 이미지가 있으면 스토리지에서 비동기 삭제 (트랜잭션 차단 방지)
+    if (comment.imageUrl) {
+      try {
+        const imagePath = this.uploadsService.extractPathFromUrl(comment.imageUrl);
+        if (imagePath) {
+          await this.uploadsService.deleteImage(imagePath);
+          this.logger.log(`Successfully deleted comment image from storage: ${comment.imageUrl}`);
+        }
+      } catch (err) {
+        this.logger.error(`Failed to delete comment image from storage: ${comment.imageUrl}`, err);
+      }
+    }
 
     if (userId) {
         this.eventEmitter.emit(
