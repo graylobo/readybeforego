@@ -51,7 +51,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // "직방" 스타일의 수량 비례형 원형 뱃지 마커 및 위치 이름 라벨 오버레이 생성
-const createClusterIcon = (count: number, name: string) => {
+const createClusterIcon = (count: number, name: string, isSelected: boolean = false) => {
   let sizeClass = "w-9 h-9 text-xs";
   let colorClass = "from-amber-400 to-orange-500";
   let pulseClass = "";
@@ -65,13 +65,20 @@ const createClusterIcon = (count: number, name: string) => {
     colorClass = "from-orange-500 to-red-500";
   }
 
+  // 선택 상태 유무에 따른 보더 두께, 보더 컬러, 스케일 및 그림자 설정 (빨간색 강조)
+  const borderStyle = isSelected 
+    ? "border-4 border-red-650 shadow-[0_0_15px_rgba(239,68,68,0.9)] scale-110 z-50" 
+    : "border-2 border-white shadow-md group-hover:scale-110 group-hover:shadow-lg";
+
+  const labelStyle = "bg-slate-900/90 dark:bg-slate-950/90 border-white/10 text-white font-bold";
+
   return new L.DivIcon({
     html: `
-      <div class="flex flex-col items-center justify-center select-none group cursor-pointer">
-        <div class="flex items-center justify-center rounded-full text-white font-black shadow-md border-2 border-white bg-gradient-to-br transition-all duration-200 group-hover:scale-110 group-hover:shadow-lg ${colorClass} ${sizeClass} ${pulseClass}">
+      <div class="flex flex-col items-center justify-center select-none group cursor-pointer relative">
+        <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br transition-all duration-200 ${colorClass} ${sizeClass} ${pulseClass} ${borderStyle}">
           ${count}
         </div>
-        <div class="mt-1 bg-slate-900/90 dark:bg-slate-950/90 text-[10px] font-bold text-white px-2 py-0.5 rounded-full shadow border border-white/10 whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors">
+        <div class="mt-1 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle}">
           ${name}
         </div>
       </div>
@@ -376,6 +383,11 @@ export default function ReadyBeforeGoMap() {
           displayName = `${displayName} 외 ${group.length - 1}`;
         }
 
+        // 클러스터 내의 모든 매장/지역들이 실제로 물리적인 다른 위치에 흩어져 있는지 판단
+        const hasMultipleLocations = group.some(
+          (r) => r.latitude !== r1.latitude || r.longitude !== r1.longitude
+        );
+
         clusters.push({
           id: `cluster-${r1.id}`,
           name: displayName,
@@ -383,6 +395,7 @@ export default function ReadyBeforeGoMap() {
           longitude: sumLng / group.length,
           scamCount: totalScamCount,
           isCluster: true,
+          hasMultipleLocations,
           regions: group,
         });
       }
@@ -407,12 +420,12 @@ export default function ReadyBeforeGoMap() {
   const handleDynamicClusterClick = (cluster: any) => {
     if (isReportMode) {
       if (cluster.isCluster) {
-        if (currentZoom < 18) {
+        if (currentZoom < 18 && cluster.hasMultipleLocations) {
           setMapCenter([cluster.latitude, cluster.longitude]);
           setMapZoom(Math.min(currentZoom + 2, 18));
           toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
         } else {
-          // 최대 줌 레벨에서 클러스터 클릭 시 대표 지역에 추가 제보 연동
+          // 최대 줌 레벨 또는 동일 좌표의 중첩된 장소 클러스터 클릭 시 대표 지역에 추가 제보 연동
           const region = cluster.regions[0];
           const confirmReport = window.confirm(`해당 ${region.name}에 추가로 제보를 등록하시겠습니까?`);
           if (confirmReport) {
@@ -436,11 +449,12 @@ export default function ReadyBeforeGoMap() {
       }
     } else {
       if (cluster.isCluster) {
-        if (currentZoom < 18) {
+        if (currentZoom < 18 && cluster.hasMultipleLocations) {
           setMapCenter([cluster.latitude, cluster.longitude]);
           setMapZoom(Math.min(currentZoom + 2, 18));
         } else {
-          // 최대 줌 레벨에서 클러스터 클릭 시, 첫 번째(대표) 지역을 바로 선택하여 제보 내용을 보여줌
+          // 동일 좌표 내에만 여러 매장명이 존재하는 경우(or 최대 줌인 경우), 
+          // 맵을 더 이상 강제 확대하지 않고 즉시 첫 번째 매장 클릭으로 우측 피드를 띄웁니다!
           handleRegionClick(cluster.regions[0]);
         }
       } else {
@@ -750,16 +764,19 @@ export default function ReadyBeforeGoMap() {
         )}
 
         {/* 동적 통합 클러스터 렌더링 */}
-        {getDynamicClusters().map((cluster) => (
-          <Marker
-            key={cluster.id}
-            position={[cluster.latitude, cluster.longitude]}
-            icon={createClusterIcon(cluster.scamCount, cluster.name)}
-            eventHandlers={{
-              click: () => handleDynamicClusterClick(cluster),
-            }}
-          />
-        ))}
+        {getDynamicClusters().map((cluster) => {
+          const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
+          return (
+            <Marker
+              key={cluster.id}
+              position={[cluster.latitude, cluster.longitude]}
+              icon={createClusterIcon(cluster.scamCount, cluster.name, isSelected)}
+              eventHandlers={{
+                click: () => handleDynamicClusterClick(cluster),
+              }}
+            />
+          );
+        })}
       </MapContainer>
 
       {/* 현재 위치 이동 플로팅 버튼 */}
