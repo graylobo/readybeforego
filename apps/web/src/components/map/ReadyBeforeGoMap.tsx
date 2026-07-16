@@ -333,7 +333,13 @@ export default function ReadyBeforeGoMap() {
         const lngDiff = Math.abs(r1.longitude - r2.longitude);
         const isSameCountry = r1.countryCode === r2.countryCode;
 
-        if (isSameCountry && latDiff < threshold && lngDiff < threshold) {
+        // 좌표가 완전히 동일한 경우(위경도 오차 0)는 줌 레벨에 관계없이 항상 강제 병합하여 하나의 클러스터로 묶어 표현
+        const shouldMerge = isSameCountry && (
+          (latDiff === 0 && lngDiff === 0) || 
+          (currentZoom < 18 && latDiff < threshold && lngDiff < threshold)
+        );
+
+        if (shouldMerge) {
           group.push(r2);
           visited.add(r2.id);
         }

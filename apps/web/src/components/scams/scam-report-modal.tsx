@@ -230,8 +230,9 @@ export function ScamReportModal() {
           setIsLoadingGeo(false);
         }
       } else if (reportType === "new") {
-        setCountryCode("");
-        setCityId("");
+        // 기존 장소에서 신규 등록으로 동적 전환 시 기존 프리필 국가/도시 보존
+        setCountryCode((prev) => prev || "");
+        setCityId((prev) => prev || "");
         setDetectedCountryName("");
         setDetectedCountryCode("");
         setDetectedCityName("");
@@ -401,6 +402,7 @@ export function ScamReportModal() {
   const handleClose = () => {
     setReportModalOpen(false);
     setReportCoords(null);
+    setIsReportMode(false);
   };
 
   return (
@@ -422,6 +424,45 @@ export function ScamReportModal() {
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           
+          {/* 제보 방식 선택 토글 🔀 */}
+          {reportCoords && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                제보 방식 선택
+              </Label>
+              <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportType("existing");
+                    if (selectedRegionId) setRegionId(selectedRegionId);
+                  }}
+                  className={`flex-1 text-center py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${
+                    reportType === "existing"
+                      ? "bg-white dark:bg-slate-800 shadow text-slate-850 dark:text-slate-100 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                  }`}
+                >
+                  기존 등록 장소에 추가 제보
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportType("new");
+                    setRegionId("");
+                  }}
+                  className={`flex-1 text-center py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${
+                    reportType === "new"
+                      ? "bg-white dark:bg-slate-800 shadow text-slate-850 dark:text-slate-100 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                  }`}
+                >
+                  이 위치에 새로운 장소 등록
+                </button>
+              </div>
+            </div>
+          )}
+
           {(() => {
             const matchedCountry = countries.find((c) => c.code === detectedCountryCode);
             const matchedCity = cities.find((c) => c.id === cityId);

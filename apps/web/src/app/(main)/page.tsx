@@ -76,6 +76,8 @@ function getCategoryInfo(cat: string, t: any) {
   };
 }
 
+const EMPTY_ARRAY: any[] = [];
+
 export default function Home() {
   const queryClient = useQueryClient();
   const { t, lang, setLang } = useTranslation();
@@ -114,6 +116,9 @@ export default function Home() {
     setReportModalOpen,
     setReportCoords,
     setAddressSearchModalOpen,
+    setGeoData,
+    setGeocodeConfirmModalOpen,
+    setReportConfirmModalOpen,
   } = useScamMapStore();
 
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
@@ -130,6 +135,7 @@ export default function Home() {
   const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [displayScams, setDisplayScams] = useState<ScamInfo[]>([]);
 
 
 
@@ -157,11 +163,28 @@ export default function Home() {
     queryFn: () => scamsApi.getAllRegions(),
   });
 
+  // 동일 좌표를 갖는 모든 지역 필터링 (좌표 단위 통합 피드 구현)
+  const sharingRegions = selectedRegionId && selectedRegion
+    ? allRegions.filter(
+        (r) => r.latitude === selectedRegion.latitude && r.longitude === selectedRegion.longitude
+      )
+    : [];
+  const selectedRegionIds = sharingRegions.map((r) => r.id);
+
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
-  const { data: scams = [], isPending: isScamsPending } = useQuery<ScamInfo[]>({
-    queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId],
-    queryFn: () => {
+  const { data: scams = EMPTY_ARRAY, isPending: isScamsPending } = useQuery<ScamInfo[]>({
+    queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId, selectedRegionIds.join(",")],
+    queryFn: async () => {
       if (selectedRegionId) {
+        if (selectedRegionIds.length > 1) {
+          // 동일 좌표 내의 모든 지역 제보들을 병렬 패치하여 병합
+          const results = await Promise.all(
+            selectedRegionIds.map((id) => scamsApi.getScamsByRegion(id))
+          );
+          return results
+            .flat()
+            .sort((a, b) => b.upvoteCount - a.upvoteCount || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }
         return scamsApi.getScamsByRegion(selectedRegionId);
       }
       if (selectedCityId) {
@@ -174,6 +197,36 @@ export default function Home() {
     },
     enabled: !!selectedRegionId || !!selectedCityId || !!selectedCountryCode,
   });
+
+  // scams의 데이터 갱신 시 순서 동결(Freeze) 처리하여 Layout Instability 방지
+  useEffect(() => {
+    const scamsIds = scams.map((s) => s.id).sort().join(",");
+    const prevIds = displayScams.map((s) => s.id).sort().join(",");
+    
+    if (scamsIds !== prevIds) {
+      setDisplayScams(scams);
+    } else {
+      // 순서를 보존하며 개별 요소의 내용이 변했는지 체크
+      let changed = false;
+      const updated = displayScams.map((ds) => {
+        const fresh = scams.find((s) => s.id === ds.id);
+        if (fresh && (
+          fresh.upvoteCount !== ds.upvoteCount || 
+          fresh.downvoteCount !== ds.downvoteCount || 
+          fresh.commentCount !== ds.commentCount || 
+          fresh.updatedAt !== ds.updatedAt
+        )) {
+          changed = true;
+          return fresh;
+        }
+        return ds;
+      });
+      
+      if (changed) {
+        setDisplayScams(updated);
+      }
+    }
+  }, [scams, displayScams]);
 
   // Upvote/Downvote mutation
   const reactionMutation = useMutation({
@@ -364,7 +417,7 @@ export default function Home() {
       );
     }
 
-    if (scams.length === 0) {
+    if (displayScams.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
           <Info className="w-8 h-8 text-slate-300" />
@@ -393,7 +446,7 @@ export default function Home() {
 
     return (
       <div className="space-y-4 pb-8">
-        {scams.map((scam) => {
+        {displayScams.map((scam) => {
           const isSuperAdmin = user?.role === "super_admin";
           const isOwner = user && scam.userId === user.id;
           const canManage = isSuperAdmin || isOwner;
@@ -409,6 +462,17 @@ export default function Home() {
               <CardHeader className="p-4 pb-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-wrap">
+                    {(() => {
+                      const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
+                      if (selectedRegionId && sharingRegions.length > 1 && currentScamRegion) {
+                        return (
+                          <Badge variant="outline" className="bg-slate-100 dark:bg-slate-900 border-slate-250 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-extrabold py-0.5 px-2">
+                            📍 {currentScamRegion.name}
+                          </Badge>
+                        );
+                      }
+                      return null;
+                    })()}
                     {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
                       const cat = getCategoryInfo(catKey, t);
                       return (
@@ -648,10 +712,10 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full overflow-hidden bg-background font-sans relative">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] w-full overflow-hidden bg-background font-sans relative">
       
       {/* Left Map Canvas (Occupies full viewport on mobile) */}
-      <div className="flex-1 h-[100vh] md:h-full relative z-0">
+      <div className="flex-1 h-[calc(100vh-8rem)] md:h-full relative z-0">
         <ReadyBeforeGoMap />
 
         {/* 플로팅 컨트롤 그룹 (검색 버튼 + 제보하기 버튼) */}
@@ -700,11 +764,13 @@ export default function Home() {
           
           {/* Active Scope Header */}
           <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center justify-between gap-2 shrink-0">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-red-600" />
-              <h2 className="font-bold text-sm text-card-foreground">
-                {selectedRegion?.name} <span className="text-xs font-normal text-muted-foreground">{t("common.warning_info")}</span>
-              </h2>
+            <div className="flex items-start gap-2">
+              <MapPin className="w-4 h-4 text-red-600 mt-0.5" />
+              <div className="space-y-0.5">
+                <h2 className="font-bold text-sm text-card-foreground">
+                  이 위치 내 주의 정보
+                </h2>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -752,16 +818,18 @@ export default function Home() {
       <Dialog open={isMobileFeedOpen} onOpenChange={setIsMobileFeedOpen}>
         <DialogContent className="md:hidden sm:max-w-[480px] h-[75vh] bottom-0 top-auto translate-y-0 rounded-t-2xl rounded-b-none p-0 overflow-hidden flex flex-col gap-0 border-t border-border bg-card/98 backdrop-blur-lg">
           <DialogHeader className="px-6 py-4 bg-muted/40 border-b border-border flex flex-row items-center justify-between gap-2 shrink-0 space-y-0">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-red-600" />
-              <DialogTitle className="font-bold text-sm text-card-foreground">
-                {selectedRegionId 
-                  ? selectedRegion?.name 
-                  : selectedCityId 
-                    ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                    : (getCountryName(selectedCountryCode, lang) || "국가")
-                } 
-              </DialogTitle>
+            <div className="flex items-start gap-2">
+              <MapPin className="w-4 h-4 text-red-600 mt-0.5" />
+              <div className="space-y-0.5 text-left">
+                <DialogTitle className="font-bold text-sm text-card-foreground">
+                  {selectedRegionId 
+                    ? "이 위치 내 주의 정보" 
+                    : selectedCityId 
+                      ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                      : (getCountryName(selectedCountryCode, lang) || "국가")
+                  } 
+                </DialogTitle>
+              </div>
             </div>
 
             {selectedRegionId && (
@@ -901,6 +969,124 @@ export default function Home() {
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3.5 pt-3">
+            <button
+              type="button"
+              className="flex items-start gap-3.5 p-4 rounded-xl border border-border bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-all text-left group cursor-pointer shadow-sm hover:shadow"
+              onClick={() => {
+                const requestCurrentPosition = () => {
+                  toast.loading("현재 위치 정보를 수신하고 있습니다...", { id: "geolocation-loading" });
+                  navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                      const { latitude, longitude } = position.coords;
+                      
+                      // 1. 지도 중심 이동, 최대 줌 설정 및 제보 핀 활성화
+                      setMapCenter([latitude, longitude]);
+                      setMapZoom(18);
+                      setIsReportMode(true);
+                      setReportCoords([latitude, longitude]);
+
+                      // 다른 위치 확인 다이얼로그들 우선 해제
+                      setReportConfirmModalOpen(false);
+                      setGeocodeConfirmModalOpen(false);
+                      setSelectTypeModalOpen(false);
+
+                      // 2. 백그라운드 지오코딩 수행 후 제보 위치 확인 모달 기동
+                      scamsApi.reverseGeocode(latitude, longitude)
+                        .then((data: any) => {
+                          toast.dismiss("geolocation-loading");
+                          if (data && data.address && Object.keys(data.address).length > 0) {
+                            setReportType("new");
+                            setGeoData(data);
+                            setReportConfirmModalOpen(true);
+                            toast.success("현재 위치 수신 성공! 지도를 확인해 주세요. 📍");
+                          } else {
+                            setReportType("new");
+                            setGeocodeConfirmModalOpen(true);
+                            toast.warning("상세 주소를 수신하지 못해 주소 검색 창을 엽니다.");
+                          }
+                        })
+                        .catch((err: any) => {
+                          toast.dismiss("geolocation-loading");
+                          console.error("Geolocation reverse geocode error:", err);
+                          setReportType("new");
+                          setGeocodeConfirmModalOpen(true);
+                          toast.error("통신 장애로 수동 주소 검색 창을 엽니다.");
+                        });
+                    },
+                    (error) => {
+                      toast.dismiss("geolocation-loading");
+                      console.error("Geolocation error:", error);
+                      
+                      if (error.code === error.PERMISSION_DENIED) {
+                        const confirmRetry = window.confirm(
+                          "위치 권한 수집 동의가 필요합니다.\n\n" +
+                          "주소창 좌측의 설정(자물쇠) 아이콘을 눌러 위치 권한을 '허용'으로 변경하신 후 [확인]을 누르면 권한 요청을 다시 시도합니다.\n\n" +
+                          "주소 직접 검색으로 대신 제보하시려면 [취소]를 눌러주세요."
+                        );
+                        if (confirmRetry) {
+                          requestCurrentPosition();
+                        } else {
+                          setReportType("new");
+                          setAddressSearchModalOpen(true);
+                          setSelectTypeModalOpen(false);
+                        }
+                      } else {
+                        toast.error("위치 획득에 실패했습니다. 주소 검색 창을 대신 엽니다.");
+                        setReportType("new");
+                        setAddressSearchModalOpen(true);
+                        setSelectTypeModalOpen(false);
+                      }
+                    },
+                    { enableHighAccuracy: true, timeout: 8500, maximumAge: 0 }
+                  );
+                };
+
+                if (typeof window === "undefined" || !navigator.geolocation) {
+                  toast.error("위치 서비스를 지원하지 않는 환경입니다. 주소 검색을 실행합니다.");
+                  setReportType("new");
+                  setAddressSearchModalOpen(true);
+                  setSelectTypeModalOpen(false);
+                  return;
+                }
+
+                // 권한 사전 조회 후 거부(denied) 상태이면 브라우저 설정 안내 띄움
+                if (navigator.permissions && navigator.permissions.query) {
+                  navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((permissionStatus) => {
+                    if (permissionStatus.state === 'denied') {
+                      const confirmRetry = window.confirm(
+                        "브라우저의 위치 권한이 차단되어 있습니다.\n\n" +
+                        "주소창 좌측의 설정(자물쇠/슬라이더) 아이콘을 클릭하여 위치 권한을 '허용'으로 설정한 뒤 [확인]을 클릭하시면 다시 위치 요청을 시작합니다.\n\n" +
+                        "주소 검색을 대신 이용하시려면 [취소]를 클릭해 주세요."
+                      );
+                      if (confirmRetry) {
+                        requestCurrentPosition();
+                      } else {
+                        setReportType("new");
+                        setAddressSearchModalOpen(true);
+                        setSelectTypeModalOpen(false);
+                      }
+                    } else {
+                      requestCurrentPosition();
+                    }
+                  }).catch(() => {
+                    requestCurrentPosition();
+                  });
+                } else {
+                  requestCurrentPosition();
+                }
+              }}
+            >
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform shrink-0">
+                🎯
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">현재 내 위치에서 제보</h4>
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  GPS 센서를 이용하여 현재 내 물리적 위치를 자동으로 추적해 간편하게 제보합니다.
+                </p>
+              </div>
+            </button>
+
             <button
               type="button"
               className="flex items-start gap-3.5 p-4 rounded-xl border border-border bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-all text-left group cursor-pointer shadow-sm hover:shadow"
