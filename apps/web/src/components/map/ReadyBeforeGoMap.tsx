@@ -10,6 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
 import { Compass, Loader2, Locate, Search, MapPin } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import "leaflet/dist/leaflet.css";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -175,6 +177,9 @@ export default function ReadyBeforeGoMap() {
   const {
     mapCenter,
     mapZoom,
+    selectedCountryCode,
+    selectedCityId,
+    selectedRegionId,
     setSelectedRegionId,
     setSelectedRegion,
     setSelectedCityId,
@@ -201,14 +206,74 @@ export default function ReadyBeforeGoMap() {
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
+  const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
   
   // 임시 제보 마커 참조 레퍼런스
   const markerRef = useRef<L.Marker>(null);
+
+  // ESC 키 감지 리스너 (위치 지정 및 확인 단계 대응)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isReportConfirmModalOpen) {
+          // '제보 위치 확인' 팝업창이 뜬 상태에서 ESC 누르면 취소(아니오) 처리하여 상태 동기화
+          e.preventDefault();
+          setGeocodeConfirmModalOpen(false);
+          setReportConfirmModalOpen(false);
+          setReportCoords(null);
+        } else if (
+          isReportMode &&
+          !isReportModalOpen &&
+          !isGeocodeConfirmModalOpen &&
+          !isEscConfirmOpen
+        ) {
+          e.preventDefault();
+          setIsEscConfirmOpen(true);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    isReportMode,
+    isReportConfirmModalOpen,
+    isReportModalOpen,
+    isGeocodeConfirmModalOpen,
+    isEscConfirmOpen,
+    setGeocodeConfirmModalOpen,
+    setReportConfirmModalOpen,
+    setReportCoords,
+  ]);
 
   // Sync state when store mapZoom updates
   useEffect(() => {
     setCurrentZoom(mapZoom);
   }, [mapZoom]);
+
+  // 사이트 첫 진입 시 사용자 위치 기준 자동 포커싱 📍
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.geolocation) return;
+
+    // 만약 이미 사용자가 필터를 선택한 상태라면 자동 위치 탐색을 건너뜁니다.
+    if (selectedCountryCode || selectedCityId || selectedRegionId) return;
+
+    // 현재 지도 중심이 기본값(방콕 [13.7563, 100.5018])이 아니면 이미 필터/지점선택 등으로 이동한 것이므로 수행하지 않음
+    const isDefaultCenter = Math.abs(mapCenter[0] - 13.7563) < 0.0001 && Math.abs(mapCenter[1] - 100.5018) < 0.0001;
+    if (!isDefaultCenter) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation([latitude, longitude]);
+        setMapCenter([latitude, longitude]);
+        setMapZoom(12); // 도시에 포커싱되도록 줌 레벨 12 설정
+      },
+      (error) => {
+        console.warn("Initial user localization failed or denied:", error);
+      },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }, [selectedCountryCode, selectedCityId, selectedRegionId, mapCenter, setMapCenter, setMapZoom]);
 
   // 주소 매칭 컨펌 모달이 켜지거나 임시 핀 좌표가 잡혔을 때 바로 팝업창을 즉각 강제 오픈 🛡️
   useEffect(() => {
@@ -239,7 +304,10 @@ export default function ReadyBeforeGoMap() {
     if (zoom === 12) return 0.005;   // 세부 구/동 스케일
     if (zoom === 13) return 0.002;
     if (zoom === 14) return 0.001;
-    return 0.0003; // zoom >= 15 (정밀 개별 지점 마커)
+    if (zoom === 15) return 0.0005;
+    if (zoom === 16) return 0.0002;
+    if (zoom === 17) return 0.0001;
+    return 0; // zoom >= 18 (최대 줌 레벨에서는 클러스터링을 하지 않고 개별 지점을 보여줌)
   };
 
   // 모든 줌 레벨 통합 동적 클러스터러
@@ -333,9 +401,22 @@ export default function ReadyBeforeGoMap() {
   const handleDynamicClusterClick = (cluster: any) => {
     if (isReportMode) {
       if (cluster.isCluster) {
-        setMapCenter([cluster.latitude, cluster.longitude]);
-        setMapZoom(Math.min(currentZoom + 2, 18));
-        toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
+        if (currentZoom < 18) {
+          setMapCenter([cluster.latitude, cluster.longitude]);
+          setMapZoom(Math.min(currentZoom + 2, 18));
+          toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
+        } else {
+          // 최대 줌 레벨에서 클러스터 클릭 시 대표 지역에 추가 제보 연동
+          const region = cluster.regions[0];
+          const confirmReport = window.confirm(`해당 ${region.name}에 추가로 제보를 등록하시겠습니까?`);
+          if (confirmReport) {
+            setReportType("existing");
+            setReportCoords([region.latitude, region.longitude]);
+            setSelectedRegionId(region.id);
+            setSelectedRegion(region);
+            setReportModalOpen(true);
+          }
+        }
       } else {
         const region = cluster.regions[0];
         const confirmReport = window.confirm(`해당 ${region.name}에 추가로 제보를 등록하시겠습니까?`);
@@ -349,8 +430,13 @@ export default function ReadyBeforeGoMap() {
       }
     } else {
       if (cluster.isCluster) {
-        setMapCenter([cluster.latitude, cluster.longitude]);
-        setMapZoom(Math.min(currentZoom + 2, 18));
+        if (currentZoom < 18) {
+          setMapCenter([cluster.latitude, cluster.longitude]);
+          setMapZoom(Math.min(currentZoom + 2, 18));
+        } else {
+          // 최대 줌 레벨에서 클러스터 클릭 시, 첫 번째(대표) 지역을 바로 선택하여 제보 내용을 보여줌
+          handleRegionClick(cluster.regions[0]);
+        }
       } else {
         handleRegionClick(cluster.regions[0]);
       }
@@ -365,6 +451,16 @@ export default function ReadyBeforeGoMap() {
         setMapZoom(Math.min(zoomVal + 2, 18));
         return;
       }
+
+      // 클릭한 핀 지정 위치가 화면 정가운데로 오도록 지도 중심 이동 📍
+      setMapCenter([lat, lng]);
+
+      // 임시 핀 위치를 클릭한 위치로 즉시 옮겨 반응성 향상 📍
+      setReportCoords([lat, lng]);
+
+      // 새로운 위치 선택 시 기존 제보 확인 팝업/모달들을 먼저 즉시 강제로 닫음 🚪
+      setReportConfirmModalOpen(false);
+      setGeocodeConfirmModalOpen(false);
 
       // [백그라운드 지오코딩 & 우아한 로딩바 🛡️]
       setIsMapGeocoding(true);
@@ -592,6 +688,8 @@ export default function ReadyBeforeGoMap() {
                 closeButton={false}
                 autoClose={false}
                 closeOnClick={false}
+                closeOnEscapeKey={false}
+                autoPan={false}
               >
                 <div className="p-0.5 space-y-2.5 max-w-[220px] text-slate-100 min-w-0">
                   <div className="space-y-0.5">
@@ -666,6 +764,40 @@ export default function ReadyBeforeGoMap() {
       >
         <Locate className="w-4.5 h-4.5" />
       </button>
+
+      {/* ESC 키 제보 위치 선택 취소 확인 모달 🛑 */}
+      <Dialog open={isEscConfirmOpen} onOpenChange={setIsEscConfirmOpen}>
+        <DialogContent className="w-[90%] max-w-[360px] p-5 rounded-2xl bg-card border border-border shadow-2xl z-[99999]">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-base font-extrabold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+              🛑 제보 위치 선택 중단
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              제보 위치 선택을 중단하시겠습니까? 현재 선택 중이던 위치 정보가 초기화됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2.5 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setIsEscConfirmOpen(false)}
+              className="flex-1 text-xs font-semibold h-9 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"
+            >
+              아니오
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setIsEscConfirmOpen(false);
+                setIsReportMode(false);
+                setReportCoords(null);
+              }}
+              className="flex-1 text-xs font-bold h-9 rounded-xl bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+            >
+              예
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

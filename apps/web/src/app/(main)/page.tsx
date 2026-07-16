@@ -191,6 +191,13 @@ export default function Home() {
       toast.success("제보가 성공적으로 삭제되었습니다.");
       queryClient.invalidateQueries({ queryKey: ["scam-regions"] });
       queryClient.invalidateQueries({ queryKey: ["scams"] });
+
+      // 만약 선택된 특정 지역(Region)의 마지막 제보를 삭제한 경우, 해당 지역 선택을 해제하고 피드창을 닫습니다.
+      if (selectedRegionId && scams.length <= 1) {
+        setSelectedRegionId(null);
+        setSelectedRegion(null);
+        setIsMobileFeedOpen(false);
+      }
     },
     onError: (error: any) => {
       console.error(error);
@@ -983,7 +990,7 @@ export default function Home() {
                           next = selectedCats.filter((c) => c !== item.value);
                         } else {
                           if (selectedCats.length >= 3) {
-                            toast.error("카테고리는 최대 3개까지 선택할 수 있습니다.");
+                            toast.error("카테고리는 최대 3개까지 선택할 수 있습니다.", { id: "max-categories-warning" });
                             return;
                           }
                           next = [...selectedCats, item.value];

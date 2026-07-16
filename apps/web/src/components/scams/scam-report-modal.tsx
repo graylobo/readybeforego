@@ -58,6 +58,7 @@ export function ScamReportModal() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
 
   // 로컬 상태로 regionId만 관리
   const [regionId, setRegionId] = useState("");
@@ -389,7 +390,8 @@ export function ScamReportModal() {
   };
 
   return (
-    <Dialog open={isReportModalOpen} onOpenChange={(open) => !open && handleClose()}>
+    <>
+    <Dialog open={isReportModalOpen} onOpenChange={(open) => !open && setIsCloseConfirmOpen(true)}>
       <DialogContent className="sm:max-w-[550px] p-6 rounded-2xl bg-card max-h-[95vh] overflow-y-auto scrollbar-thin">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -615,7 +617,7 @@ export function ScamReportModal() {
                         next = selectedCats.filter((c) => c !== item.value);
                       } else {
                         if (selectedCats.length >= 3) {
-                          toast.warning("카테고리는 최대 3개까지 선택할 수 있습니다.");
+                          toast.warning("카테고리는 최대 3개까지 선택할 수 있습니다.", { id: "max-categories-warning" });
                           return;
                         }
                         next = [...selectedCats, item.value];
@@ -747,7 +749,7 @@ export function ScamReportModal() {
           </div>
 
           <DialogFooter className="pt-3 gap-2 sm:gap-0 border-t border-border">
-            <Button type="button" variant="outline" size="sm" onClick={handleClose} className="cursor-pointer" disabled={uploading}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsCloseConfirmOpen(true)} className="cursor-pointer" disabled={uploading}>
               {t("report_modal.cancel")}
             </Button>
             <Button 
@@ -772,5 +774,39 @@ export function ScamReportModal() {
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* 제보 취소 확인 모달 🛑 */}
+    <Dialog open={isCloseConfirmOpen} onOpenChange={setIsCloseConfirmOpen}>
+      <DialogContent className="w-[90%] max-w-[360px] p-5 rounded-2xl bg-card border border-border shadow-2xl z-[99999]">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="text-base font-extrabold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+            🛑 제보 중단
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+            제보를 중단하시겠습니까? 작성 중이던 내용은 저장되지 않습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex gap-2.5 mt-4">
+          <Button
+            variant="outline"
+            onClick={() => setIsCloseConfirmOpen(false)}
+            className="flex-1 text-xs font-semibold h-9 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"
+          >
+            아니오
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setIsCloseConfirmOpen(false);
+              handleClose();
+            }}
+            className="flex-1 text-xs font-bold h-9 rounded-xl bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+          >
+            예
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
