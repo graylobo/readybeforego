@@ -36,6 +36,7 @@ export function ScamReportModal() {
     setReportCoords,
     setIsReportMode,
     setSelectedRegionId,
+    setSelectedRegion,
     setMapCenter,
     setMapZoom,
     reportType,
@@ -43,6 +44,7 @@ export function ScamReportModal() {
     selectedRegionId,
     selectedRegion,
     geoData,
+    setIsMobileFeedOpen,
   } = useScamMapStore();
 
   const [countryCode, setCountryCode] = useState("");
@@ -59,6 +61,7 @@ export function ScamReportModal() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
+  const [selectedScamDetail, setSelectedScamDetail] = useState<ScamInfo | null>(null);
 
   // 로컬 상태로 regionId만 관리
   const [regionId, setRegionId] = useState("");
@@ -89,6 +92,17 @@ export function ScamReportModal() {
     queryKey: ["city-regions", cityId],
     queryFn: () => scamsApi.getRegions(cityId),
     enabled: isReportModalOpen && !!cityId && cityId !== "NEW_CITY",
+  });
+
+  const { data: regionScams = [] } = useQuery<ScamInfo[]>({
+    queryKey: ["scam-reports-for-duplicate-check", regionId],
+    queryFn: () => scamsApi.getScamsByRegion(regionId),
+    enabled: isReportModalOpen && !!regionId && regionId !== "NEW_CITY",
+  });
+
+  const overlappingScams = regionScams.filter((existingScam) => {
+    const existingCategories = existingScam.scamCategory ? existingScam.scamCategory.split(",") : [];
+    return selectedCats.some((cat) => existingCategories.includes(cat));
   });
 
   useEffect(() => {
@@ -651,6 +665,42 @@ export function ScamReportModal() {
             {errors.scamCategory && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.scamCategory}</p>}
           </div>
 
+          {/* 동일 지역 내 유사 카테고리 제보 감지 경고 안내창 ⚠️ */}
+          {overlappingScams.length > 0 && (
+            <div className="p-3 bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500 font-bold text-xs">
+                <span className="text-sm">⚠️</span>
+                <span>이 지역에 이미 유사한 제보가 있습니다. (클릭 시 상세 확인)</span>
+              </div>
+              <div className="space-y-1 pt-0.5 max-h-[110px] overflow-y-auto scrollbar-thin">
+                {overlappingScams.slice(0, 5).map((scam) => (
+                  <button
+                    key={scam.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedScamDetail(scam);
+                    }}
+                    className="block w-full px-2.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-lg hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 truncate flex-1">
+                        {scam.title}
+                      </span>
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
+                        {scam.scamCategory.split(",").map(cat => t(`categories.${cat}`)).join(", ")}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {overlappingScams.length > 5 && (
+                <p className="text-[9px] text-muted-foreground text-center font-medium">
+                  + {overlappingScams.length - 5}개의 제보가 더 있습니다.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.attachments_label")}</Label>
             <div className="flex flex-wrap gap-2 items-center pt-1">
@@ -805,6 +855,102 @@ export function ScamReportModal() {
             예
           </Button>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* 유사 제보 상세 확인 모달 🔍 */}
+    <Dialog open={!!selectedScamDetail} onOpenChange={(open) => !open && setSelectedScamDetail(null)}>
+      <DialogContent className="w-[95%] max-w-[500px] p-6 rounded-2xl bg-card border border-border shadow-2xl z-[999999] max-h-[85vh] overflow-y-auto scrollbar-thin">
+        {selectedScamDetail && (
+          <div className="space-y-4">
+            <DialogHeader className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded">
+                  {t(`categories.${selectedScamDetail.scamCategory.split(",")[0]}`)}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(selectedScamDetail.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <DialogTitle className="text-base font-extrabold text-slate-900 dark:text-slate-100 pt-1">
+                {selectedScamDetail.title}
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* 제보 내용 */}
+            <div className="space-y-1">
+              <h4 className="text-[11px] font-bold text-slate-400">🚨 피해 상세 내용</h4>
+              <p className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 whitespace-pre-wrap leading-relaxed">
+                {selectedScamDetail.description}
+              </p>
+            </div>
+
+            {/* 대처법 및 예방법 (있을 경우) */}
+            {selectedScamDetail.avoidanceTip && (
+              <div className="space-y-1">
+                <h4 className="text-[11px] font-bold text-red-400 flex items-center gap-1">
+                  💡 대처법 & 예방법
+                </h4>
+                <p className="text-xs text-red-800 dark:text-red-300 bg-red-500/10 dark:bg-red-500/5 p-3.5 rounded-xl border border-red-500/20 whitespace-pre-wrap leading-relaxed">
+                  {selectedScamDetail.avoidanceTip}
+                </p>
+              </div>
+            )}
+
+            {/* 이미지 갤러리 */}
+            {selectedScamDetail.imageUrls && selectedScamDetail.imageUrls.length > 0 && (
+              <div className="space-y-1">
+                <h4 className="text-[11px] font-bold text-slate-400">📸 첨부 사진</h4>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                  {selectedScamDetail.imageUrls.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative w-20 h-20 rounded-xl overflow-hidden border border-border shrink-0 hover:opacity-90 transition-opacity">
+                      <img src={url} alt={`attachment-${i}`} className="w-full h-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 하단 제보 공감 안내 및 닫기 버튼 */}
+            <div className="pt-2 border-t border-border flex gap-2.5">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedScamDetail(null)}
+                className="flex-1 text-xs font-semibold h-9 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
+                닫기
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => {
+                  const targetScam = selectedScamDetail;
+                  setSelectedScamDetail(null);
+                  
+                  // 제보하기 취소/동기화 처리하고 해당 피드로 이동
+                  setReportModalOpen(false);
+                  setReportCoords(null);
+                  setIsCloseConfirmOpen(false);
+                  setIsReportMode(false);
+
+                  setSelectedRegionId(targetScam.regionId);
+                  const matchedRegion = cityRegions.find((r) => r.id === targetScam.regionId);
+                  if (matchedRegion) {
+                    setSelectedRegion(matchedRegion);
+                    setMapCenter([matchedRegion.latitude, matchedRegion.longitude]);
+                    setMapZoom(15);
+                  }
+
+                  if (typeof window !== "undefined" && window.innerWidth < 768) {
+                    setIsMobileFeedOpen(true);
+                  }
+                }}
+                className="flex-1 text-xs font-bold h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+              >
+                기존 제보글로 이동 (작성 취소)
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     </>
