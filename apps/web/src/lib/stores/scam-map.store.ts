@@ -89,8 +89,6 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     selectedCityId: null,
     selectedRegionId: null,
     selectedRegion: null,
-    mapCenter: [13.7563, 100.5018],
-    mapZoom: 5,
     isReportMode: false,
     reportCoords: null,
     isReportModalOpen: false,
