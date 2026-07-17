@@ -112,13 +112,17 @@ export default function Home() {
     setIsFilterModalOpen,
     isSelectTypeModalOpen,
     setSelectTypeModalOpen,
-    setReportType,
+    isReportModalOpen,
     setReportModalOpen,
-    setReportCoords,
+    isAddressSearchModalOpen,
     setAddressSearchModalOpen,
-    setGeoData,
+    isGeocodeConfirmModalOpen,
     setGeocodeConfirmModalOpen,
+    isReportConfirmModalOpen,
     setReportConfirmModalOpen,
+    setReportType,
+    setReportCoords,
+    setGeoData,
   } = useScamMapStore();
 
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
@@ -136,6 +140,71 @@ export default function Home() {
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [displayScams, setDisplayScams] = useState<ScamInfo[]>([]);
+
+  // 모바일 환경 하드웨어 뒤로가기 버튼(및 스와이프 백) 제어 📱
+  useEffect(() => {
+    const isAnyModalOpen =
+      isMobileFeedOpen ||
+      isReportModalOpen ||
+      isSelectTypeModalOpen ||
+      isGeocodeConfirmModalOpen ||
+      isReportConfirmModalOpen ||
+      isAddressSearchModalOpen ||
+      isEditModalOpen;
+
+    if (isAnyModalOpen) {
+      // 모달이 하나라도 열리면 브라우저 history 스택에 가상 상태 주입
+      if (typeof window !== "undefined" && window.history.state?.modalActive !== true) {
+        window.history.pushState({ modalActive: true }, "");
+      }
+    } else {
+      // 모달이 전부 닫혔는데 가상 상태가 남아있다면 히스토리백 처리하여 정리
+      if (typeof window !== "undefined" && window.history.state?.modalActive === true) {
+        window.history.back();
+      }
+    }
+  }, [
+    isMobileFeedOpen,
+    isReportModalOpen,
+    isSelectTypeModalOpen,
+    isGeocodeConfirmModalOpen,
+    isReportConfirmModalOpen,
+    isAddressSearchModalOpen,
+    isEditModalOpen,
+  ]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      // 뒤로가기를 눌러 modalActive 가 없는 상태가 감지되면 모든 오버레이 닫기
+      if (!e.state || e.state.modalActive !== true) {
+        setIsMobileFeedOpen(false);
+        setReportModalOpen(false);
+        setSelectTypeModalOpen(false);
+        setGeocodeConfirmModalOpen(false);
+        setReportConfirmModalOpen(false);
+        setAddressSearchModalOpen(false);
+        setIsEditModalOpen(false);
+        resetSelections(); // 기존 핀/피드 선택 상태 원복
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("popstate", handlePopState);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("popstate", handlePopState);
+      }
+    };
+  }, [
+    setIsMobileFeedOpen,
+    setReportModalOpen,
+    setSelectTypeModalOpen,
+    setGeocodeConfirmModalOpen,
+    setReportConfirmModalOpen,
+    setAddressSearchModalOpen,
+    resetSelections,
+  ]);
 
 
 
