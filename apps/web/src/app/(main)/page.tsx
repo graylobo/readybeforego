@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -36,7 +36,8 @@ import {
   Search,
   ImageIcon,
   X,
-  Loader2
+  Loader2,
+  Share2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -140,6 +141,7 @@ export default function Home() {
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [displayScams, setDisplayScams] = useState<ScamInfo[]>([]);
+  const isInitialUrlParsed = useRef(false);
 
   // 모바일 환경 하드웨어 뒤로가기 버튼(및 스와이프 백) 제어 📱
   useEffect(() => {
@@ -297,6 +299,48 @@ export default function Home() {
     }
   }, [scams, displayScams]);
 
+  // URL regionId 파라미터 실시간 동기화 🔗
+  useEffect(() => {
+    // 초기 URL 파라미터 파싱이 완료되기 전에는 동기화를 차단하여 파라미터 소실 방지
+    if (!isInitialUrlParsed.current) return;
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (selectedRegionId) {
+        url.searchParams.set("regionId", selectedRegionId);
+        window.history.replaceState(null, "", url.pathname + url.search);
+      } else {
+        url.searchParams.delete("regionId");
+        window.history.replaceState(null, "", url.pathname + url.search);
+      }
+    }
+  }, [selectedRegionId]);
+
+  // 첫 마운트 또는 전체 지역 정보 로드 시, URL regionId 파라미터가 있으면 자동 이동 및 선택 처리 📍
+  useEffect(() => {
+    if (mounted && allRegions.length > 0 && !isInitialUrlParsed.current) {
+      const params = new URLSearchParams(window.location.search);
+      const sharedRegionId = params.get("regionId");
+      if (sharedRegionId) {
+        const targetRegion = allRegions.find((r) => r.id === sharedRegionId);
+        if (targetRegion) {
+          setSelectedRegionId(targetRegion.id);
+          setSelectedRegion(targetRegion);
+          if (targetRegion.cityId) setSelectedCityId(targetRegion.cityId);
+          if (targetRegion.countryCode) setSelectedCountryCode(targetRegion.countryCode);
+          setMapCenter([targetRegion.latitude, targetRegion.longitude]);
+          setMapZoom(16);
+          
+          if (window.innerWidth < 768) {
+            setIsMobileFeedOpen(true);
+          }
+        }
+      }
+      isInitialUrlParsed.current = true; // 초기 파라미터 파싱 및 맵 배치 완료 설정
+    }
+  }, [mounted, allRegions, setSelectedRegionId, setSelectedRegion, setSelectedCityId, setSelectedCountryCode, setMapCenter, setMapZoom, setIsMobileFeedOpen]);
+
+
   // Upvote/Downvote mutation
   const reactionMutation = useMutation({
     mutationFn: ({ scamId, type }: { scamId: string; type: "like" | "dislike" }) =>
@@ -433,6 +477,40 @@ export default function Home() {
       if (typeof window !== "undefined" && window.innerWidth < 768) {
         setIsMobileFeedOpen(false);
       }
+    }
+  };
+
+  // 공유하기 기능 🔗
+  const handleShare = () => {
+    if (!selectedRegionId) return;
+    
+    const shareUrl = `${window.location.origin}${window.location.pathname}?regionId=${selectedRegionId}`;
+    
+    // 모바일/태블릿 기기 여부 감지
+    const isMobileDevice = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (navigator.share && isMobileDevice) {
+      navigator.share({
+        title: "ReadyBeforeGo - 위험 제보 정보",
+        text: `📍 ${selectedRegion?.name || "지정 위치"}의 피해 제보 및 주의 정보입니다.`,
+        url: shareUrl,
+      })
+      .then(() => toast.success("성공적으로 공유되었습니다."))
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Share failed:", err);
+        }
+      });
+    } else {
+      // 데스크톱 환경에서는 시스템 공유창 대신 즉시 클립보드로 링크 복사
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => {
+          toast.success("공유 링크가 클립보드에 복사되었습니다! 🔗");
+        })
+        .catch((err) => {
+          console.error("Clipboard copy failed:", err);
+          toast.error("링크 복사에 실패했습니다. 주소창의 URL을 직접 복사해 주세요.");
+        });
     }
   };
 
@@ -863,6 +941,17 @@ export default function Home() {
                 <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
               </Button>
 
+              {/* 공유하기 버튼 */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                onClick={handleShare}
+                title="공유하기"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+
               {/* 닫기 (X) 버튼 */}
               <Button
                 size="icon"
@@ -902,26 +991,39 @@ export default function Home() {
             </div>
 
             {selectedRegionId && (
-              <Button
-                size="sm"
-                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95 mr-6"
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                      router.push("/login");
+              <div className="flex items-center gap-1.5 mr-6 shrink-0">
+                <Button
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95"
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                        router.push("/login");
+                      }
+                      return;
                     }
-                    return;
-                  }
-                  setIsReportMode(true);
-                  setReportType("existing");
-                  setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
-                  setReportModalOpen(true);
-                  setIsMobileFeedOpen(false);
-                }}
-              >
-                <span>➕</span>
-                <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
-              </Button>
+                    setIsReportMode(true);
+                    setReportType("existing");
+                    setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
+                    setReportModalOpen(true);
+                    setIsMobileFeedOpen(false);
+                  }}
+                >
+                  <span>➕</span>
+                  <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
+                </Button>
+
+                {/* 모바일 공유하기 버튼 */}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                  onClick={handleShare}
+                  title="공유하기"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             )}
           </DialogHeader>
           
