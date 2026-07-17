@@ -60,6 +60,7 @@ export function ScamReportModal() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
   const [selectedScamDetail, setSelectedScamDetail] = useState<ScamInfo | null>(null);
 
@@ -117,6 +118,7 @@ export function ScamReportModal() {
       setImageFiles([]);
       setImagePreviews([]);
       setUploading(false);
+      setIsCompressing(false);
       setErrors({});
 
       if (reportType === "existing" && selectedRegionId) {
@@ -288,7 +290,7 @@ export function ScamReportModal() {
     },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
       
@@ -297,9 +299,24 @@ export function ScamReportModal() {
         return;
       }
 
-      setImageFiles((prev) => [...prev, ...selectedFiles]);
+      // 1. 임시 미리보기 생성하여 화면에 바로 피드백 노출
       const newPreviews = selectedFiles.map((file) => URL.createObjectURL(file));
       setImagePreviews((prev) => [...prev, ...newPreviews]);
+
+      // 2. 비동기 백그라운드 이미지 압축 시작 (사용자 모르게 물밑에서 조용히 실행)
+      setIsCompressing(true);
+      try {
+        const compressPromises = selectedFiles.map((file) => uploadsApi.compressImage(file));
+        const compressedFiles = await Promise.all(compressPromises);
+        
+        setImageFiles((prev) => [...prev, ...compressedFiles]);
+      } catch (err) {
+        console.error("Image compression error:", err);
+        // 압축 실패 시 원본이라도 저장하여 등록 가능하도록 지원
+        setImageFiles((prev) => [...prev, ...selectedFiles]);
+      } finally {
+        setIsCompressing(false);
+      }
     }
   };
 
@@ -358,13 +375,19 @@ export function ScamReportModal() {
       return;
     }
 
+    // 백그라운드 압축 진행중 가드
+    if (isCompressing) {
+      toast.warning("현재 이미지를 최적화하는 중입니다. 완료될 때까지 잠시만 기다려 주세요.");
+      return;
+    }
+
     setUploading(true);
     try {
-      const urls: string[] = [];
-      for (const file of imageFiles) {
-        const url = await uploadsApi.uploadImage(file, { compress: true, folder: "scams" });
-        urls.push(url);
-      }
+      // 선택 시 미리 압축해 둔 파일 리스트를 병렬(Promise.all) 및 compress: false로 빠르게 업로드 ⚡
+      const uploadPromises = imageFiles.map((file) =>
+        uploadsApi.uploadImage(file, { compress: false, folder: "scams" })
+      );
+      const urls = await Promise.all(uploadPromises);
 
       if (reportType === "new" && reportCoords) {
         createMutation.mutate({
@@ -847,9 +870,14 @@ export function ScamReportModal() {
               type="submit" 
               size="sm" 
               className="bg-red-600 hover:bg-red-700 text-white cursor-pointer ml-0 sm:ml-2"
-              disabled={createMutation.isPending || uploading}
+              disabled={createMutation.isPending || uploading || isCompressing}
             >
-              {uploading ? (
+              {isCompressing ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  이미지 최적화 중...
+                </span>
+              ) : uploading ? (
                 <span className="flex items-center gap-1">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   {t("report_modal.uploading_images")}
