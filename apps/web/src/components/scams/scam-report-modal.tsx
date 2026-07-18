@@ -56,6 +56,7 @@ export function ScamReportModal() {
   const [description, setDescription] = useState("");
   const [avoidanceTip, setAvoidanceTip] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [scope, setScope] = useState<'spot' | 'region' | 'city' | 'country'>('spot');
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -120,6 +121,7 @@ export function ScamReportModal() {
       setUploading(false);
       setIsCompressing(false);
       setErrors({});
+      setScope("spot");
 
       if (reportType === "existing" && selectedRegionId) {
         setRegionId(selectedRegionId);
@@ -330,25 +332,38 @@ export function ScamReportModal() {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
-    // A. 국가/도시 매칭 검증
-    if (!cityId && (!detectedCountryName || !detectedCityName)) {
-      newErrors.cityId = "제보할 국가와 도시를 선택해 주세요.";
-    }
-    
-    // B. 제보 위치 지정 방식별 검증
-    if (reportType === "new") {
-      if (!regionName.trim()) {
-        newErrors.regionName = t("report_modal.place_name_placeholder");
-      } else if (regionName.trim().length < 2) {
-        newErrors.regionName = "세부 장소명은 최소 2자 이상이어야 합니다.";
+    // A. 제보 적용 범위별 국가/도시 검증
+    if (scope === "country") {
+      if (!countryCode && !detectedCountryName) {
+        newErrors.cityId = "제보할 국가를 선택해 주세요.";
       }
-      if (!reportCoords) {
-        newErrors.coords = "지정된 좌표 정보가 없습니다.";
+    } else if (scope === "city") {
+      if (!cityId && (!detectedCountryName || !detectedCityName)) {
+        newErrors.cityId = "제보할 국가와 도시를 선택해 주세요.";
       }
     } else {
-      // 기존 등록 장소 제보인 경우 검사
-      if (!regionId) {
-        newErrors.regionId = "기존에 등록된 장소를 선택해 주세요.";
+      // scope === "spot" 또는 "region" 인 경우
+      if (!cityId && (!detectedCountryName || !detectedCityName)) {
+        newErrors.cityId = "제보할 국가와 도시를 선택해 주세요.";
+      }
+    }
+    
+    // B. 제보 위치 지정 방식별 검증 (spot, region 범위일 때 지명/핀 필수 검증)
+    if (scope === "spot" || scope === "region") {
+      if (reportType === "new") {
+        if (!regionName.trim()) {
+          newErrors.regionName = scope === "region" ? "구역/거리 이름을 입력해 주세요." : t("report_modal.place_name_placeholder");
+        } else if (regionName.trim().length < 2) {
+          newErrors.regionName = scope === "region" ? "구역/거리 이름은 최소 2자 이상이어야 합니다." : "세부 장소명은 최소 2자 이상이어야 합니다.";
+        }
+        if (!reportCoords) {
+          newErrors.coords = "지정된 좌표 정보가 없습니다.";
+        }
+      } else {
+        // 기존 등록 장소 제보인 경우 검사
+        if (!regionId) {
+          newErrors.regionId = scope === "region" ? "기존에 등록된 구역을 선택해 주세요." : "기존에 등록된 장소를 선택해 주세요.";
+        }
       }
     }
 
@@ -391,11 +406,12 @@ export function ScamReportModal() {
 
       if (reportType === "new" && reportCoords) {
         createMutation.mutate({
-          cityId: cityId === "NEW_CITY" ? undefined : cityId,
+          scope,
+          cityId: scope === "country" ? undefined : (cityId === "NEW_CITY" ? undefined : cityId),
           countryCode: countryCode === "NEW_COUNTRY" ? detectedCountryCode : countryCode || undefined,
           countryName: countryCode === "NEW_COUNTRY" ? detectedCountryName : undefined,
-          cityName: cityId === "NEW_CITY" ? detectedCityName : undefined,
-          regionName: regionName.trim(),
+          cityName: scope === "country" ? undefined : (cityId === "NEW_CITY" ? detectedCityName : undefined),
+          regionName: (scope === "spot" || scope === "region") ? regionName.trim() : undefined,
           latitude: reportCoords[0],
           longitude: reportCoords[1],
           scamCategory,
@@ -407,7 +423,10 @@ export function ScamReportModal() {
         });
       } else {
         createMutation.mutate({
-          regionId,
+          scope,
+          regionId: (scope === "spot" || scope === "region") ? regionId : undefined,
+          cityId: scope === "city" ? cityId : undefined,
+          countryCode: scope === "country" ? countryCode : undefined,
           scamCategory,
           title: title.trim(),
           description: description.trim(),
@@ -486,6 +505,45 @@ export function ScamReportModal() {
             </div>
           )}
 
+          {/* 제보 적용 범위 선택 🎯 */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              제보 적용 범위
+            </Label>
+            <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl gap-1">
+              {(["spot", "region", "city", "country"] as const).map((sc) => {
+                const label = 
+                  sc === "spot" ? "📍 특정 상점" :
+                  sc === "region" ? "🗺️ 구역/거리 전체" :
+                  sc === "city" ? "🏙️ 도시 전체" :
+                  "🇹🇭 국가 전체";
+                
+                const isActive = scope === sc;
+                return (
+                  <button
+                    key={sc}
+                    type="button"
+                    onClick={() => setScope(sc)}
+                    className={`flex-1 text-center py-1.5 rounded-lg text-[10.5px] font-semibold cursor-pointer transition-all duration-200 ${
+                      isActive
+                        ? "bg-white dark:bg-slate-800 shadow text-slate-850 dark:text-slate-100 font-bold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* 가이드라인 표시 */}
+            <p className="text-[10px] text-muted-foreground leading-normal mt-1 pl-1">
+              {scope === "spot" && "📍 특정 맛집, 마사지숍, 옷가게 등 개별 업소 하나에 해당하는 정보입니다."}
+              {scope === "region" && "🗺️ 카오산로드, 명동거리, 야시장 구역 전반에서 행해지는 호객 사기 등입니다."}
+              {scope === "city" && "🏙️ 그랩/볼트 사기 등 특정 구역을 넘어 도시 전체에 공통된 유형입니다."}
+              {scope === "country" && "🇹🇭 특정 지역에 상관없이 국가 전체에 공통으로 적용되는 안전/법률 경고입니다."}
+            </p>
+          </div>
+
           {(() => {
             const matchedCountry = countries.find((c) => c.code === detectedCountryCode);
             const matchedCity = cities.find((c) => c.id === cityId);
@@ -511,7 +569,7 @@ export function ScamReportModal() {
                 : "위치 정보 없음";
 
             return (
-              <div className="grid grid-cols-2 gap-3">
+              <div className={scope === "country" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.country")}
@@ -534,10 +592,10 @@ export function ScamReportModal() {
                     >
                       <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
                         {isLoadingGeo ? (
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            위치 감지 중...
-                          </span>
+                           <span className="flex items-center gap-1 text-muted-foreground">
+                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                             위치 감지 중...
+                           </span>
                         ) : (
                           <SelectValue placeholder={t("report_modal.country_select")} />
                         )}
@@ -558,117 +616,124 @@ export function ScamReportModal() {
                   )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    {t("report_modal.city")}
-                  </Label>
-                  {reportType === "new" && isGeoSuccess ? (
-                    <Input
-                      value={displayCityText}
-                      disabled
-                      className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
-                    />
-                  ) : (
-                    <Select 
-                      value={cityId} 
-                      onValueChange={(val) => {
-                        setCityId(val);
-                        if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
-                      }}
-                      disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
-                    >
-                      <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                        {isLoadingGeo ? (
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            도시 감지 중...
-                          </span>
-                        ) : (
-                          <SelectValue placeholder={t("report_modal.city_select")} />
-                        )}
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cities.map((city) => (
-                          <SelectItem key={city.id} value={city.id} className="cursor-pointer">
-                            {city.name}
-                          </SelectItem>
-                        ))}
-                        {detectedCityName && detectedCityName !== "기타 도시" && detectedCityName !== "기타 지역" && (
-                          <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
-                            {detectedCityName} (자동 감지)
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
+                {scope !== "country" && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {t("report_modal.city")}
+                    </Label>
+                    {reportType === "new" && isGeoSuccess ? (
+                      <Input
+                        value={displayCityText}
+                        disabled
+                        className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
+                      />
+                    ) : (
+                      <Select 
+                        value={cityId} 
+                        onValueChange={(val) => {
+                          setCityId(val);
+                          if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                        }}
+                        disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
+                      >
+                        <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                          {isLoadingGeo ? (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              도시 감지 중...
+                            </span>
+                          ) : (
+                            <SelectValue placeholder={t("report_modal.city_select")} />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cities.map((city) => (
+                            <SelectItem key={city.id} value={city.id} className="cursor-pointer">
+                              {city.name}
+                            </SelectItem>
+                          ))}
+                          {detectedCityName && detectedCityName !== "기타 도시" && detectedCityName !== "기타 지역" && (
+                            <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
+                              {detectedCityName} (자동 감지)
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}
           {errors.cityId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.cityId}</p>}
 
 
-
           {/* 제보 폼 분기 */}
-          {reportType === "new" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                {t("report_modal.place_name")} (새로 등록할 세부 장소명)
-              </Label>
-              <Input
-                id="regionName"
-                placeholder={t("report_modal.place_name_placeholder")}
-                value={regionName}
-                onChange={(e) => {
-                  setRegionName(e.target.value);
-                  if (errors.regionName) setErrors(prev => ({ ...prev, regionName: "" }));
-                }}
-                className={`text-xs transition-all ${errors.regionName ? "border-red-500 focus-visible:ring-red-400 focus-visible:border-red-500" : ""}`}
-                required
-                disabled={uploading}
-              />
-              {errors.regionName ? (
-                <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionName}</p>
-              ) : (
-                <p className="text-[10px] text-muted-foreground">{t("report_modal.place_name_desc")}</p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">기존 등록 장소 선택</Label>
-              <Select 
-                value={regionId} 
-                onValueChange={(val) => {
-                  setRegionId(val);
-                  if (errors.regionId) setErrors(prev => ({ ...prev, regionId: "" }));
-                }} 
-                disabled={isRegionsPending || uploading || reportType === "existing"}
-              >
-                <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.regionId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                  {isRegionsPending ? (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      지역 목록 불러오는 중...
-                    </span>
-                  ) : (
-                    <SelectValue placeholder="등록된 기존 장소를 선택해 주세요" />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  {cityRegions.map((r) => (
-                    <SelectItem key={r.id} value={r.id} className="cursor-pointer">
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                  {cityRegions.length === 0 && !isRegionsPending && (
-                    <SelectItem value="NO_REGIONS" disabled className="text-muted-foreground text-xs text-center py-2">
-                      등록된 기존 장소가 없습니다.
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {errors.regionId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionId}</p>}
-            </div>
+          {(scope === "spot" || scope === "region") && (
+            reportType === "new" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {scope === "region" ? "구역/거리 이름 (예: 카오산로드 전체, 야시장 구역)" : `${t("report_modal.place_name")} (새로 등록할 세부 장소명)`}
+                </Label>
+                <Input
+                  id="regionName"
+                  placeholder={scope === "region" ? "구역/거리 이름을 입력해 주세요." : t("report_modal.place_name_placeholder")}
+                  value={regionName}
+                  onChange={(e) => {
+                    setRegionName(e.target.value);
+                    if (errors.regionName) setErrors(prev => ({ ...prev, regionName: "" }));
+                  }}
+                  className={`text-xs transition-all ${errors.regionName ? "border-red-500 focus-visible:ring-red-400 focus-visible:border-red-500" : ""}`}
+                  required
+                  disabled={uploading}
+                />
+                {errors.regionName ? (
+                  <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionName}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">
+                    {scope === "region" ? "제보가 묶여서 노출될 구역/거리의 현지 대표 명칭을 입력해 주세요." : t("report_modal.place_name_desc")}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {scope === "region" ? "기존 등록 구역 선택" : "기존 등록 장소 선택"}
+                </Label>
+                <Select 
+                  value={regionId} 
+                  onValueChange={(val) => {
+                    setRegionId(val);
+                    if (errors.regionId) setErrors(prev => ({ ...prev, regionId: "" }));
+                  }} 
+                  disabled={isRegionsPending || uploading || reportType === "existing"}
+                >
+                  <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.regionId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                    {isRegionsPending ? (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        지역 목록 불러오는 중...
+                      </span>
+                    ) : (
+                      <SelectValue placeholder="등록된 기존 장소를 선택해 주세요" />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cityRegions.map((r) => (
+                      <SelectItem key={r.id} value={r.id} className="cursor-pointer">
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                    {cityRegions.length === 0 && !isRegionsPending && (
+                      <SelectItem value="NO_REGIONS" disabled className="text-muted-foreground text-xs text-center py-2">
+                        등록된 기존 장소가 없습니다.
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {errors.regionId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionId}</p>}
+              </div>
+            )
           )}
 
           <div className="space-y-2">
@@ -1001,12 +1066,14 @@ export function ScamReportModal() {
                   setIsCloseConfirmOpen(false);
                   setIsReportMode(false);
 
-                  setSelectedRegionId(targetScam.regionId);
-                  const matchedRegion = cityRegions.find((r) => r.id === targetScam.regionId);
-                  if (matchedRegion) {
-                    setSelectedRegion(matchedRegion);
-                    setMapCenter([matchedRegion.latitude, matchedRegion.longitude]);
-                    setMapZoom(15);
+                  if (targetScam) {
+                    setSelectedRegionId(targetScam.regionId ?? null);
+                    const matchedRegion = cityRegions.find((r) => r.id === targetScam.regionId);
+                    if (matchedRegion) {
+                      setSelectedRegion(matchedRegion);
+                      setMapCenter([matchedRegion.latitude, matchedRegion.longitude]);
+                      setMapZoom(15);
+                    }
                   }
 
                   if (typeof window !== "undefined" && window.innerWidth < 768) {

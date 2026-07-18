@@ -14,8 +14,29 @@ export class ScamsService {
 
   async create(createDto: CreateScamInfoZodDto, userId?: string) {
     return this.scamsRepository.transaction(async (tx) => {
-      let regionId = createDto.regionId;
-      let cityId = createDto.cityId;
+      let regionId: string | null = createDto.regionId ?? null;
+      let cityId: string | null = createDto.cityId ?? null;
+      let countryCode: string | null = createDto.countryCode ?? null;
+      const scope = createDto.scope ?? 'spot';
+
+      // 기존 ID가 존재하는 경우 상위 계층 구조(도시 및 국가) 역추적하여 매핑
+      if (regionId) {
+        const regionObj = await this.scamsRepository.findRegionById(regionId, tx);
+        if (regionObj) {
+          cityId = regionObj.cityId;
+          if (cityId) {
+            const cityObj = await this.scamsRepository.findCityById(cityId, tx);
+            if (cityObj) {
+              countryCode = cityObj.countryCode;
+            }
+          }
+        }
+      } else if (cityId) {
+        const cityObj = await this.scamsRepository.findCityById(cityId, tx);
+        if (cityObj) {
+          countryCode = cityObj.countryCode;
+        }
+      }
 
       // 1. cityId가 없는데 cityName과 국가 정보가 제공된 경우 동적 국가 및 도시 생성 처리
       if (!regionId && !cityId && createDto.cityName && (createDto.countryCode || createDto.countryName)) {
@@ -73,6 +94,10 @@ export class ScamsService {
           }
         }
 
+        if (country) {
+          countryCode = country.code;
+        }
+
         // 1-3. 국가가 식별되었으면 도시 생성 진행
         if (country && verifiedCityName) {
           const cityName = verifiedCityName.trim();
@@ -92,8 +117,8 @@ export class ScamsService {
         }
       }
 
-      // 2. 세부 지역(Region) 생성 처리
-      if (!regionId && createDto.regionName && cityId && createDto.latitude !== undefined && createDto.longitude !== undefined) {
+      // 2. 세부 지역(Region) 생성 처리 (Spot 및 Region 범위일 때만 지역 정보 생성)
+      if ((scope === 'spot' || scope === 'region') && !regionId && createDto.regionName && cityId && createDto.latitude !== undefined && createDto.longitude !== undefined) {
         const newRegion = await this.scamsRepository.createRegion({
           cityId: cityId,
           name: createDto.regionName,
@@ -104,12 +129,39 @@ export class ScamsService {
         regionId = newRegion.id;
       }
 
-      if (!regionId) {
-        throw new Error('올바른 지역 정보가 지정되지 않았습니다.');
+      // 3. 제보 적용 범위(Scope)에 맞춰 최종 저장할 계층 정보 정제
+      let finalRegionId: string | null = null;
+      let finalCityId: string | null = null;
+      let finalCountryCode: string | null = null;
+
+      if (scope === 'spot' || scope === 'region') {
+        if (!regionId) {
+          throw new Error('올바른 지역 정보가 지정되지 않았습니다.');
+        }
+        finalRegionId = regionId;
+        finalCityId = cityId;
+        finalCountryCode = countryCode;
+      } else if (scope === 'city') {
+        if (!cityId) {
+          throw new Error('올바른 도시 정보가 지정되지 않았습니다.');
+        }
+        finalRegionId = null;
+        finalCityId = cityId;
+        finalCountryCode = countryCode;
+      } else if (scope === 'country') {
+        if (!countryCode) {
+          throw new Error('올바른 국가 정보가 지정되지 않았습니다.');
+        }
+        finalRegionId = null;
+        finalCityId = null;
+        finalCountryCode = countryCode;
       }
 
-       return this.scamsRepository.create({
-        regionId: regionId,
+      return this.scamsRepository.create({
+        regionId: finalRegionId,
+        cityId: finalCityId,
+        countryCode: finalCountryCode,
+        scope: scope,
         userId: userId ?? null,
         title: createDto.title,
         description: createDto.description,

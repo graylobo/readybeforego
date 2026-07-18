@@ -141,7 +141,12 @@ export default function Home() {
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [displayScams, setDisplayScams] = useState<ScamInfo[]>([]);
+  const [feedScopeFilter, setFeedScopeFilter] = useState<'all' | 'spot' | 'region' | 'city' | 'country'>('all');
   const isInitialUrlParsed = useRef(false);
+
+  useEffect(() => {
+    setFeedScopeFilter('all');
+  }, [selectedCountryCode, selectedCityId, selectedRegionId]);
 
   // 모바일 환경 하드웨어 뒤로가기 버튼(및 스와이프 백) 제어 📱
   useEffect(() => {
@@ -152,7 +157,8 @@ export default function Home() {
       isGeocodeConfirmModalOpen ||
       isReportConfirmModalOpen ||
       isAddressSearchModalOpen ||
-      isEditModalOpen;
+      isEditModalOpen ||
+      isReportMode;
 
     if (isAnyModalOpen) {
       // 모달이 하나라도 열리면 브라우저 history 스택에 가상 상태 주입
@@ -173,6 +179,7 @@ export default function Home() {
     isReportConfirmModalOpen,
     isAddressSearchModalOpen,
     isEditModalOpen,
+    isReportMode,
   ]);
 
   useEffect(() => {
@@ -545,33 +552,18 @@ export default function Home() {
 
   // Common warning feed renderer shared between Desktop sidebar and Mobile sheet
   const renderFeedContent = () => {
-    if (isScamsPending) {
-      return (
-        <div className="space-y-4">
-          {[1, 2].map((i) => (
-            <Card key={i} className="border-border">
-              <CardHeader className="space-y-2 p-4">
-                <Skeleton className="h-4 w-1/4" />
-                <Skeleton className="h-6 w-3/4" />
-              </CardHeader>
-              <CardContent className="p-4 pt-0 space-y-2">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
+    const chips = [
+      { value: "all", label: "전체" },
+      { value: "spot", label: "📍 특정 지점" },
+      { value: "region", label: "🗺️ 구역 전체" },
+      { value: "city", label: "🏙️ 도시 전체" },
+      { value: "country", label: "🇹🇭 국가 전체" },
+    ] as const;
 
-    if (displayScams.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
-          <Info className="w-8 h-8 text-slate-300" />
-          <p className="text-xs text-muted-foreground">{t("common.empty_warnings")}</p>
-        </div>
-      );
-    }
+    const filteredScams = displayScams.filter((s) => {
+      if (feedScopeFilter === "all") return true;
+      return s.scope === feedScopeFilter;
+    });
 
     const formatDate = (dateStr: string) => {
       const d = new Date(dateStr);
@@ -593,258 +585,331 @@ export default function Home() {
 
     return (
       <div className="space-y-4 pb-8">
-        {displayScams.map((scam) => {
-          const isSuperAdmin = user?.role === "super_admin";
-          const isOwner = user && scam.userId === user.id;
-          const canManage = isSuperAdmin || isOwner;
-          
-          const isEdited = new Date(scam.updatedAt).getTime() - new Date(scam.createdAt).getTime() > 1000;
+        {/* 필터 칩 목록 🎛️ */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none">
+          {chips.map((chip) => {
+            const isActive = feedScopeFilter === chip.value;
+            const count = chip.value === "all" 
+              ? displayScams.length 
+              : displayScams.filter(s => s.scope === chip.value).length;
 
-          return (
-            <Card 
-              key={scam.id} 
-              className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
-              onClick={() => handleCardClick(scam)}
-            >
-              <CardHeader className="p-4 pb-2 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {(() => {
-                      const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
-                      if (selectedRegionId && sharingRegions.length > 1 && currentScamRegion) {
-                        return (
-                          <Badge variant="outline" className="bg-slate-100 dark:bg-slate-900 border-slate-250 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-extrabold py-0.5 px-2">
-                            📍 {currentScamRegion.name}
-                          </Badge>
-                        );
-                      }
-                      return null;
-                    })()}
-                    {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
-                      const cat = getCategoryInfo(catKey, t);
-                      return (
-                        <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
-                          {cat.label}
-                        </Badge>
-                      );
-                    })}
-                    <span className="text-[10px] text-muted-foreground select-none">
-                      {formatDate(scam.createdAt)}
-                      {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 shrink-0">
-                    {scam.sourceUrl && (
-                      <a 
-                        href={scam.sourceUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    )}
+            return (
+              <button
+                key={chip.value}
+                type="button"
+                onClick={() => setFeedScopeFilter(chip.value)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition-all duration-200 ${
+                  isActive
+                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                }`}
+              >
+                {chip.label} <span className="text-[10px] opacity-75 ml-0.5 font-bold">({count})</span>
+              </button>
+            );
+          })}
+        </div>
 
-                    {canManage && (
-                      <div className="flex items-center gap-1 text-[10px] shrink-0 whitespace-nowrap">
-                        <span className="text-slate-300 select-none">|</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingScam(scam);
-                            setEditTitle(scam.title);
-                            setEditDescription(scam.description);
-                            setEditAvoidanceTip(scam.avoidanceTip || "");
-                            setEditSourceUrl(scam.sourceUrl || "");
-                            setEditScamCategory(scam.scamCategory);
-                            setEditExistingImageUrls(scam.imageUrls || []);
-                            setEditImageFiles([]);
-                            setEditImagePreviews([]);
-                            setIsEditModalOpen(true);
-                          }}
-                          className="text-slate-500 hover:text-blue-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
-                        >
-                          수정
-                        </button>
-                        <span className="text-slate-300 select-none">|</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm("정말로 이 제보를 삭제하시겠습니까?")) {
-                              deleteMutation.mutate(scam.id);
-                            }
-                          }}
-                          className="text-slate-500 hover:text-red-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
-              </CardHeader>
+        {isScamsPending ? (
+          <div className="space-y-4">
+            {[1, 2].map((i) => (
+              <Card key={i} className="border-border">
+                <CardHeader className="space-y-2 p-4">
+                  <Skeleton className="h-4 w-1/4" />
+                  <Skeleton className="h-6 w-3/4" />
+                </CardHeader>
+                <CardContent className="p-4 pt-0 space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filteredScams.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
+            <Info className="w-8 h-8 text-slate-300" />
+            <p className="text-xs text-muted-foreground">
+              {feedScopeFilter === "all" ? t("common.empty_warnings") : "선택한 범위의 제보가 없습니다."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredScams.map((scam) => {
+              const isSuperAdmin = user?.role === "super_admin";
+              const isOwner = user && scam.userId === user.id;
+              const canManage = isSuperAdmin || isOwner;
               
-              <CardContent className="p-4 pt-0 pb-3 space-y-3">
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                  {scam.description}
-                </p>
+              const isEdited = new Date(scam.updatedAt).getTime() - new Date(scam.createdAt).getTime() > 1000;
 
-                {/* Attached image gallery layout */}
-                {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
-                  <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
-                    scam.imageUrls.length === 1 
-                      ? 'grid-cols-1' 
-                      : scam.imageUrls.length === 2 
-                        ? 'grid-cols-2' 
-                        : 'grid-cols-3'
-                  }`}>
-                    {scam.imageUrls.map((url, idx) => (
-                      <a 
-                        key={idx} 
-                        href={url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
+              return (
+                <Card 
+                  key={scam.id} 
+                  className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
+                  onClick={() => handleCardClick(scam)}
+                >
+                  <CardHeader className="p-4 pb-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* 적용 범위 배지 뱃지 🏷️ */}
+                        {scam.scope === "country" && (
+                          <Badge variant="outline" className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                            🇹🇭 국가 경보
+                          </Badge>
+                        )}
+                        {scam.scope === "city" && (
+                          <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                            🏙️ 도시 전체
+                          </Badge>
+                        )}
+                        {scam.scope === "region" && (
+                          <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                            🗺️ 구역 전체
+                          </Badge>
+                        )}
+                        {scam.scope === "spot" && (
+                          <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                            📍 특정 지점
+                          </Badge>
+                        )}
+
+                        {(() => {
+                          const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
+                          if (selectedRegionId && sharingRegions.length > 1 && currentScamRegion) {
+                            return (
+                              <Badge variant="outline" className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-extrabold py-0.5 px-2">
+                                📍 {currentScamRegion.name}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
+                          const cat = getCategoryInfo(catKey, t);
+                          return (
+                            <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                              {cat.label}
+                            </Badge>
+                          );
+                        })}
+                        <span className="text-[10px] text-muted-foreground select-none">
+                          {formatDate(scam.createdAt)}
+                          {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {scam.sourceUrl && (
+                          <a 
+                            href={scam.sourceUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+
+                        {canManage && (
+                          <div className="flex items-center gap-1 text-[10px] shrink-0 whitespace-nowrap">
+                            <span className="text-slate-300 select-none">|</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingScam(scam);
+                                setEditTitle(scam.title);
+                                setEditDescription(scam.description);
+                                setEditAvoidanceTip(scam.avoidanceTip || "");
+                                setEditSourceUrl(scam.sourceUrl || "");
+                                setEditScamCategory(scam.scamCategory);
+                                setEditExistingImageUrls(scam.imageUrls || []);
+                                setEditImageFiles([]);
+                                setEditImagePreviews([]);
+                                setIsEditModalOpen(true);
+                              }}
+                              className="text-slate-500 hover:text-blue-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
+                            >
+                              수정
+                            </button>
+                            <span className="text-slate-300 select-none">|</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm("정말로 이 제보를 삭제하시겠습니까?")) {
+                                  deleteMutation.mutate(scam.id);
+                                }
+                              }}
+                              className="text-slate-500 hover:text-red-600 font-bold px-1 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition-colors whitespace-nowrap"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
+                  </CardHeader>
+                  
+                  <CardContent className="p-4 pt-0 pb-3 space-y-3">
+                    <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                      {scam.description}
+                    </p>
+
+                    {/* Attached image gallery layout */}
+                    {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
+                      <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
+                        scam.imageUrls.length === 1 
+                          ? 'grid-cols-1' 
+                          : scam.imageUrls.length === 2 
+                            ? 'grid-cols-2' 
+                            : 'grid-cols-3'
+                      }`}>
+                        {scam.imageUrls.map((url, idx) => (
+                          <a 
+                            key={idx} 
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <img 
+                              src={url} 
+                              alt={`scam-attachment-${idx}`} 
+                              className="w-full h-full object-cover" 
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+
+                    {scam.avoidanceTip && (
+                      <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
+                        <h4 className="font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
+                          {t("common.avoidance_title")}
+                        </h4>
+                        <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
+                      </div>
+                    )}
+
+                    {/* Card Footer Actions */}
+                    <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
+                      
+                      {/* Reactions (Likes/Dislikes) & Comments */}
+                      {(() => {
+                        const isLiked = scam.reactions && scam.reactions.some(r => r.type === "like");
+                        const isDisliked = scam.reactions && scam.reactions.some(r => r.type === "dislike");
+                        const isCommentsOpen = activeCommentScamId === scam.id;
+                        return (
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                                isLiked ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!isAuthenticated) {
+                                  if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                    router.push("/login");
+                                  }
+                                  return;
+                                }
+                                reactionMutation.mutate({ scamId: scam.id, type: "like" });
+                              }}
+                            >
+                              <ThumbsUp className={`w-3.5 h-3.5 transition-colors ${isLiked ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
+                            </Button>
+                            <span className={`font-bold text-[11px] min-w-[12px] text-center ${isLiked ? 'text-blue-600' : 'text-slate-700'}`}>{scam.upvoteCount}</span>
+
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                                isDisliked ? 'text-red-600 bg-red-50 dark:bg-red-950/20' : ''
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!isAuthenticated) {
+                                  if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                                    router.push("/login");
+                                  }
+                                  return;
+                                }
+                                reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
+                              }}
+                            >
+                              <ThumbsDown className={`w-3.5 h-3.5 transition-colors ${isDisliked ? 'fill-red-600 stroke-red-600 text-red-600' : 'text-slate-500 group-hover:stroke-red-600'}`} />
+                            </Button>
+                            <span className={`text-[11px] min-w-[12px] text-center ${isDisliked ? 'text-red-600 font-bold' : 'text-slate-500'} mr-2`}>{scam.downvoteCount}</span>
+
+                            {/* 댓글 버튼 (싫어요 우측) */}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                                isCommentsOpen ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveCommentScamId(isCommentsOpen ? null : scam.id);
+                              }}
+                            >
+                              <MessageSquare className={`w-3.5 h-3.5 transition-colors ${isCommentsOpen ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
+                            </Button>
+                            <span className={`text-[11px] min-w-[12px] text-center ${isCommentsOpen ? 'text-blue-600 font-bold' : 'text-slate-500'}`}>{scam.commentCount || 0}</span>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Report (Flag) trigger */}
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 rounded-full text-slate-400 hover:text-red-500 hover:bg-slate-100 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveReportScamId(scam.id);
+                          }}
+                        >
+                          <Flag className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Collapsible Discussion Panel */}
+                    {activeCommentScamId === scam.id && (
+                      <div 
+                        className="border-t border-slate-100 dark:border-slate-800 pt-2 transition-all duration-300"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <img 
-                          src={url} 
-                          alt={`scam-attachment-${idx}`} 
-                          className="w-full h-full object-cover" 
+                        <Comments 
+                          targetType="scam_info" 
+                          targetId={scam.id} 
+                          allowAnonymous={true} 
+                          onMutationSuccess={() => {
+                            queryClient.invalidateQueries({ queryKey: ["scams"] });
+                          }}
                         />
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {scam.avoidanceTip && (
-                  <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
-                    <h4 className="font-bold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
-                      {t("common.avoidance_title")}
-                    </h4>
-                    <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
-                  </div>
-                )}
-
-                {/* Card Footer Actions */}
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
-                  
-                  {/* Reactions (Likes/Dislikes) & Comments */}
-                  {(() => {
-                    const isLiked = scam.reactions && scam.reactions.some(r => r.type === "like");
-                    const isDisliked = scam.reactions && scam.reactions.some(r => r.type === "dislike");
-                    const isCommentsOpen = activeCommentScamId === scam.id;
-                    return (
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
-                            isLiked ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isAuthenticated) {
-                              if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                                router.push("/login");
-                              }
-                              return;
-                            }
-                            reactionMutation.mutate({ scamId: scam.id, type: "like" });
-                          }}
-                        >
-                          <ThumbsUp className={`w-3.5 h-3.5 transition-colors ${isLiked ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
-                        </Button>
-                        <span className={`font-bold text-[11px] min-w-[12px] text-center ${isLiked ? 'text-blue-600' : 'text-slate-700'}`}>{scam.upvoteCount}</span>
-
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
-                            isDisliked ? 'text-red-600 bg-red-50 dark:bg-red-950/20' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isAuthenticated) {
-                              if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                                router.push("/login");
-                              }
-                              return;
-                            }
-                            reactionMutation.mutate({ scamId: scam.id, type: "dislike" });
-                          }}
-                        >
-                          <ThumbsDown className={`w-3.5 h-3.5 transition-colors ${isDisliked ? 'fill-red-600 stroke-red-600 text-red-600' : 'text-slate-500 group-hover:stroke-red-600'}`} />
-                        </Button>
-                        <span className={`text-[11px] min-w-[12px] text-center ${isDisliked ? 'text-red-600 font-bold' : 'text-slate-500'} mr-2`}>{scam.downvoteCount}</span>
-
-                        {/* 댓글 버튼 (싫어요 우측) */}
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
-                            isCommentsOpen ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveCommentScamId(isCommentsOpen ? null : scam.id);
-                          }}
-                        >
-                          <MessageSquare className={`w-3.5 h-3.5 transition-colors ${isCommentsOpen ? 'fill-blue-600 stroke-blue-600 text-blue-600' : 'text-slate-500 group-hover:stroke-blue-600'}`} />
-                        </Button>
-                        <span className={`text-[11px] min-w-[12px] text-center ${isCommentsOpen ? 'text-blue-600 font-bold' : 'text-slate-500'}`}>{scam.commentCount || 0}</span>
                       </div>
-                    );
-                  })()}
+                    )}
+                  </CardContent>
 
-                  {/* Report (Flag) trigger */}
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-7 w-7 rounded-full text-slate-400 hover:text-red-500 hover:bg-slate-100 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveReportScamId(scam.id);
-                      }}
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Collapsible Discussion Panel */}
-                {activeCommentScamId === scam.id && (
-                  <div 
-                    className="border-t border-slate-100 dark:border-slate-800 pt-2 transition-all duration-300"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Comments 
-                      targetType="scam_info" 
-                      targetId={scam.id} 
-                      allowAnonymous={true} 
-                      onMutationSuccess={() => {
-                        queryClient.invalidateQueries({ queryKey: ["scams"] });
-                      }}
-                    />
-                  </div>
-                )}
-              </CardContent>
-
-              {/* Flag Dialog */}
-              <ReportDialog
-                isOpen={activeReportScamId === scam.id}
-                onClose={() => setActiveReportScamId(null)}
-                targetType="SCAM_INFO"
-                targetId={scam.id}
-              />
-            </Card>
-          );
-        })}
+                  {/* Flag Dialog */}
+                  <ReportDialog
+                    isOpen={activeReportScamId === scam.id}
+                    onClose={() => setActiveReportScamId(null)}
+                    targetType="SCAM_INFO"
+                    targetId={scam.id}
+                  />
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };

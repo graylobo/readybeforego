@@ -51,23 +51,37 @@ L.Icon.Default.mergeOptions({
 });
 
 // "직방" 스타일의 수량 비례형 원형 뱃지 마커 및 위치 이름 라벨 오버레이 생성
-const createClusterIcon = (count: number, name: string, isSelected: boolean = false) => {
+const createClusterIcon = (
+  count: number,
+  name: string,
+  isSelected: boolean = false,
+  scope?: "spot" | "region" | "city" | "country"
+) => {
   let sizeClass = "w-9 h-9 text-xs";
-  let colorClass = "from-amber-400 to-orange-500";
+  let colorClass = "from-sky-400 to-indigo-650"; // 기본값 (spot: 지점)
   let pulseClass = "";
 
+  // 범위(Scope)별 테마 그라데이션 지정 🎨
+  if (scope === "country") {
+    colorClass = "from-red-500 to-rose-700";
+  } else if (scope === "city") {
+    colorClass = "from-amber-400 to-orange-600";
+  } else if (scope === "region") {
+    colorClass = "from-violet-500 to-fuchsia-700";
+  } else {
+    // spot
+    colorClass = "from-sky-400 to-indigo-600";
+  }
+
   if (count >= 6) {
-    sizeClass = "w-13 h-13 text-sm border-rose-400";
-    colorClass = "from-red-600 to-rose-600";
-    pulseClass = "";
+    sizeClass = "w-13 h-13 text-sm";
   } else if (count >= 3) {
-    sizeClass = "w-11 h-11 text-xs border-orange-300";
-    colorClass = "from-orange-500 to-red-500";
+    sizeClass = "w-11 h-11 text-xs";
   }
 
   // 선택 상태 유무에 따른 보더 두께, 보더 컬러, 스케일 및 그림자 설정 (빨간색 강조)
   const borderStyle = isSelected 
-    ? "border-4 border-red-650 shadow-[0_0_15px_rgba(239,68,68,0.9)] scale-110 z-50" 
+    ? "border-4 border-red-600 shadow-[0_0_15px_rgba(239,68,68,0.9)] scale-110 z-50" 
     : "border-2 border-white shadow-md group-hover:scale-110 group-hover:shadow-lg";
 
   const labelStyle = "bg-slate-900/90 dark:bg-slate-950/90 border-white/10 text-white font-bold";
@@ -134,23 +148,37 @@ function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: numb
 }
 
 // 제보 모드 커서 제어 핸들러 (확대 전: 돋보기+, 확대 완료: 핀 아이콘)
-function MapCursorHandler({ active, needZoom }: { active: boolean; needZoom: boolean }) {
+function MapCursorHandler({ active }: { active: boolean }) {
   const map = useMap();
+
   useEffect(() => {
     const container = map.getContainer();
-    
-    // 기존 커서 클래스 일괄 제거
-    container.classList.remove("cursor-report-mode");
-    container.classList.remove("cursor-zoom-in-mode");
 
-    if (active) {
-      if (needZoom) {
-        container.classList.add("cursor-zoom-in-mode");
-      } else {
-        container.classList.add("cursor-report-mode");
+    const updateCursor = () => {
+      const zoom = map.getZoom();
+      container.classList.remove("cursor-report-mode");
+      container.classList.remove("cursor-zoom-in-mode");
+
+      if (active) {
+        if (zoom < 18) {
+          container.classList.add("cursor-zoom-in-mode");
+        } else {
+          container.classList.add("cursor-report-mode");
+        }
       }
-    }
-  }, [active, needZoom, map]);
+    };
+
+    // 최초 실행 및 이벤트 리스너 등록
+    updateCursor();
+    map.on("zoomend", updateCursor);
+
+    return () => {
+      map.off("zoomend", updateCursor);
+      container.classList.remove("cursor-report-mode");
+      container.classList.remove("cursor-zoom-in-mode");
+    };
+  }, [active, map]);
+
   return null;
 }
 
@@ -214,6 +242,7 @@ export default function ReadyBeforeGoMap() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
   const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
+  const [isLegendOpen, setIsLegendOpen] = useState(true);
   
   // 임시 제보 마커 참조 레퍼런스
   const markerRef = useRef<L.Marker>(null);
@@ -320,8 +349,77 @@ export default function ReadyBeforeGoMap() {
   // 모든 줌 레벨 통합 동적 클러스터러
   const getDynamicClusters = () => {
     const activeRegions = regions.filter((r) => (r.scamCount || 0) > 0);
+
+    // A. 대형 스케일 (zoom <= 5): 국가 단위 강제 그룹화
+    if (currentZoom <= 5) {
+      const countryGroups: Record<string, Region[]> = {};
+      activeRegions.forEach((r) => {
+        const code = r.countryCode || "ETC";
+        if (!countryGroups[code]) countryGroups[code] = [];
+        countryGroups[code].push(r);
+      });
+
+      return Object.entries(countryGroups).map(([code, group]) => {
+        const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
+        const name = getCountryName(code, lang) || code;
+        
+        let lat = group.reduce((sum, r) => sum + r.latitude, 0) / group.length;
+        let lng = group.reduce((sum, r) => sum + r.longitude, 0) / group.length;
+        if (COUNTRY_COORDS[code]) {
+          [lat, lng] = COUNTRY_COORDS[code];
+        }
+
+        return {
+          id: `country-${code}`,
+          name,
+          latitude: lat,
+          longitude: lng,
+          scamCount: totalScamCount,
+          isCluster: true,
+          scope: "country",
+          countryCode: code,
+          regions: group,
+        };
+      });
+    }
+
+    // B. 중형 스케일 (5 < zoom <= 9): 도시 단위 강제 그룹화
+    if (currentZoom <= 9) {
+      const cityGroups: Record<string, Region[]> = {};
+      activeRegions.forEach((r) => {
+        const cid = r.cityId || "ETC";
+        if (!cityGroups[cid]) cityGroups[cid] = [];
+        cityGroups[cid].push(r);
+      });
+
+      return Object.entries(cityGroups).map(([cid, group]) => {
+        const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
+        const representative = group[0];
+        const cityName = representative.cityName || "기타 도시";
+
+        let lat = group.reduce((sum, r) => sum + r.latitude, 0) / group.length;
+        let lng = group.reduce((sum, r) => sum + r.longitude, 0) / group.length;
+        
+        if (cityName && CITY_COORDS[cityName]) {
+          [lat, lng] = CITY_COORDS[cityName];
+        }
+
+        return {
+          id: `city-${cid}`,
+          name: cityName,
+          latitude: lat,
+          longitude: lng,
+          scamCount: totalScamCount,
+          isCluster: true,
+          scope: "city",
+          cityId: cid,
+          regions: group,
+        };
+      });
+    }
+
+    // C. 상세 스케일 (zoom > 9): 임계값 기반 거리 클러스터링
     const threshold = getThresholdForZoom(currentZoom);
-    
     const clusters: any[] = [];
     const visited = new Set<string>();
 
@@ -340,10 +438,9 @@ export default function ReadyBeforeGoMap() {
         const lngDiff = Math.abs(r1.longitude - r2.longitude);
         const isSameCountry = r1.countryCode === r2.countryCode;
 
-        // 좌표가 완전히 동일한 경우(위경도 오차 0)는 줌 레벨에 관계없이 항상 강제 병합하여 하나의 클러스터로 묶어 표현
         const shouldMerge = isSameCountry && (
           (latDiff === 0 && lngDiff === 0) || 
-          (currentZoom < 18 && latDiff < threshold && lngDiff < threshold)
+          (latDiff < threshold && lngDiff < threshold)
         );
 
         if (shouldMerge) {
@@ -360,6 +457,7 @@ export default function ReadyBeforeGoMap() {
           longitude: r1.longitude,
           scamCount: r1.scamCount || 0,
           isCluster: false,
+          scope: r1.hasRegionScope ? "region" : "spot",
           regions: group,
         });
       } else {
@@ -370,23 +468,16 @@ export default function ReadyBeforeGoMap() {
         const sortedGroup = [...group].sort((a, b) => (b.scamCount || 0) - (a.scamCount || 0));
         const representative = sortedGroup[0];
         
-        let displayName = "";
-        if (currentZoom <= 5) {
-          displayName = getCountryName(representative.countryCode, lang) || representative.name;
-        } else if (currentZoom <= 9) {
-          displayName = representative.cityName || representative.name;
-        } else {
-          displayName = representative.name;
-        }
-
+        let displayName = representative.name;
         if (group.length > 1) {
           displayName = `${displayName} 외 ${group.length - 1}`;
         }
 
-        // 클러스터 내의 모든 매장/지역들이 실제로 물리적인 다른 위치에 흩어져 있는지 판단
         const hasMultipleLocations = group.some(
           (r) => r.latitude !== r1.latitude || r.longitude !== r1.longitude
         );
+
+        const hasRegionWarning = group.some((r) => r.hasRegionScope);
 
         clusters.push({
           id: `cluster-${r1.id}`,
@@ -395,6 +486,7 @@ export default function ReadyBeforeGoMap() {
           longitude: sumLng / group.length,
           scamCount: totalScamCount,
           isCluster: true,
+          scope: hasRegionWarning ? "region" : "spot",
           hasMultipleLocations,
           regions: group,
         });
@@ -425,7 +517,6 @@ export default function ReadyBeforeGoMap() {
           setMapZoom(Math.min(currentZoom + 2, 18));
           toast.info("마커가 세분화될 때까지 지도를 확대했습니다! 📍 상세 마커를 선택해 주세요.");
         } else {
-          // 최대 줌 레벨 또는 동일 좌표의 중첩된 장소 클러스터 클릭 시 대표 지역에 추가 제보 연동
           const region = cluster.regions[0];
           const confirmReport = window.confirm(`해당 ${region.name}에 추가로 제보를 등록하시겠습니까?`);
           if (confirmReport) {
@@ -448,17 +539,34 @@ export default function ReadyBeforeGoMap() {
         }
       }
     } else {
-      if (cluster.isCluster) {
-        if (currentZoom < 18 && cluster.hasMultipleLocations) {
-          setMapCenter([cluster.latitude, cluster.longitude]);
-          setMapZoom(Math.min(currentZoom + 2, 18));
+      if (cluster.scope === "country") {
+        setSelectedCountryCode(cluster.countryCode);
+        setSelectedCityId(null);
+        setSelectedRegionId(null);
+        setSelectedRegion(null);
+        setMapCenter([cluster.latitude, cluster.longitude]);
+        setMapZoom(6);
+      } else if (cluster.scope === "city") {
+        setSelectedCityId(cluster.cityId);
+        setSelectedRegionId(null);
+        setSelectedRegion(null);
+        const representative = cluster.regions[0];
+        if (representative && representative.countryCode) {
+          setSelectedCountryCode(representative.countryCode);
+        }
+        setMapCenter([cluster.latitude, cluster.longitude]);
+        setMapZoom(11);
+      } else {
+        if (cluster.isCluster) {
+          if (currentZoom < 18 && cluster.hasMultipleLocations) {
+            setMapCenter([cluster.latitude, cluster.longitude]);
+            setMapZoom(Math.min(currentZoom + 2, 18));
+          } else {
+            handleRegionClick(cluster.regions[0]);
+          }
         } else {
-          // 동일 좌표 내에만 여러 매장명이 존재하는 경우(or 최대 줌인 경우), 
-          // 맵을 더 이상 강제 확대하지 않고 즉시 첫 번째 매장 클릭으로 우측 피드를 띄웁니다!
           handleRegionClick(cluster.regions[0]);
         }
-      } else {
-        handleRegionClick(cluster.regions[0]);
       }
     }
   };
@@ -688,7 +796,7 @@ export default function ReadyBeforeGoMap() {
         />
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
-        <MapCursorHandler active={isReportMode} needZoom={currentZoom < 18} />
+        <MapCursorHandler active={isReportMode} />
         
         <MapEventsHandler 
           onZoomChange={(zoom) => setCurrentZoom(zoom)} 
@@ -770,7 +878,7 @@ export default function ReadyBeforeGoMap() {
             <Marker
               key={cluster.id}
               position={[cluster.latitude, cluster.longitude]}
-              icon={createClusterIcon(cluster.scamCount, cluster.name, isSelected)}
+              icon={createClusterIcon(cluster.scamCount, cluster.name, isSelected, cluster.scope)}
               eventHandlers={{
                 click: () => handleDynamicClusterClick(cluster),
               }}
@@ -821,6 +929,52 @@ export default function ReadyBeforeGoMap() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 범례 플로팅 카드 (Map Legend) 🗺️ */}
+      <div className="absolute bottom-4 right-4 z-[1000] select-none">
+        {isLegendOpen ? (
+          <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3.5 shadow-2xl flex flex-col gap-2.5 w-[160px] animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                제보 범위 범례
+              </span>
+              <button
+                onClick={() => setIsLegendOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs font-bold leading-none p-0.5"
+                title="범례 닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-red-500 to-rose-700 border border-white/20 shrink-0" />
+                <span className="text-xs font-semibold text-slate-200">국가 경보</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 border border-white/20 shrink-0" />
+                <span className="text-xs font-semibold text-slate-200">도시 전체</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-700 border border-white/20 shrink-0" />
+                <span className="text-xs font-semibold text-slate-200">구역 전체</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-sky-400 to-indigo-600 border border-white/20 shrink-0" />
+                <span className="text-xs font-semibold text-slate-200">특정 지점</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setIsLegendOpen(true)}
+            className="w-9 h-9 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 rounded-xl shadow-lg flex items-center justify-center text-slate-200 hover:text-white hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+            title="범례 보기"
+          >
+            🗺️
+          </button>
+        )}
+      </div>
     </div>
   );
 }

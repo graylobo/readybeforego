@@ -10,6 +10,7 @@ export const CreateScamInfoBaseSchema = z.object({
   cityName: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  scope: z.enum(['spot', 'region', 'city', 'country']).optional().default('spot'),
   title: z.string().min(2, '제목은 2자 이상이어야 합니다.').max(100),
   description: z.string().min(10, '설명은 10자 이상이어야 합니다.'),
   avoidanceTip: z.string().max(1000).nullable().optional(),
@@ -20,19 +21,33 @@ export const CreateScamInfoBaseSchema = z.object({
 
 export const CreateScamInfoSchema = CreateScamInfoBaseSchema.refine(
   data => {
-    // 1. 기존 지역 ID가 있으면 통과
-    if (data.regionId) return true;
-    
-    // 2. 기존 지역 ID가 없으면 신규 지역 생성 정보 필요
-    const hasNewRegionBase = !!(data.regionName && data.latitude !== undefined && data.longitude !== undefined);
-    if (!hasNewRegionBase) return false;
-    
-    // 3. 상위 도시 관계 검증: 기존 cityId가 있거나, 신규 cityName과 국가 정보(countryCode 또는 countryName)가 있어야 함.
-    const hasCityRelation = !!(data.cityId || (data.cityName && (data.countryCode || data.countryName)));
-    return hasCityRelation;
+    const scope = data.scope || 'spot';
+
+    // 1. 국가 범위 제보 검증
+    if (scope === 'country') {
+      return !!(data.countryCode || data.countryName);
+    }
+
+    // 2. 도시 범위 제보 검증
+    if (scope === 'city') {
+      return !!(data.cityId || (data.cityName && (data.countryCode || data.countryName)));
+    }
+
+    // 3. 지점/골목 및 구역 전체 범위 제보 검증
+    if (scope === 'spot' || scope === 'region') {
+      if (data.regionId) return true;
+      
+      const hasNewRegionBase = !!(data.regionName && data.latitude !== undefined && data.longitude !== undefined);
+      if (!hasNewRegionBase) return false;
+      
+      const hasCityRelation = !!(data.cityId || (data.cityName && (data.countryCode || data.countryName)));
+      return hasCityRelation;
+    }
+
+    return false;
   },
   {
-    message: '기존 지역 ID가 없으면 새 지역 정보(이름, 도시, 위경도)가 필수입니다.',
+    message: '제보 적용 범위(scope)에 따른 필수 지리 정보가 지정되지 않았습니다.',
     path: ['regionId'],
   }
 );

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."scam_scope" ADD VALUE 'region' BEFORE 'city';

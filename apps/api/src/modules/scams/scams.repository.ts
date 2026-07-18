@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SQL, and, asc, desc, eq, sql, inArray } from 'drizzle-orm';
+import { SQL, and, asc, desc, eq, sql, inArray, or } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -96,8 +96,33 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
+    const region = await db.query.regions.findFirst({
+      where: eq(schema.regions.id, regionId),
+      with: {
+        city: true,
+      },
+    });
+
+    const whereConditions = [
+      and(eq(schema.scamInfos.regionId, regionId), inArray(schema.scamInfos.scope, ['spot', 'region'])),
+    ];
+
+    if (region) {
+      whereConditions.push(
+        and(eq(schema.scamInfos.cityId, region.cityId), eq(schema.scamInfos.scope, 'city'))
+      );
+      if (region.city?.countryCode) {
+        whereConditions.push(
+          and(eq(schema.scamInfos.countryCode, region.city.countryCode), eq(schema.scamInfos.scope, 'country'))
+        );
+      }
+    }
+
     const scams = await db.query.scamInfos.findMany({
-      where: and(eq(schema.scamInfos.regionId, regionId), sql`${schema.scamInfos.deletedAt} is null`),
+      where: and(
+        or(...whereConditions),
+        sql`${schema.scamInfos.deletedAt} is null`
+      ),
       orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
       with: {
         reactions: userId
@@ -124,13 +149,28 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
+    const city = await db.query.cities.findFirst({
+      where: eq(schema.cities.id, cityId),
+    });
+
     const regionIdsSubquery = db.select({ id: schema.regions.id })
       .from(schema.regions)
       .where(eq(schema.regions.cityId, cityId));
 
+    const whereConditions = [
+      and(inArray(schema.scamInfos.regionId, regionIdsSubquery), inArray(schema.scamInfos.scope, ['spot', 'region'])),
+      and(eq(schema.scamInfos.cityId, cityId), eq(schema.scamInfos.scope, 'city')),
+    ];
+
+    if (city?.countryCode) {
+      whereConditions.push(
+        and(eq(schema.scamInfos.countryCode, city.countryCode), eq(schema.scamInfos.scope, 'country'))
+      );
+    }
+
     const scams = await db.query.scamInfos.findMany({
       where: and(
-        inArray(schema.scamInfos.regionId, regionIdsSubquery),
+        or(...whereConditions),
         sql`${schema.scamInfos.deletedAt} is null`
       ),
       orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
@@ -159,14 +199,24 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
+    const cityIdsSubquery = db.select({ id: schema.cities.id })
+      .from(schema.cities)
+      .where(eq(schema.cities.countryCode, countryCode));
+
     const regionIdsSubquery = db.select({ id: schema.regions.id })
       .from(schema.regions)
       .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
       .where(eq(schema.cities.countryCode, countryCode));
 
+    const whereConditions = [
+      and(inArray(schema.scamInfos.regionId, regionIdsSubquery), inArray(schema.scamInfos.scope, ['spot', 'region'])),
+      and(inArray(schema.scamInfos.cityId, cityIdsSubquery), eq(schema.scamInfos.scope, 'city')),
+      and(eq(schema.scamInfos.countryCode, countryCode), eq(schema.scamInfos.scope, 'country')),
+    ];
+
     const scams = await db.query.scamInfos.findMany({
       where: and(
-        inArray(schema.scamInfos.regionId, regionIdsSubquery),
+        or(...whereConditions),
         sql`${schema.scamInfos.deletedAt} is null`
       ),
       orderBy: [desc(schema.scamInfos.upvoteCount), desc(schema.scamInfos.createdAt)],
@@ -310,6 +360,7 @@ export class ScamsRepository {
       cityName: schema.cities.name,
       countryCode: schema.cities.countryCode,
       scamCount: sql<number>`count(${schema.scamInfos.id})::int`,
+      hasRegionScope: sql<boolean>`coalesce(bool_or(${schema.scamInfos.scope} = 'region'), false)`,
     })
     .from(schema.regions)
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
@@ -373,5 +424,19 @@ export class ScamsRepository {
     const db = tx ?? this.db;
     const [result] = await db.insert(schema.cities).values(data).returning();
     return result;
+  }
+
+  async findRegionById(id: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.regions.findFirst({
+      where: eq(schema.regions.id, id),
+    });
+  }
+
+  async findCityById(id: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.cities.findFirst({
+      where: eq(schema.cities.id, id),
+    });
   }
 }

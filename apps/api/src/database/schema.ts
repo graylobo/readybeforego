@@ -8,6 +8,7 @@ export const categoryTypeEnum = pgEnum('category_type', ['system', 'user']); // 
 export const reactionTypeEnum = pgEnum('reaction_type', ['like', 'dislike']);
 export const emoticonStatusEnum = pgEnum('emoticon_status', ['pending', 'approved', 'rejected']);
 export const reportStatusEnum = pgEnum('report_status', ['pending', 'resolved', 'rejected']);
+export const scamScopeEnum = pgEnum('scam_scope', ['spot', 'region', 'city', 'country']);
 
 // Users table
 export const users = pgTable('users', {
@@ -548,15 +549,19 @@ export const regions = pgTable('regions', {
 export const scamInfos = pgTable('scam_infos', {
   id: uuid('id').defaultRandom().primaryKey(),
   regionId: uuid('region_id')
-    .notNull()
     .references(() => regions.id, { onDelete: 'cascade' }),
+  cityId: uuid('city_id')
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  countryCode: text('country_code')
+    .references(() => countries.code, { onDelete: 'cascade' }),
+  scope: scamScopeEnum('scope').default('spot').notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
   avoidanceTip: text('avoidance_tip'),
   scamCategory: text('scam_category').notNull(),
   sourceUrl: text('source_url'),
-  imageUrls: json('image_urls'), // 다중 이미지 URL 저장을 위한 JSON 컬럼 추가
+  imageUrls: json('image_urls'),
   viewCount: integer('view_count').default(0).notNull(),
   upvoteCount: integer('upvote_count').default(0).notNull(),
   downvoteCount: integer('downvote_count').default(0).notNull(),
@@ -565,6 +570,8 @@ export const scamInfos = pgTable('scam_infos', {
   deletedAt: timestamp('deleted_at'),
 }, (table) => ({
   regionIdx: index('scam_infos_region_idx').on(table.regionId),
+  cityIdx: index('scam_infos_city_idx').on(table.cityId),
+  countryIdx: index('scam_infos_country_idx').on(table.countryCode),
   upvoteIdx: index('scam_infos_upvote_idx').on(table.upvoteCount),
   userScaleIdx: index('scam_infos_user_idx').on(table.userId),
 }));
@@ -586,6 +593,7 @@ export const scamInfoReactions = pgTable('scam_info_reactions', {
 // Relations
 export const countriesRelations = relations(countries, ({ many }) => ({
   cities: many(cities),
+  scamInfos: many(scamInfos),
 }));
 
 export const citiesRelations = relations(cities, ({ one, many }) => ({
@@ -594,6 +602,7 @@ export const citiesRelations = relations(cities, ({ one, many }) => ({
     references: [countries.code],
   }),
   regions: many(regions),
+  scamInfos: many(scamInfos),
 }));
 
 export const regionsRelations = relations(regions, ({ one, many }) => ({
@@ -608,6 +617,14 @@ export const scamInfosRelations = relations(scamInfos, ({ one, many }) => ({
   region: one(regions, {
     fields: [scamInfos.regionId],
     references: [regions.id],
+  }),
+  city: one(cities, {
+    fields: [scamInfos.cityId],
+    references: [cities.id],
+  }),
+  country: one(countries, {
+    fields: [scamInfos.countryCode],
+    references: [countries.code],
   }),
   reactions: many(scamInfoReactions),
   user: one(users, {
