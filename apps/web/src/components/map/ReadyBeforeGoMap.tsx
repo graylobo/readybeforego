@@ -802,11 +802,30 @@ export default function ReadyBeforeGoMap() {
         maxBounds={[[-85, -180], [85, 180]]}
         maxBoundsViscosity={1.0}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
-          url={`https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}`}
-          noWrap={true}
-        />
+        {/* 동적 맵 스타일 프로바이더 연동 (Google, Mapbox, OSM) 🎨 */}
+        {(() => {
+          const provider = process.env.NEXT_PUBLIC_MAP_PROVIDER || "GOOGLE";
+          let tileUrl = `https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}`;
+          let attribution = '&copy; <a href="https://maps.google.com">Google Maps</a>';
+
+          if (provider.toUpperCase() === "MAPBOX") {
+            const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+            const style = process.env.NEXT_PUBLIC_MAPBOX_STYLE || "mapbox/streets-v12";
+            tileUrl = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}?access_token=${token}`;
+            attribution = '&copy; <a href="https://www.mapbox.com/">Mapbox</a>';
+          } else if (provider.toUpperCase() === "OSM") {
+            tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+            attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+          }
+
+          return (
+            <TileLayer
+              attribution={attribution}
+              url={tileUrl}
+              noWrap={true}
+            />
+          );
+        })()}
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
         <MapCursorHandler active={isReportMode} />
