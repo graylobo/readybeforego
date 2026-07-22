@@ -3,14 +3,228 @@ import { ScamsRepository } from './scams.repository';
 import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
 import { UploadsService } from '../uploads/uploads.service';
 
+// 1. 프론트엔드 호환용 표준 가상 주소 응답 모델 정의 🗺️
+export interface GeocodeResponse {
+  place_id: string | number;
+  name: string;
+  display_name: string;
+  address: {
+    road?: string;
+    house_number?: string;
+    suburb?: string;
+    city: string;
+    country: string;
+    country_code: string;
+  };
+  lat: string;
+  lon: string;
+}
+
+// 2. 지오코딩 제공자 추상 인터페이스 정의 🌍
+export interface GeocodingProvider {
+  reverseGeocode(lat: number, lng: number): Promise<GeocodeResponse>;
+  searchAddress(query: string): Promise<GeocodeResponse[]>;
+}
+
+// 3. Nominatim(OSM) 지오코딩 제공자 구현 🔴
+export class NominatimProvider implements GeocodingProvider {
+  async reverseGeocode(lat: number, lng: number): Promise<GeocodeResponse> {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&accept-language=ko`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'readybeforego-travel-scam-agent/1.0',
+        'Accept-Language': 'ko'
+      }
+    });
+    if (!response.ok) {
+      throw new Error('OSM Geocoding Error');
+    }
+    const data = await response.json();
+    const addr = data.address || {};
+    const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
+
+    // 한국은 시/군 레벨, 해외는 province/state 레벨을 대표 도시로 적용 🛡️
+    const city = countryCodeVal === "KR"
+      ? (addr.city || addr.county || addr.municipality || addr.province || "기타 도시")
+      : (addr.province || addr.state || addr.city || "기타 도시");
+
+    return {
+      place_id: data.place_id,
+      name: data.name || "",
+      display_name: data.display_name || "",
+      address: {
+        road: addr.road,
+        house_number: addr.house_number,
+        suburb: addr.suburb,
+        city: city,
+        country: addr.country || "기타 국가",
+        country_code: (addr.country_code || "etc").toLowerCase()
+      },
+      lat: String(data.lat || lat),
+      lon: String(data.lon || lng)
+    };
+  }
+
+  async searchAddress(query: string): Promise<GeocodeResponse[]> {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=5&accept-language=ko`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'readybeforego-travel-scam-agent/1.0',
+        'Accept-Language': 'ko'
+      }
+    });
+    if (!response.ok) {
+      throw new Error('OSM Search Error');
+    }
+    const results = await response.json();
+    return results.map((data: any) => {
+      const addr = data.address || {};
+      const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
+      const city = countryCodeVal === "KR"
+        ? (addr.city || addr.county || addr.municipality || addr.province || "기타 도시")
+        : (addr.province || addr.state || addr.city || "기타 도시");
+
+      return {
+        place_id: data.place_id,
+        name: data.name || "",
+        display_name: data.display_name || "",
+        address: {
+          road: addr.road,
+          house_number: addr.house_number,
+          suburb: addr.suburb,
+          city: city,
+          country: addr.country || "기타 국가",
+          country_code: (addr.country_code || "etc").toLowerCase()
+        },
+        lat: String(data.lat),
+        lon: String(data.lon)
+      };
+    });
+  }
+}
+
+// 4. Mapbox 지오코딩 제공자 구현 (추후 활성화용 뼈대 및 가동 준비 완료 🟢)
+export class MapboxProvider implements GeocodingProvider {
+  private readonly apiKey = process.env.MAPBOX_API_KEY || '';
+
+  async reverseGeocode(lat: number, lng: number): Promise<GeocodeResponse> {
+    if (!this.apiKey) {
+      console.warn("Mapbox API Key가 설정되지 않았습니다. Nominatim으로 폴백 작동합니다.");
+      return new NominatimProvider().reverseGeocode(lat, lng);
+    }
+    
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${this.apiKey}&language=ko`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Mapbox Geocoding Error');
+    }
+    const data = await response.json();
+    const features = data.features || [];
+    if (features.length === 0) {
+      return {
+        place_id: "mapbox_empty",
+        name: "",
+        display_name: "주소를 찾을 수 없습니다.",
+        address: { city: "기타 도시", country: "기타 국가", country_code: "etc" },
+        lat: String(lat),
+        lon: String(lng)
+      };
+    }
+
+    const mainFeature = features[0];
+    const context = mainFeature.context || [];
+    const countryObj = context.find((c: any) => c.id.startsWith('country'));
+    const regionObj = context.find((c: any) => c.id.startsWith('region'));
+    const placeObj = context.find((c: any) => c.id.startsWith('place'));
+    const localityObj = context.find((c: any) => c.id.startsWith('locality'));
+
+    const country = countryObj?.text || "기타 국가";
+    const countryCode = (countryObj?.short_code || "etc").toLowerCase();
+    
+    // 한국은 시/군 레벨, 해외는 province 레벨 적용
+    const city = countryCode.toUpperCase() === "KR"
+      ? (placeObj?.text || regionObj?.text || "기타 도시")
+      : (regionObj?.text || placeObj?.text || "기타 도시");
+
+    return {
+      place_id: mainFeature.id,
+      name: mainFeature.text || "",
+      display_name: mainFeature.place_name || "",
+      address: {
+        road: mainFeature.properties?.address || "",
+        house_number: mainFeature.address || "",
+        suburb: localityObj?.text || "",
+        city: city,
+        country: country,
+        country_code: countryCode
+      },
+      lat: String(mainFeature.center?.[1] || lat),
+      lon: String(mainFeature.center?.[0] || lng)
+    };
+  }
+
+  async searchAddress(query: string): Promise<GeocodeResponse[]> {
+    if (!this.apiKey) {
+      return new NominatimProvider().searchAddress(query);
+    }
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${this.apiKey}&language=ko&limit=5`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Mapbox Search Error');
+    }
+    const data = await response.json();
+    const features = data.features || [];
+
+    return features.map((feature: any) => {
+      const context = feature.context || [];
+      const countryObj = context.find((c: any) => c.id.startsWith('country'));
+      const regionObj = context.find((c: any) => c.id.startsWith('region'));
+      const placeObj = context.find((c: any) => c.id.startsWith('place'));
+      const localityObj = context.find((c: any) => c.id.startsWith('locality'));
+
+      const country = countryObj?.text || "기타 국가";
+      const countryCode = (countryObj?.short_code || "etc").toLowerCase();
+      
+      const city = countryCode.toUpperCase() === "KR"
+        ? (placeObj?.text || regionObj?.text || "기타 도시")
+        : (regionObj?.text || placeObj?.text || "기타 도시");
+
+      return {
+        place_id: feature.id,
+        name: feature.text || "",
+        display_name: feature.place_name || "",
+        address: {
+          road: feature.properties?.address || "",
+          house_number: feature.address || "",
+          suburb: localityObj?.text || "",
+          city: city,
+          country: country,
+          country_code: countryCode
+        },
+        lat: String(feature.center?.[1] || 0),
+        lon: String(feature.center?.[0] || 0)
+      };
+    });
+  }
+}
+
 @Injectable()
 export class ScamsService {
   private readonly logger = new Logger(ScamsService.name);
+  private readonly geocodingProvider: GeocodingProvider;
 
   constructor(
     private readonly scamsRepository: ScamsRepository,
     private readonly uploadsService: UploadsService,
-  ) {}
+  ) {
+    // 💡 환경변수 'GEOCODING_PROVIDER' 변경만으로 1초 만에 맵 모듈을 스위칭 가능!
+    const providerType = process.env.GEOCODING_PROVIDER || 'NOMINATIM';
+    if (providerType.toUpperCase() === 'MAPBOX') {
+      this.geocodingProvider = new MapboxProvider();
+    } else {
+      this.geocodingProvider = new NominatimProvider();
+    }
+  }
 
   async create(createDto: CreateScamInfoZodDto, userId?: string) {
     return this.scamsRepository.transaction(async (tx) => {
@@ -54,7 +268,7 @@ export class ScamsService {
               const addr = geoData.address;
               verifiedCountryName = addr.country || '기타 국가';
               verifiedCountryCode = (addr.country_code || 'ETC').toUpperCase();
-              verifiedCityName = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || '기타 도시';
+              verifiedCityName = addr.city; // 👈 정제 매핑된 어댑터 필드를 다이렉트로 매핑!
             }
           } catch (e) {
             // 외부 지오코딩 실패 시 안전한 공통 기타 명칭으로 폴백
@@ -324,40 +538,27 @@ export class ScamsService {
     return this.scamsRepository.findAllRegions();
   }
 
-  async reverseGeocode(lat: number, lng: number) {
+  async reverseGeocode(lat: number, lng: number): Promise<GeocodeResponse> {
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&accept-language=ko`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'readybeforego-travel-scam-agent/1.0',
-          'Accept-Language': 'ko'
-        }
-      });
-      if (!response.ok) {
-        throw new Error('OSM Geocoding Error');
-      }
-      return await response.json();
+      return await this.geocodingProvider.reverseGeocode(lat, lng);
     } catch (error) {
-      console.error('Nominatim bypass error:', error);
-      return { address: {} };
+      this.logger.error('Geocoding Error:', error);
+      return {
+        place_id: 'error_fallback',
+        name: '',
+        display_name: '위치 정보 획득 실패',
+        address: { city: '기타 도시', country: '기타 국가', country_code: 'etc' },
+        lat: String(lat),
+        lon: String(lng)
+      };
     }
   }
 
-  async searchAddress(query: string) {
+  async searchAddress(query: string): Promise<GeocodeResponse[]> {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&accept-language=ko`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'readybeforego-travel-scam-agent/1.0',
-          'Accept-Language': 'ko'
-        }
-      });
-      if (!response.ok) {
-        throw new Error('OSM Search Error');
-      }
-      return await response.json();
+      return await this.geocodingProvider.searchAddress(query);
     } catch (error) {
-      console.error('Nominatim search bypass error:', error);
+      this.logger.error('Search Geocoding Error:', error);
       return [];
     }
   }
