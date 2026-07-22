@@ -554,7 +554,7 @@ export default function Home() {
   const renderFeedContent = () => {
     const chips = [
       { value: "all", label: "전체" },
-      { value: "spot", label: "📍 특정 지점" },
+      { value: "spot", label: "📍 특정 위치" },
       { value: "region", label: "🗺️ 구역 전체" },
       { value: "city", label: "🏙️ 도시 전체" },
       { value: "country", label: "🇹🇭 국가 전체" },
@@ -653,14 +653,18 @@ export default function Home() {
                         {/* 적용 범위 배지 뱃지 🏷️ */}
                         {scam.scope === "country" && (
                           <Badge variant="outline" className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold py-0.5 px-2 select-none">
-                            🇹🇭 국가 경보
+                            {scam.countryCode ? `🇹🇭 ${getCountryName(scam.countryCode, lang)} 전체` : "🇹🇭 국가 경보"}
                           </Badge>
                         )}
-                        {scam.scope === "city" && (
-                          <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none">
-                            🏙️ 도시 전체
-                          </Badge>
-                        )}
+                        {scam.scope === "city" && (() => {
+                          const matchedRegion = allRegions.find(r => r.cityId === scam.cityId);
+                          const cityName = matchedRegion?.cityName || "도시";
+                          return (
+                            <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                              🏙️ {cityName} 전체
+                            </Badge>
+                          );
+                        })()}
                         {scam.scope === "region" && (
                           <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none">
                             🗺️ 구역 전체
@@ -668,16 +672,17 @@ export default function Home() {
                         )}
                         {scam.scope === "spot" && (
                           <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none">
-                            📍 특정 지점
+                            📍 특정 위치
                           </Badge>
                         )}
 
+                        {/* 위치 정보(Breadcrumb) 형식의 보조 뱃지 항상 표시 🗺️ */}
                         {(() => {
                           const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
-                          if (selectedRegionId && sharingRegions.length > 1 && currentScamRegion) {
+                          if (currentScamRegion) {
                             return (
-                              <Badge variant="outline" className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-extrabold py-0.5 px-2">
-                                📍 {currentScamRegion.name}
+                              <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold py-0.5 px-2">
+                                📍 {currentScamRegion.cityName} · {currentScamRegion.name}
                               </Badge>
                             );
                           }

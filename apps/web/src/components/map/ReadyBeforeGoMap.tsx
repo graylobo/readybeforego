@@ -840,11 +840,27 @@ export default function ReadyBeforeGoMap() {
                     <p className="text-[10.5px] font-bold leading-relaxed text-slate-200">
                       지도 위 선택하신 이 위치에 피해 사례를 제보하시겠습니까?
                     </p>
-                    {geoData && (
-                      <p className="text-[9.5px] font-medium text-slate-300 bg-slate-950/60 border border-slate-800/80 p-1.5 rounded-md mt-1 truncate block w-full">
-                        {geoData.name || geoData.display_name.split(",")[0]}
-                      </p>
-                    )}
+                    {geoData && (() => {
+                      const getDisplayName = () => {
+                        if (geoData.name && geoData.name.trim() !== "") {
+                          return geoData.name;
+                        }
+                        const addr = geoData.address || {};
+                        const road = addr.road || addr.street || "";
+                        const houseNumber = addr.house_number || "";
+                        if (road) {
+                          return houseNumber ? `${road} ${houseNumber}` : road;
+                        }
+                        const parts = geoData.display_name.split(",").map(p => p.trim());
+                        const validPart = parts.find(p => p && !/^\d+$/.test(p));
+                        return validPart || parts[0] || "지정된 위치";
+                      };
+                      return (
+                        <p className="text-[9.5px] font-medium text-slate-300 bg-slate-950/60 border border-slate-800/80 p-1.5 rounded-md mt-1 truncate block w-full">
+                          {getDisplayName()}
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex gap-1.5 pt-1 w-full flex-shrink-0">
                     <button
@@ -964,7 +980,7 @@ export default function ReadyBeforeGoMap() {
           <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3.5 shadow-2xl flex flex-col gap-2.5 w-[160px] animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                제보 범위 범례
+                경고 범위 범례
               </span>
               <button
                 onClick={() => setIsLegendOpen(false)}
@@ -977,19 +993,19 @@ export default function ReadyBeforeGoMap() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-red-500 to-rose-700 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">국가 경보</span>
+                <span className="text-xs font-semibold text-slate-200">국가</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">도시 전체</span>
+                <span className="text-xs font-semibold text-slate-200">도시</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3.5 h-3.5 rounded bg-gradient-to-br from-violet-500 to-fuchsia-700 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">구역 전체</span>
+                <span className="text-xs font-semibold text-slate-200">구역</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-sky-400 to-indigo-600 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">특정 지점</span>
+                <span className="text-xs font-semibold text-slate-200">특정 위치</span>
               </div>
             </div>
           </div>

@@ -207,33 +207,26 @@ export function ScamReportModal() {
           };
 
           // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
-          const landmark = addr.amenity || addr.tourism || addr.historic || addr.attraction || addr.place || addr.religion || addr.shop || addr.building || "";
-          
-          if (landmark && !isBroadArea(landmark)) {
-            setRegionName(landmark);
-          } else {
-            // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출
-            let fallbackName = "";
-            if (geoData.name) {
-              fallbackName = geoData.name;
-            } else if (geoData.display_name) {
-              const parts = geoData.display_name.split(",");
-              if (parts.length > 0) {
-                fallbackName = parts[0].trim();
-              }
+           // 2. 세부 장소명(Region Name) 지능형 추출 🗺️
+          const getRegionDisplayName = () => {
+            if (geoData.name && geoData.name.trim() !== "") {
+              return geoData.name;
             }
+            const road = addr.road || addr.street || "";
+            const houseNumber = addr.house_number || "";
+            if (road) {
+              return houseNumber ? `${road} ${houseNumber}` : road;
+            }
+            const parts = (geoData.display_name || "").split(",").map(p => p.trim());
+            const validPart = parts.find(p => p && !/^\d+$/.test(p));
+            return validPart || parts[0] || "";
+          };
 
-            if (fallbackName && !isBroadArea(fallbackName)) {
-              setRegionName(fallbackName);
-            } else {
-              // 4. 3순위 (동/리/도로명 폴백)
-              const subLandmark = addr.neighbourhood || addr.suburb || addr.road || "";
-              if (subLandmark && !isBroadArea(subLandmark)) {
-                setRegionName(subLandmark);
-              } else {
-                setRegionName("");
-              }
-            }
+          const calculatedRegionName = getRegionDisplayName();
+          if (calculatedRegionName && !isBroadArea(calculatedRegionName)) {
+            setRegionName(calculatedRegionName);
+          } else {
+            setRegionName("");
           }
 
           setDetectedCountryName(country);

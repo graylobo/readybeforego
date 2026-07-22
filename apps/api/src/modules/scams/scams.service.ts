@@ -326,7 +326,7 @@ export class ScamsService {
 
   async reverseGeocode(lat: number, lng: number) {
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&accept-language=ko`;
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&accept-language=ko`;
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'readybeforego-travel-scam-agent/1.0',
