@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
-import L from "leaflet";
-import { useScamMapStore } from "@/lib/stores/scam-map.store";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "@/hooks/use-translation";
 import { Region, scamsApi } from "@/lib/api/scams";
-import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
-import { Compass, Loader2, Locate, Search, MapPin } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Loader2, Locate, MapPin, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { toast } from "sonner";
 
 // Webpack marker-icon path fixes for Next.js bundle
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -60,6 +60,7 @@ const createClusterIcon = (
   let sizeClass = "w-9 h-9 text-xs";
   let colorClass = "from-sky-400 to-indigo-650"; // 기본값 (spot: 지점)
   let pulseClass = "";
+  let shapeClass = "rounded-full"; // 기본 원형
 
   // 범위(Scope)별 테마 그라데이션 지정 🎨
   if (scope === "country") {
@@ -68,6 +69,7 @@ const createClusterIcon = (
     colorClass = "from-amber-400 to-orange-600";
   } else if (scope === "region") {
     colorClass = "from-violet-500 to-fuchsia-700";
+    shapeClass = "rounded-xl"; // 구역전체는 둥근 사각형으로 차별화 🗺️
   } else {
     // spot
     colorClass = "from-sky-400 to-indigo-600";
@@ -85,15 +87,16 @@ const createClusterIcon = (
     : "border-2 border-white shadow-md group-hover:scale-110 group-hover:shadow-lg";
 
   const labelStyle = "bg-slate-900/90 dark:bg-slate-950/90 border-white/10 text-white font-bold";
+  const displayName = name;
 
   return new L.DivIcon({
     html: `
-      <div class="flex flex-col items-center justify-center select-none group cursor-pointer relative">
-        <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br transition-all duration-200 ${colorClass} ${sizeClass} ${pulseClass} ${borderStyle}">
+      <div class="relative flex items-center justify-center w-[60px] h-[60px] select-none group cursor-pointer">
+        <div class="flex items-center justify-center ${shapeClass} text-white font-black bg-gradient-to-br transition-all duration-200 ${colorClass} ${sizeClass} ${pulseClass} ${borderStyle} z-10">
           ${count}
         </div>
-        <div class="mt-1 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle}">
-          ${name}
+        <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
+          ${displayName}
         </div>
       </div>
     `,
@@ -215,6 +218,7 @@ export default function ReadyBeforeGoMap() {
     selectedCountryCode,
     selectedCityId,
     selectedRegionId,
+    selectedRegion,
     setSelectedRegionId,
     setSelectedRegion,
     setSelectedCityId,
@@ -871,6 +875,21 @@ export default function ReadyBeforeGoMap() {
           <Marker position={userLocation} icon={createUserLocationIcon()} />
         )}
 
+        {/* 구역/거리전체(region)인 경우 지도 상에 반투명 원형 범위(Circle Overlay) 렌더링 🗺️ */}
+        {selectedRegionId && selectedRegion && selectedRegion.hasRegionScope && (
+          <Circle
+            center={[selectedRegion.latitude, selectedRegion.longitude]}
+            radius={250} // 250미터 반경
+            pathOptions={{
+              fillColor: "#a855f7", // violet-500
+              fillOpacity: 0.15,
+              color: "#d946ef", // fuchsia-500
+              weight: 1.5,
+              dashArray: "4, 6",
+            }}
+          />
+        )}
+
         {/* 동적 통합 클러스터 렌더링 */}
         {getDynamicClusters().map((cluster) => {
           const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
@@ -956,7 +975,7 @@ export default function ReadyBeforeGoMap() {
                 <span className="text-xs font-semibold text-slate-200">도시 전체</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-700 border border-white/20 shrink-0" />
+                <div className="w-3.5 h-3.5 rounded bg-gradient-to-br from-violet-500 to-fuchsia-700 border border-white/20 shrink-0" />
                 <span className="text-xs font-semibold text-slate-200">구역 전체</span>
               </div>
               <div className="flex items-center gap-2">
