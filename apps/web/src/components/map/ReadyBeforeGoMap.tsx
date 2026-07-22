@@ -599,11 +599,12 @@ export default function ReadyBeforeGoMap() {
 
       scamsApi.reverseGeocode(lat, lng)
         .then((data: any) => {
-          if (data && data.address && Object.keys(data.address).length > 0) {
+          const actualData = data?.data || data;
+          if (actualData && actualData.address && Object.keys(actualData.address).length > 0) {
             // 성공 시 스토어 데이터 바인딩 후 지도 컨펌 팝업 기동
             setReportType("new");
             setReportCoords([lat, lng]);
-            setGeoData(data);
+            setGeoData(actualData);
             setReportConfirmModalOpen(true);
           } else {
             // 위치 정보 획득 실패 시, 임시 좌표 얹고 주소 수동 검색 확인 모달 기동
@@ -870,8 +871,8 @@ export default function ReadyBeforeGoMap() {
                         if (road) {
                           return houseNumber ? `${road} ${houseNumber}` : road;
                         }
-                        const parts = geoData.display_name.split(",").map(p => p.trim());
-                        const validPart = parts.find(p => p && !/^\d+$/.test(p));
+                        const parts = geoData.display_name.split(",").map((p: string) => p.trim());
+                        const validPart = parts.find((p: string) => p && !/^\d+$/.test(p));
                         return validPart || parts[0] || "지정된 위치";
                       };
                       return (

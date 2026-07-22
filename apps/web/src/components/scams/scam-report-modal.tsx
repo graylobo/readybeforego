@@ -179,10 +179,13 @@ export function ScamReportModal() {
         setRegionId("");
         setIsLoadingGeo(true);
         try {
-          const addr = geoData.address || {};
+          const targetGeo = geoData?.data || geoData || {};
+          const addr = targetGeo.address || {};
           const country = addr.country || "기타 국가";
           const countryCodeVal = (addr.country_code || "ETC").toUpperCase();
-          const city = addr.city || addr.province || addr.state || addr.region || addr.town || addr.village || addr.city_district || addr.state_district || addr.county || "기타 도시";
+
+          // 표준 지오코딩 행정구역 우선순위에 따라 도시명(city) 추출 🏙️
+          const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.province || addr.state || "기타 도시";
 
           // 1. 광역/기초 자치단체 필터 함수 정의
           const isBroadArea = (name: string) => {
@@ -206,19 +209,18 @@ export function ScamReportModal() {
             return isGenericName || isDistrictOrCounty;
           };
 
-          // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
-           // 2. 세부 장소명(Region Name) 지능형 추출 🗺️
+          // 2. 세부 장소명(Region Name) 지능형 추출 🗺️
           const getRegionDisplayName = () => {
-            if (geoData.name && geoData.name.trim() !== "") {
-              return geoData.name;
+            if (targetGeo.name && targetGeo.name.trim() !== "") {
+              return targetGeo.name;
             }
             const road = addr.road || addr.street || "";
             const houseNumber = addr.house_number || "";
             if (road) {
               return houseNumber ? `${road} ${houseNumber}` : road;
             }
-            const parts = (geoData.display_name || "").split(",").map(p => p.trim());
-            const validPart = parts.find(p => p && !/^\d+$/.test(p));
+            const parts = (targetGeo.display_name || "").split(",").map((p: string) => p.trim());
+            const validPart = parts.find((p: string) => p && !/^\d+$/.test(p));
             return validPart || parts[0] || "";
           };
 
@@ -588,28 +590,25 @@ export function ScamReportModal() {
           </div>
 
           {(() => {
-            const matchedCountry = countries.find((c) => c.code === detectedCountryCode);
+            // geoData가 전달되었을 때 렌더링 시점에 즉시 동기 추출하는 지오코딩 기본값 ⚡
+            const rawGeo = geoData?.data || geoData || {};
+            const rawAddr = rawGeo.address || {};
+            const directCountryName = rawAddr.country || detectedCountryName || "";
+            const directCountryCode = (rawAddr.country_code || detectedCountryCode || "ETC").toUpperCase();
+            const directCityName = rawAddr.city || rawAddr.town || rawAddr.village || rawAddr.municipality || rawAddr.county || rawAddr.province || rawAddr.state || detectedCityName || "";
+
+            const matchedCountry = countries.find((c) => c.code === (countryCode || directCountryCode));
             const matchedCity = cities.find((c) => c.id === cityId);
             
-            // 지오코딩이 무사히 성공하여 유효한 위치 정보가 식별되었는가?
-            const isGeoSuccess = 
-              !!detectedCountryCode && 
-              detectedCountryCode !== "ETC" && 
-              !!detectedCityName && 
-              detectedCityName !== "기타 도시" &&
-              detectedCityName !== "기타 지역";
-
             const displayCountryText = matchedCountry
               ? getCountryName(matchedCountry.code, lang)
-              : detectedCountryName 
-                ? detectedCountryName 
-                : "위치 정보 없음";
+              : directCountryName || "위치 정보 없음";
 
             const displayCityText = matchedCity
               ? matchedCity.name
-              : detectedCityName
-                ? detectedCityName
-                : "위치 정보 없음";
+              : directCityName || "위치 정보 없음";
+
+            const isGeoSuccess = !!displayCountryText && displayCountryText !== "위치 정보 없음" && !!displayCityText && displayCityText !== "위치 정보 없음";
 
             return (
               <div className={scope === "country" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
@@ -632,6 +631,10 @@ export function ScamReportModal() {
                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                            위치 감지 중...
                          </span>
+                      ) : (reportType === "new" && directCountryName) || reportType === "existing" || isGeoSuccess ? (
+                        <span className="text-slate-900 dark:text-slate-100 font-medium truncate">
+                          {displayCountryText}
+                        </span>
                       ) : (
                         <SelectValue placeholder={t("report_modal.country_select")} />
                       )}
@@ -669,6 +672,10 @@ export function ScamReportModal() {
                           <span className="flex items-center gap-1 text-muted-foreground">
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             도시 감지 중...
+                          </span>
+                        ) : (reportType === "new" && directCityName) || reportType === "existing" || isGeoSuccess ? (
+                          <span className="text-slate-900 dark:text-slate-100 font-medium truncate">
+                            {displayCityText}
                           </span>
                         ) : (
                           <SelectValue placeholder={t("report_modal.city_select")} />
