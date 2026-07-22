@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useTranslation } from "@/hooks/use-translation";
@@ -23,6 +23,31 @@ const CATEGORY_ITEMS = [
   { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
   { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
 ];
+
+interface ImagePreviewItemProps {
+  url: string;
+  index: number;
+  onRemove: (index: number) => void;
+  disabled: boolean;
+}
+
+const ImagePreviewItem = memo(({ url, index, onRemove, disabled }: ImagePreviewItemProps) => {
+  return (
+    <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-border group">
+      <img src={url} alt="preview" className="w-full h-full object-cover" />
+      <button
+        type="button"
+        onClick={() => onRemove(index)}
+        className="absolute top-1 right-1 w-4.5 h-4.5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        disabled={disabled}
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+});
+
+ImagePreviewItem.displayName = "ImagePreviewItem";
 
 export function ScamReportModal() {
   const queryClient = useQueryClient();
@@ -123,20 +148,35 @@ export function ScamReportModal() {
       setErrors({});
       setScope("spot");
 
-      if (reportType === "existing" && selectedRegionId) {
-        setRegionId(selectedRegionId);
-        if (selectedRegion) {
-          if (selectedRegion.countryCode) setCountryCode(selectedRegion.countryCode);
-          if (selectedRegion.cityId) setCityId(selectedRegion.cityId);
+      // 단일 제어 흐름으로 전면 개편하여 상태 경합/덮어쓰기 버그 원천 봉쇄 🛡️
+      if (reportType === "existing") {
+        // 케이스 1: 기존 등록 장소에 추가 제보
+        setRegionId(selectedRegionId || "");
+        
+        if (selectedRegionId && selectedRegion) {
+          if (selectedRegion.countryCode) {
+            setCountryCode(selectedRegion.countryCode);
+            setDetectedCountryCode(selectedRegion.countryCode);
+            setDetectedCountryName(getCountryName(selectedRegion.countryCode, lang) || "");
+          }
+          if (selectedRegion.cityId) {
+            setCityId(selectedRegion.cityId);
+          }
+          if (selectedRegion.cityName) {
+            setDetectedCityName(selectedRegion.cityName);
+          }
+        } else {
+          setCountryCode(selectedCountryCode || "");
+          setCityId(selectedCityId || "");
+          setDetectedCountryName("");
+          setDetectedCountryCode("");
+          setDetectedCityName("");
         }
-      } else {
+        setIsLoadingGeo(false);
+
+      } else if (reportType === "new" && geoData) {
+        // 케이스 2: 신규 핀 제보이고 역지오코딩 정보가 있는 경우
         setRegionId("");
-        setCountryCode("");
-        setCityId("");
-      }
-      
-      // A. 신규 핀 제보인 경우에만 cached geoData 파싱
-      if (reportType === "new" && geoData) {
         setIsLoadingGeo(true);
         try {
           const addr = geoData.address || {};
@@ -169,11 +209,10 @@ export function ScamReportModal() {
           // 2. 1순위: address 내부의 구체적인 지상 지물/랜드마크 태그 추출
           const landmark = addr.amenity || addr.tourism || addr.historic || addr.attraction || addr.place || addr.religion || addr.shop || addr.building || "";
           
-          // 만약 1순위 지물이 광범위 행정구역이 아니라면 바로 채택!
           if (landmark && !isBroadArea(landmark)) {
             setRegionName(landmark);
           } else {
-            // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출 (기장읍, 용호동, 시랑리 등)
+            // 3. 2순위 (폴백): display_name의 첫 토큰 또는 data.name 추출
             let fallbackName = "";
             if (geoData.name) {
               fallbackName = geoData.name;
@@ -184,11 +223,10 @@ export function ScamReportModal() {
               }
             }
 
-            // 2순위 지물이 광범위 행정구역이 아니라면 채택!
             if (fallbackName && !isBroadArea(fallbackName)) {
               setRegionName(fallbackName);
             } else {
-              // 4. 3순위 (동/리/도로명 폴백): address 내부의 상세 세부 지명 추출 (neighbourhood, suburb, road 등)
+              // 4. 3순위 (동/리/도로명 폴백)
               const subLandmark = addr.neighbourhood || addr.suburb || addr.road || "";
               if (subLandmark && !isBroadArea(subLandmark)) {
                 setRegionName(subLandmark);
@@ -233,25 +271,32 @@ export function ScamReportModal() {
         } finally {
           setIsLoadingGeo(false);
         }
-      } else if (reportType === "new") {
-        // 기존 장소에서 신규 등록으로 동적 전환 시 기존 프리필 국가/도시 보존
-        setCountryCode((prev) => prev || "");
-        setCityId((prev) => prev || "");
-        setDetectedCountryName("");
-        setDetectedCountryCode("");
-        setDetectedCityName("");
-        setIsLoadingGeo(false);
+
       } else {
-        // B. 기존 장소 목록 제보인 경우: 현재 맵 및 스토어에 바인딩된 국가/도시를 프리필하여 세팅
-        setCountryCode(selectedCountryCode || "");
-        setCityId(selectedCityId || "");
-        setDetectedCountryName("");
-        setDetectedCountryCode("");
-        setDetectedCityName("");
+        // 케이스 3: reportType === "new" 인데 geoData가 없는 경우 (탭 동적 전환 포함)
+        setRegionId("");
+        
+        // 기존 프리필 국가/도시 보존 및 감지 데이터 매핑
+        setCountryCode((prev) => prev || selectedCountryCode || "");
+        setCityId((prev) => prev || selectedCityId || "");
+        
+        if (selectedRegion) {
+          if (selectedRegion.countryCode) {
+            setDetectedCountryCode(selectedRegion.countryCode);
+            setDetectedCountryName(getCountryName(selectedRegion.countryCode, lang) || "");
+          }
+          if (selectedRegion.cityName) {
+            setDetectedCityName(selectedRegion.cityName);
+          }
+        } else {
+          setDetectedCountryName("");
+          setDetectedCountryCode("");
+          setDetectedCityName("");
+        }
         setIsLoadingGeo(false);
       }
     }
-  }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries, geoData]);
+  }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries, geoData, selectedRegion, lang]);
 
   useEffect(() => {
     return () => {
@@ -322,11 +367,13 @@ export function ScamReportModal() {
     }
   };
 
-  const removeImage = (index: number) => {
+  const removeImage = useCallback((index: number) => {
     setImageFiles((prev) => prev.filter((_, i) => i !== index));
-    URL.revokeObjectURL(imagePreviews[index]);
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
+    setImagePreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -396,13 +443,16 @@ export function ScamReportModal() {
       return;
     }
 
-    setUploading(true);
+    let urls: string[] = [];
     try {
-      // 선택 시 미리 압축해 둔 파일 리스트를 병렬(Promise.all) 및 compress: false로 빠르게 업로드 ⚡
-      const uploadPromises = imageFiles.map((file) =>
-        uploadsApi.uploadImage(file, { compress: false, folder: "scams" })
-      );
-      const urls = await Promise.all(uploadPromises);
+      if (imageFiles.length > 0) {
+        setUploading(true);
+        // 선택 시 미리 압축해 둔 파일 리스트를 병렬(Promise.all) 및 compress: false로 빠르게 업로드 ⚡
+        const uploadPromises = imageFiles.map((file) =>
+          uploadsApi.uploadImage(file, { compress: false, folder: "scams" })
+        );
+        urls = await Promise.all(uploadPromises);
+      }
 
       if (reportType === "new" && reportCoords) {
         createMutation.mutate({
@@ -557,15 +607,15 @@ export function ScamReportModal() {
               detectedCityName !== "기타 지역";
 
             const displayCountryText = matchedCountry
-              ? `${getCountryName(matchedCountry.code, lang)} (자동 감지)`
+              ? getCountryName(matchedCountry.code, lang)
               : detectedCountryName 
-                ? `${detectedCountryName} (자동 감지)` 
+                ? detectedCountryName 
                 : "위치 정보 없음";
 
             const displayCityText = matchedCity
-              ? `${matchedCity.name} (자동 감지)`
+              ? matchedCity.name
               : detectedCityName
-                ? `${detectedCityName} (자동 감지)`
+                ? detectedCityName
                 : "위치 정보 없음";
 
             return (
@@ -574,46 +624,38 @@ export function ScamReportModal() {
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {t("report_modal.country")}
                   </Label>
-                  {reportType === "new" && isGeoSuccess ? (
-                    <Input
-                      value={displayCountryText}
-                      disabled
-                      className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
-                    />
-                  ) : (
-                    <Select 
-                      value={countryCode} 
-                      onValueChange={(val) => { 
-                        setCountryCode(val); 
-                        setCityId(""); 
-                        if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
-                      }} 
-                      disabled={uploading || isLoadingGeo || reportType === "existing"}
-                    >
-                      <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                        {isLoadingGeo ? (
-                           <span className="flex items-center gap-1 text-muted-foreground">
-                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                             위치 감지 중...
-                           </span>
-                        ) : (
-                          <SelectValue placeholder={t("report_modal.country_select")} />
-                        )}
-                      </SelectTrigger>
-                      <SelectContent>
-                        {countries.map((c) => (
-                          <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                            {getCountryName(c.code, lang)}
-                          </SelectItem>
-                        ))}
-                        {detectedCountryName && detectedCountryCode !== "ETC" && (
-                          <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
-                            {detectedCountryName} (자동 감지)
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select 
+                    value={countryCode} 
+                    onValueChange={(val) => { 
+                      setCountryCode(val); 
+                      setCityId(""); 
+                      if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                    }} 
+                    disabled={uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && isGeoSuccess)}
+                  >
+                    <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                      {isLoadingGeo ? (
+                         <span className="flex items-center gap-1 text-muted-foreground">
+                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                           위치 감지 중...
+                         </span>
+                      ) : (
+                        <SelectValue placeholder={t("report_modal.country_select")} />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries.map((c) => (
+                        <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                          {getCountryName(c.code, lang)}
+                        </SelectItem>
+                      ))}
+                      {detectedCountryName && detectedCountryCode !== "ETC" && (
+                        <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
+                          {detectedCountryName}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {scope !== "country" && (
@@ -621,45 +663,37 @@ export function ScamReportModal() {
                     <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       {t("report_modal.city")}
                     </Label>
-                    {reportType === "new" && isGeoSuccess ? (
-                      <Input
-                        value={displayCityText}
-                        disabled
-                        className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 text-slate-500 font-medium select-none"
-                      />
-                    ) : (
-                      <Select 
-                        value={cityId} 
-                        onValueChange={(val) => {
-                          setCityId(val);
-                          if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
-                        }}
-                        disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing"}
-                      >
-                        <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                          {isLoadingGeo ? (
-                            <span className="flex items-center gap-1 text-muted-foreground">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              도시 감지 중...
-                            </span>
-                          ) : (
-                            <SelectValue placeholder={t("report_modal.city_select")} />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          {cities.map((city) => (
-                            <SelectItem key={city.id} value={city.id} className="cursor-pointer">
-                              {city.name}
-                            </SelectItem>
-                          ))}
-                          {detectedCityName && detectedCityName !== "기타 도시" && detectedCityName !== "기타 지역" && (
-                            <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
-                              {detectedCityName} (자동 감지)
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <Select 
+                      value={cityId} 
+                      onValueChange={(val) => {
+                        setCityId(val);
+                        if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
+                      }}
+                      disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && isGeoSuccess)}
+                    >
+                      <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
+                        {isLoadingGeo ? (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            도시 감지 중...
+                          </span>
+                        ) : (
+                          <SelectValue placeholder={t("report_modal.city_select")} />
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map((city) => (
+                          <SelectItem key={city.id} value={city.id} className="cursor-pointer">
+                            {city.name}
+                          </SelectItem>
+                        ))}
+                        {detectedCityName && detectedCityName !== "기타 도시" && detectedCityName !== "기타 지역" && (
+                          <SelectItem value="NEW_CITY" className="cursor-pointer text-blue-600 font-semibold">
+                            {detectedCityName}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </div>
@@ -850,17 +884,13 @@ export function ScamReportModal() {
               )}
 
               {imagePreviews.map((url, index) => (
-                <div key={index} className="relative w-16 h-16 rounded-xl overflow-hidden border border-border group">
-                  <img src={url} alt="preview" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    className="absolute top-1 right-1 w-4.5 h-4.5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    disabled={uploading}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+                <ImagePreviewItem
+                  key={url}
+                  url={url}
+                  index={index}
+                  onRemove={removeImage}
+                  disabled={uploading}
+                />
               ))}
             </div>
           </div>
