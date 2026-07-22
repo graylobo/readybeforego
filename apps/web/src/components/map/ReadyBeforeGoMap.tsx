@@ -628,7 +628,7 @@ export default function ReadyBeforeGoMap() {
     }
   };
 
-  // 사용자 현재 위치 GPS 탐색 함수
+  // 사용자 현재 위치 GPS 탐색 함수 (고정밀 실패 시 저정밀 Fallback 적용 🛡️)
   const handleLocateUser = () => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("이 브라우저에서는 현재 위치 기능을 지원하지 않습니다.");
@@ -637,20 +637,29 @@ export default function ReadyBeforeGoMap() {
 
     toast.loading("현재 위치를 확인하고 있습니다...", { id: "geolocation" });
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation([latitude, longitude]);
-        setMapCenter([latitude, longitude]);
-        setMapZoom(16);
-        toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
-      },
-      (error) => {
-        console.error("Geolocation Error:", error);
-        toast.error("위치 정보 접근 권한이 거부되었거나 위치를 찾을 수 없습니다.", { id: "geolocation" });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    const getPosition = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation([latitude, longitude]);
+          setMapCenter([latitude, longitude]);
+          setMapZoom(16);
+          toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
+        },
+        (error) => {
+          console.error(`Geolocation Error (highAccuracy=${highAccuracy}):`, error);
+          if (highAccuracy) {
+            // 고정밀도 실패 시 저정밀도로 재시도하여 성공률 극대화
+            getPosition(false);
+          } else {
+            toast.error("위치 정보 접근 권한이 거부되었거나 위치를 찾을 수 없습니다.", { id: "geolocation" });
+          }
+        },
+        { enableHighAccuracy: highAccuracy, timeout: 8000 }
+      );
+    };
+
+    getPosition(true);
   };
 
   return (
