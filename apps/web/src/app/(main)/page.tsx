@@ -144,9 +144,22 @@ export default function Home() {
   const [feedScopeFilter, setFeedScopeFilter] = useState<'all' | 'spot' | 'region' | 'city' | 'country'>('all');
   const isInitialUrlParsed = useRef(false);
 
+  // 마커/지역 선택 시 해당 마커의 스코프 범위(특정위치/구역/도시/국가) 탭이 자동 선택되도록 동기화 🎯
   useEffect(() => {
-    setFeedScopeFilter('all');
-  }, [selectedCountryCode, selectedCityId, selectedRegionId]);
+    if (selectedRegion) {
+      if (selectedRegion.hasRegionScope) {
+        setFeedScopeFilter('region');
+      } else {
+        setFeedScopeFilter('spot');
+      }
+    } else if (selectedCityId) {
+      setFeedScopeFilter('city');
+    } else if (selectedCountryCode) {
+      setFeedScopeFilter('country');
+    } else {
+      setFeedScopeFilter('all');
+    }
+  }, [selectedCountryCode, selectedCityId, selectedRegionId, selectedRegion]);
 
   // 모바일 환경 하드웨어 뒤로가기 버튼(및 스와이프 백) 제어 📱
   useEffect(() => {
@@ -560,7 +573,23 @@ export default function Home() {
       { value: "country", label: "🇹🇭 국가 전체" },
     ] as const;
 
-    const filteredScams = displayScams.filter((s) => {
+    // 피드 목록 렌더링 시 특정 위치/구역(spot/region) 제보글이 최상단에 1순위로 노출되도록 정렬 🎯
+    const sortedDisplayScams = [...displayScams].sort((a, b) => {
+      const getScopePriority = (scope?: string) => {
+        if (scope === "spot" || scope === "region") return 1;
+        if (scope === "city") return 2;
+        if (scope === "country") return 3;
+        return 4;
+      };
+      const priorityA = getScopePriority(a.scope);
+      const priorityB = getScopePriority(b.scope);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      return b.upvoteCount - a.upvoteCount || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    const filteredScams = sortedDisplayScams.filter((s) => {
       if (feedScopeFilter === "all") return true;
       return s.scope === feedScopeFilter;
     });

@@ -335,18 +335,18 @@ export default function ReadyBeforeGoMap() {
     if (zoom <= 3) return 15.0;     // 대륙 스케일
     if (zoom === 4) return 6.0;      // 넓은 국가 스케일
     if (zoom === 5) return 2.5;      // 국가 스케일 (서울-부산 320km 분리)
-    if (zoom === 6) return 1.0;      // 남한 전체 스케일 (서울-공주 110km 분리)
-    if (zoom === 7) return 0.4;      // 광역 경기-충청 스케일 (수원-천안 분리)
-    if (zoom === 8) return 0.18;     // 시/도 스케일 (천안-세종 분리)
-    if (zoom === 9) return 0.08;     // 세부 시내 스케일 (서울 강북-강남 분리)
-    if (zoom === 10) return 0.03;    // 구 스케일
-    if (zoom === 11) return 0.012;   // 동 스케일
-    if (zoom === 12) return 0.005;   // 세부 구/동 스케일
-    if (zoom === 13) return 0.002;
-    if (zoom === 14) return 0.001;
-    if (zoom === 15) return 0.0005;
-    if (zoom === 16) return 0.0002;
-    if (zoom === 17) return 0.0001;
+    if (zoom === 6) return 1.2;      // 남한 전체 스케일
+    if (zoom === 7) return 0.5;      // 광역 스케일
+    if (zoom === 8) return 0.25;     // 시/도 스케일
+    if (zoom === 9) return 0.12;     // 세부 시내 스케일
+    if (zoom === 10) return 0.05;    // 구 스케일 (마커 라벨 겹침 방지 🛡️)
+    if (zoom === 11) return 0.025;   // 동 스케일
+    if (zoom === 12) return 0.012;   // 세부 구/동 스케일
+    if (zoom === 13) return 0.006;
+    if (zoom === 14) return 0.003;
+    if (zoom === 15) return 0.0015;
+    if (zoom === 16) return 0.0006;
+    if (zoom === 17) return 0.00025;
     return 0; // zoom >= 18 (최대 줌 레벨에서는 클러스터링을 하지 않고 개별 지점을 보여줌)
   };
 
@@ -387,11 +387,12 @@ export default function ReadyBeforeGoMap() {
       });
     }
 
-    // B. 중형 스케일 (5 < zoom <= 9): 도시 단위 강제 그룹화
+    // B. 중형 스케일 (5 < zoom <= 9): 도시 단위 강제 그룹화 (동일 도시명/ID 통합 🎯)
     if (currentZoom <= 9) {
       const cityGroups: Record<string, Region[]> = {};
       activeRegions.forEach((r) => {
-        const cid = r.cityId || "ETC";
+        const cityNameKey = (r.cityName || "").toLowerCase().trim();
+        const cid = (r.cityId && r.cityId !== "ETC") ? r.cityId : (cityNameKey || r.countryCode || "ETC");
         if (!cityGroups[cid]) cityGroups[cid] = [];
         cityGroups[cid].push(r);
       });
