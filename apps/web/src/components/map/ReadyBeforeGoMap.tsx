@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import { cwd } from "process";
 
 // 주요 국가별 표준 중심 좌표 정의 (도시/마커 분포 쏠림 방지)
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -650,14 +651,23 @@ export default function ReadyBeforeGoMap() {
         },
         (error) => {
           console.error(`Geolocation Error (highAccuracy=${highAccuracy}):`, error);
+          console.log("에러랑",error.code)
           if (highAccuracy) {
             // 고정밀도 실패 시 저정밀도로 재시도하여 성공률 극대화
             getPosition(false);
           } else {
-            toast.error("위치 정보 접근 권한이 거부되었거나 위치를 찾을 수 없습니다.", { id: "geolocation" });
+            if (error.code === error.PERMISSION_DENIED) {
+              toast.error("브라우저 위치 접근 권한이 거부되었습니다.", { id: "geolocation" });
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              toast.error("기기 위치 신호가 측정되지 않았습니다. 시간이 조금 지난 뒤 재시도 혹은 지도에서 직접 핀을 찍어주세요.", { id: "geolocation" });
+            } else if (error.code === error.TIMEOUT) {
+              toast.error("위치 응답 시간이 초과되었습니다. 다시 시도해 주세요.", { id: "geolocation" });
+            } else {
+              toast.error("현재 위치를 찾을 수 없습니다.", { id: "geolocation" });
+            }
           }
         },
-        { enableHighAccuracy: highAccuracy, timeout: 8000 }
+        { enableHighAccuracy: highAccuracy, timeout: 15000, maximumAge: 60000 }
       );
     };
 
@@ -812,7 +822,8 @@ export default function ReadyBeforeGoMap() {
 
           if (provider.toUpperCase() === "MAPBOX") {
             const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
-            const style = process.env.NEXT_PUBLIC_MAPBOX_STYLE || "mapbox/streets-v12";
+            // 산 굴곡 음영을 뺀 깔끔한 평면 라이트 스타일(mapbox/light-v11) 기본 적용 🎯
+            const style = process.env.NEXT_PUBLIC_MAPBOX_STYLE || "mapbox/light-v11";
             tileUrl = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}?access_token=${token}`;
             attribution = '&copy; <a href="https://www.mapbox.com/">Mapbox</a>';
           } else if (provider.toUpperCase() === "OSM") {
@@ -820,11 +831,15 @@ export default function ReadyBeforeGoMap() {
             attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
           }
 
+          const isMapbox = provider.toUpperCase() === "MAPBOX";
+
           return (
             <TileLayer
               attribution={attribution}
               url={tileUrl}
               noWrap={true}
+              tileSize={isMapbox ? 512 : 256}
+              zoomOffset={isMapbox ? -1 : 0}
             />
           );
         })()}

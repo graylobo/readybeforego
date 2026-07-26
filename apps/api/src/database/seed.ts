@@ -80,7 +80,7 @@ async function main() {
       { id: '55555555-5555-4555-a555-111111111111', countryCode: 'JP', name: '도쿄', nameEn: 'Tokyo', latitude: 35.6762, longitude: 139.6503 },
       { id: '55555555-5555-4555-a555-222222222222', countryCode: 'JP', name: '오사카', nameEn: 'Osaka', latitude: 34.6937, longitude: 135.5023 },
       // 대한민국
-      { id: '66666666-6666-4666-a666-111111111111', countryCode: 'KR', name: '서울', nameEn: 'Seoul', latitude: 37.5665, longitude: 126.9780 },
+      { id: '66666666-6666-4666-a666-111111111111', countryCode: 'KR', name: '서울특별시', nameEn: 'Seoul', latitude: 37.5665, longitude: 126.9780 },
     ];
 
     for (const city of citiesData) {

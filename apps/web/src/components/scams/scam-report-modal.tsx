@@ -236,31 +236,8 @@ export function ScamReportModal() {
           setDetectedCountryName(country);
           setDetectedCountryCode(countryCodeVal);
           setDetectedCityName(city);
-
-          // 기등록 국가 목록 매칭 검사
-          const existingCountry = countries.find(c => c.code === countryCodeVal);
-          if (existingCountry) {
-            setCountryCode(existingCountry.code);
-            
-            // 해당 국가의 기등록 도시 목록 비동기 매칭
-            scamsApi.getCities(existingCountry.code)
-              .then((cityList: City[]) => {
-                const matchedCity = cityList.find((c: any) => 
-                  c.name.includes(city) || city.includes(c.name)
-                );
-                if (matchedCity) {
-                  setCityId(matchedCity.id);
-                } else {
-                  setCityId("NEW_CITY");
-                }
-              })
-              .catch(() => {
-                setCityId("NEW_CITY");
-              });
-          } else {
-            setCountryCode("NEW_COUNTRY");
-            setCityId("NEW_CITY");
-          }
+          setCountryCode(countryCodeVal);
+          setCityId("NEW_CITY");
         } catch (err) {
           console.error("Geocoding Parsing Error:", err);
           setCountryCode("");
@@ -634,9 +611,7 @@ export function ScamReportModal() {
               ? getCountryName(matchedCountry.code, lang)
               : directCountryName || "위치 정보 없음";
 
-            const displayCityText = matchedCity
-              ? matchedCity.name
-              : directCityName || "위치 정보 없음";
+            const displayCityText = directCityName || matchedCity?.name || "위치 정보 없음";
 
             const isGeoSuccess = !!displayCountryText && displayCountryText !== "위치 정보 없음" && !!displayCityText && displayCityText !== "위치 정보 없음";
 
