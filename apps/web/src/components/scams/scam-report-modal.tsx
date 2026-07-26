@@ -328,9 +328,11 @@ export function ScamReportModal() {
       }
     },
     onError: (err: any) => {
-      const msg = err.response?.data?.message || "Error";
-      toast.error(msg);
       setUploading(false);
+      const serverMsg = err.response?.data?.message || err.message;
+      if (serverMsg && serverMsg !== "Validation failed" && serverMsg !== "Error") {
+        toast.error(serverMsg);
+      }
     },
   });
 
@@ -473,12 +475,15 @@ export function ScamReportModal() {
       }
 
       if (reportType === "new" && reportCoords) {
+        const isExistingCity = !!cityId && cityId !== "NEW_CITY";
+        const isExistingCountry = !!countryCode && countryCode !== "NEW_COUNTRY";
+
         createMutation.mutate({
           scope,
-          cityId: scope === "country" ? undefined : (cityId === "NEW_CITY" ? undefined : cityId),
-          countryCode: countryCode === "NEW_COUNTRY" ? detectedCountryCode : countryCode || undefined,
-          countryName: countryCode === "NEW_COUNTRY" ? detectedCountryName : undefined,
-          cityName: scope === "country" ? undefined : (cityId === "NEW_CITY" ? detectedCityName : undefined),
+          cityId: scope === "country" ? undefined : (isExistingCity ? cityId : undefined),
+          countryCode: isExistingCountry ? countryCode : (detectedCountryCode || "ETC"),
+          countryName: !isExistingCountry ? (detectedCountryName || "기타 국가") : undefined,
+          cityName: scope === "country" ? undefined : (!isExistingCity ? (detectedCityName || "기타 도시") : undefined),
           regionName: (scope === "spot" || scope === "region") ? regionName.trim() : undefined,
           latitude: reportCoords[0],
           longitude: reportCoords[1],

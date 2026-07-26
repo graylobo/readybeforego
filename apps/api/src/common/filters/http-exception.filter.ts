@@ -25,14 +25,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse() as any;
-      
-      message = exceptionResponse.message || exception.message;
-      errorCode = exceptionResponse.errorCode || exceptionResponse.code || this.mapStatusToErrorCode(status);
 
-      // Validation error (Pipe)
-      if (Array.isArray(exceptionResponse.message)) {
-        message = exceptionResponse.message[0];
-        errorCode = ErrorCode.INVALID_INPUT;
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        if (Array.isArray(exceptionResponse.message)) {
+          message = exceptionResponse.message.join(', ');
+          errorCode = ErrorCode.INVALID_INPUT;
+        } else {
+          message = exceptionResponse.message || exception.message;
+          errorCode = exceptionResponse.errorCode || exceptionResponse.code || this.mapStatusToErrorCode(status);
+        }
+      } else {
+        message = String(exceptionResponse || exception.message);
+        errorCode = this.mapStatusToErrorCode(status);
       }
     } else {
       // Unhandled error (hide internal details from client)

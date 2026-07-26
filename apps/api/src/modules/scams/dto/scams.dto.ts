@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const CreateScamInfoBaseSchema = z.object({
   regionId: z.string().optional(),
-  regionName: z.string().min(2, '지역명은 2자 이상이어야 합니다.').optional(),
+  regionName: z.string().min(2, '세부 장소/지역명은 최소 2자 이상이어야 합니다.').optional(),
   cityId: z.string().optional(),
   countryCode: z.string().optional(),
   countryName: z.string().optional(),
@@ -11,11 +11,11 @@ export const CreateScamInfoBaseSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   scope: z.enum(['spot', 'region', 'city', 'country']).optional().default('spot'),
-  title: z.string().min(2, '제목은 2자 이상이어야 합니다.').max(100),
-  description: z.string().min(10, '설명은 10자 이상이어야 합니다.'),
-  avoidanceTip: z.string().max(1000).nullable().optional(),
-  scamCategory: z.string().min(1),
-  sourceUrl: z.string().url().or(z.literal('')).nullable().optional(),
+  title: z.string().min(2, '제보 제목은 최소 2자 이상이어야 합니다.').max(100, '제목은 최대 100자까지 작성 가능합니다.'),
+  description: z.string().min(10, '상세 피해 내용은 최소 10자 이상 자세히 작성해 주세요.'),
+  avoidanceTip: z.string().max(1000, '대처법은 최대 1000자까지 입력 가능합니다.').nullable().optional(),
+  scamCategory: z.string().min(1, '사기 피해 카테고리를 최소 1개 이상 선택해 주세요.'),
+  sourceUrl: z.string().url('유효한 URL 형식이 아닙니다.').or(z.literal('')).nullable().optional(),
   imageUrls: z.array(z.string().url()).nullable().optional(),
 });
 
@@ -47,8 +47,8 @@ export const CreateScamInfoSchema = CreateScamInfoBaseSchema.refine(
     return false;
   },
   {
-    message: '제보 적용 범위(scope)에 따른 필수 지리 정보가 지정되지 않았습니다.',
-    path: ['regionId'],
+    message: '제보 적용 범위에 따른 국가/도시/세부 장소명이 올바르게 선택되지 않았습니다.',
+    path: ['cityId'],
   }
 );
 

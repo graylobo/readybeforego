@@ -127,12 +127,12 @@ const createTempReportIcon = () => {
 const createUserLocationIcon = () => {
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center w-6 h-6">
-        <div class="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-blue-500 opacity-60"></div>
-        <div class="relative w-3.5 h-3.5 rounded-full bg-blue-600 border-2 border-white shadow-md z-10"></div>
+      <div class="relative flex items-center justify-center w-6 h-6 pointer-events-none">
+        <div class="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-blue-500 opacity-60 pointer-events-none"></div>
+        <div class="relative w-3.5 h-3.5 rounded-full bg-blue-600 border-2 border-white shadow-md z-10 pointer-events-none"></div>
       </div>
     `,
-    className: "user-location-marker",
+    className: "user-location-marker pointer-events-none",
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
@@ -915,9 +915,14 @@ export default function ReadyBeforeGoMap() {
           </Marker>
         )}
 
-        {/* 사용자 현재 위치 마커 */}
+        {/* 사용자 현재 위치 마커 (이벤트 클릭 투과 & 하위 zIndex 레이어 설정 🛡️) */}
         {userLocation && (
-          <Marker position={userLocation} icon={createUserLocationIcon()} />
+          <Marker 
+            position={userLocation} 
+            icon={createUserLocationIcon()} 
+            interactive={false}
+            zIndexOffset={-500}
+          />
         )}
 
         {/* 구역/거리전체(region)인 경우 지도 상에 반투명 원형 범위(Circle Overlay) 렌더링 🗺️ */}
@@ -935,7 +940,7 @@ export default function ReadyBeforeGoMap() {
           />
         )}
 
-        {/* 동적 통합 클러스터 렌더링 */}
+        {/* 동적 통합 클러스터 렌더링 (제보 마커를 내 위치보다 최상위 zIndex로 레이어링) */}
         {getDynamicClusters().map((cluster) => {
           const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
           return (
@@ -943,6 +948,7 @@ export default function ReadyBeforeGoMap() {
               key={cluster.id}
               position={[cluster.latitude, cluster.longitude]}
               icon={createClusterIcon(cluster.scamCount, cluster.name, isSelected, cluster.scope)}
+              zIndexOffset={isSelected ? 2000 : 1000}
               eventHandlers={{
                 click: () => handleDynamicClusterClick(cluster),
               }}

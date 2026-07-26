@@ -47,7 +47,9 @@ apiClient.interceptors.response.use(
 
     if (serverError && serverError.success === false) {
       const errorCode = serverError.errorCode as ErrorCode;
-      const message = ErrorMessages[errorCode] || serverError.message || '요청 처리 중 오류가 발생했습니다.';
+      // 백엔드가 전달한 구체적인 상세 에러 메시지가 존재하면 최우선 사용 🎯
+      const detailedMessage = (serverError.message && serverError.message !== 'Validation failed') ? serverError.message : undefined;
+      const message = detailedMessage || ErrorMessages[errorCode] || serverError.message || '요청 처리 중 오류가 발생했습니다.';
       
       if (!skipToast) {
         toast.error(message);
