@@ -86,6 +86,7 @@ export function ScamReportModal() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState("");
   const [isCompressing, setIsCompressing] = useState(false);
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
   const [selectedScamDetail, setSelectedScamDetail] = useState<ScamInfo | null>(null);
@@ -144,6 +145,7 @@ export function ScamReportModal() {
       setImageFiles([]);
       setImagePreviews([]);
       setUploading(false);
+      setUploadProgressText("");
       setIsCompressing(false);
       setErrors({});
       setScope("spot");
@@ -442,11 +444,32 @@ export function ScamReportModal() {
     try {
       if (imageFiles.length > 0) {
         setUploading(true);
-        // 선택 시 미리 압축해 둔 파일 리스트를 병렬(Promise.all) 및 compress: false로 빠르게 업로드 ⚡
-        const uploadPromises = imageFiles.map((file) =>
-          uploadsApi.uploadImage(file, { compress: false, folder: "scams" })
-        );
-        urls = await Promise.all(uploadPromises);
+        setUploadProgressText(`사진 업로드 준비 중... (0/${imageFiles.length})`);
+
+        // 해외/모바일 느린 데이터 환경에서 대역폭 고갈 및 Socket Timeout을 원천 방지하기 위한 순차 업로드 🛡️
+        for (let i = 0; i < imageFiles.length; i++) {
+          const file = imageFiles[i];
+          setUploadProgressText(`사진 업로드 중... (${i + 1}/${imageFiles.length})`);
+          
+          let attempts = 0;
+          let uploadedUrl = "";
+
+          while (attempts < 2) {
+            try {
+              uploadedUrl = await uploadsApi.uploadImage(file, { compress: false, folder: "scams" });
+              break;
+            } catch (err) {
+              attempts++;
+              console.warn(`[Image Upload Retry ${attempts}/2]`, err);
+              if (attempts >= 2) throw err;
+              await new Promise((res) => setTimeout(res, 1000));
+            }
+          }
+
+          if (uploadedUrl) {
+            urls.push(uploadedUrl);
+          }
+        }
       }
 
       if (reportType === "new" && reportCoords) {
@@ -480,9 +503,11 @@ export function ScamReportModal() {
           imageUrls: urls,
         });
       }
-    } catch (error) {
-      toast.error("Upload Error");
+    } catch (error: any) {
+      console.error("Image Upload Failed:", error);
+      toast.error("사진 업로드에 실패했습니다. 모바일 데이터 상태를 확인한 후 다시 시도해 주세요.");
       setUploading(false);
+      setUploadProgressText("");
     }
   };
 
@@ -975,7 +1000,7 @@ export function ScamReportModal() {
               ) : uploading ? (
                 <span className="flex items-center gap-1">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {t("report_modal.uploading_images")}
+                  {uploadProgressText || t("report_modal.uploading_images")}
                 </span>
               ) : createMutation.isPending ? (
                 t("report_modal.submitting")

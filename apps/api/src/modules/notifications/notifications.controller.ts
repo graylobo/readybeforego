@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, UseGuards, Req, Sse, MessageEvent } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, UseGuards, Req, Sse, MessageEvent, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -43,6 +43,8 @@ export class NotificationsController {
   }
 
   @Sse('sse')
+  @Header('Cache-Control', 'no-cache, no-transform')
+  @Header('X-Accel-Buffering', 'no')
   async sse(@Req() req: any): Promise<Observable<MessageEvent>> {
     const userId = req.user.id;
     
@@ -63,9 +65,9 @@ export class NotificationsController {
       } as MessageEvent))
     );
 
-    // 3. Cloud Run / Load Balancer Idle Timeout 방지를 위한 25초 주기 Heartbeat 스트림 생성
-    // type을 'ping'으로 지정하여 클라이언트의 기본 onmessage(쿼리 무효화)를 유발하지 않고 커넥션만 유지시킵니다.
-    const heartbeatStream = interval(25000).pipe(
+    // 3. Cloud Run / Load Balancer Idle Timeout 방지를 위한 10초 주기 Heartbeat 스트림 생성 💓
+    // Cloud Run / Nginx 등 역방향 프록시의 타임아웃(보통 13~15초) 전에 주기적 ping을 전송하여 커넥션 재연결 낭비를 방지합니다.
+    const heartbeatStream = interval(10000).pipe(
       map(() => ({
         type: 'ping',
         data: 'keep-alive',
