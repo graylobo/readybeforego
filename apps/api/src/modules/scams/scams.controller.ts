@@ -27,6 +27,43 @@ export class ScamsController {
 
   // --- Static Routes (Must be declared before wildcard routes to prevent masking) ---
 
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '어드민용 사기 경고 정보 목록 조회 (페이징 & 검색)' })
+  async getAdminScams(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('scope') scope?: string,
+    @Query('countryCode') countryCode?: string,
+    @Query('cityId') cityId?: string,
+    @Query('scamCategory') scamCategory?: string,
+  ) {
+    return this.scamsService.getAdminScams({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      scope,
+      countryCode,
+      cityId,
+      scamCategory,
+    });
+  }
+
+  @Delete('admin/:id')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '어드민용 사기 경고 정보 삭제' })
+  async deleteAdminScam(@Param('id') id: string) {
+    return this.scamsService.deleteAdminScam(id);
+  }
+
+  @Post('admin/bulk-delete')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '어드민용 사기 경고 정보 다중 선택 일괄 삭제' })
+  async deleteAdminScamsBulk(@Body('ids') ids: string[]) {
+    return this.scamsService.deleteAdminScamsBulk(ids);
+  }
+
   @Get('countries')
   @ApiOperation({ summary: '전체 국가 목록 조회' })
   async getCountries() {

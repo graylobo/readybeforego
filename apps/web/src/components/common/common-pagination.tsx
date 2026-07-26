@@ -37,7 +37,7 @@ export function CommonPagination({
   className,
   itemsPerPage,
   onItemsPerPageChange,
-  itemsPerPageOptions = [20, 30, 60, 100],
+  itemsPerPageOptions = [10, 20, 50, 100],
   position = 'center',
 }: CommonPaginationProps) {
   const options = React.useMemo(() => {
@@ -49,7 +49,7 @@ export function CommonPagination({
     return opts;
   }, [itemsPerPage, itemsPerPageOptions]);
 
-  if (totalPages <= 1) return null;
+  if (totalPages < 1) return null;
 
   return (
     <div className={`flex items-center justify-center gap-4 w-full ${className || ''}`}>

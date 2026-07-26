@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { isAdmin } from '@community/shared-types';
-import { AlertOctagon, Award, Film, Home, MessageSquare, Settings, Shield, Users } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Award, Film, Home, MessageSquare, Settings, Shield, Users } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
 
@@ -27,37 +27,23 @@ export default function AdminLayout({
       splitCheck();
   }, [checkAuth]);
 
+  // Redirection Logic
   useEffect(() => {
-    if (!hasCheckedAuth || isLoading) return;
-
-    if (!isAuthenticated) {
-      router.push(`/login?redirect=${pathname}`);
-      return;
-    }
-    if (!isAdmin(user?.role)) {
-      router.push('/');
-      return;
+    if (!isLoading && hasCheckedAuth) {
+      if (!isAuthenticated) {
+        router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
+      } else if (!isAdmin(user?.role)) {
+        // Redirect unauthorized non-admins to home page
+        router.push('/');
+      }
     }
   }, [isAuthenticated, user, isLoading, hasCheckedAuth, router, pathname]);
 
-  if (!hasCheckedAuth || isLoading) {
+  if (isLoading || !hasCheckedAuth) {
     return (
-      <div className="h-screen flex flex-col bg-background">
-        <div className="flex flex-1 overflow-hidden relative">
-          <div className="w-64 border-r border-border bg-card hidden md:flex flex-col p-4 gap-4">
-             <Skeleton className="h-8 w-3/4" />
-             <Skeleton className="h-8 w-full" />
-             <Skeleton className="h-8 w-full" />
-          </div>
-          <main className="flex-1 p-8">
-            <Skeleton className="mb-8 h-8 w-48" />
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-32 w-full rounded-lg" />
-              <Skeleton className="h-32 w-full rounded-lg" />
-              <Skeleton className="h-32 w-full rounded-lg" />
-            </div>
-          </main>
-        </div>
+      <div className="container mx-auto p-6 space-y-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
@@ -70,6 +56,12 @@ export default function AdminLayout({
       label: '대시보드',
       icon: <Home className="h-5 w-5" />,
       href: '/admin',
+    },
+    {
+      id: 'admin-scams',
+      label: '사기 제보 관리',
+      icon: <AlertTriangle className="h-5 w-5 text-amber-500" />,
+      href: '/admin/scams',
     },
     {
       id: 'admin-users',
@@ -121,8 +113,6 @@ export default function AdminLayout({
     },
   ];
 
-  // 클라이언트 페이지와 동일한 셸(사이드바 + 헤더 + 본문)을 공유하되,
-  // 어드민 전용 메뉴를 주입하고 커뮤니티 전용 푸터는 노출하지 않는다.
   return (
     <AppLayout
       variant="admin"

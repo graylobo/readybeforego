@@ -562,4 +562,29 @@ export class ScamsService {
       return [];
     }
   }
+
+  async getAdminScams(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    scope?: string;
+    countryCode?: string;
+    cityId?: string;
+    scamCategory?: string;
+  }) {
+    return this.scamsRepository.findAdminScams(params);
+  }
+
+  async deleteAdminScam(id: string) {
+    const scam = await this.scamsRepository.findById(id);
+    if (!scam) {
+      throw new NotFoundException('해당 사기 정보를 찾을 수 없습니다.');
+    }
+    return this.scamsRepository.deleteAdminScam(id);
+  }
+
+  async deleteAdminScamsBulk(ids: string[]) {
+    if (!ids || ids.length === 0) return [];
+    return this.scamsRepository.deleteAdminScamsBulk(ids);
+  }
 }

@@ -159,5 +159,26 @@ export const scamsApi = {
   searchAddress: async (q: string): Promise<any[]> => {
     const response = await apiClient.get('/scams/search-address', { params: { q } });
     return response.data?.data || response.data;
-  }
+  },
+
+  getAdminScams: async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    scope?: string;
+    countryCode?: string;
+    cityId?: string;
+    scamCategory?: string;
+  }): Promise<{ items: ScamInfo[]; total: number; page: number; limit: number }> => {
+    const response = await apiClient.get('/scams/admin/all', { params });
+    return response.data?.data || response.data;
+  },
+
+  deleteAdminScam: async (id: string): Promise<void> => {
+    await apiClient.delete(`/scams/admin/${id}`);
+  },
+
+  deleteAdminScamsBulk: async (ids: string[]): Promise<void> => {
+    await apiClient.post('/scams/admin/bulk-delete', { ids });
+  },
 };

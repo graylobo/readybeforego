@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api/admin';
 import { pointsApi } from '@/lib/api/points';
+import { scamsApi } from '@/lib/api/scams';
 
 export const adminKeys = {
   stats: ['admin', 'stats'] as const,
@@ -138,6 +139,65 @@ export function useUpdatePointPolicy() {
     mutationFn: ({ id, data }: { id: string; data: any }) => adminApi.updatePointPolicy(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminKeys.pointPolicies });
+    },
+  });
+}
+
+export function useAdminScams(params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  scope?: string;
+  countryCode?: string;
+  cityId?: string;
+  scamCategory?: string;
+}) {
+  return useQuery({
+    queryKey: ['admin', 'scams', params],
+    queryFn: () => scamsApi.getAdminScams(params),
+  });
+}
+
+export function useAdminCreateScam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => scamsApi.createScam(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scams'] });
+      queryClient.invalidateQueries({ queryKey: ['scams'] });
+    },
+  });
+}
+
+export function useAdminUpdateScam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => scamsApi.updateScam(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scams'] });
+      queryClient.invalidateQueries({ queryKey: ['scams'] });
+    },
+  });
+}
+
+export function useAdminDeleteScam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => scamsApi.deleteAdminScam(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scams'] });
+      queryClient.invalidateQueries({ queryKey: ['scams'] });
+    },
+  });
+}
+
+export function useAdminDeleteScamsBulk() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => scamsApi.deleteAdminScamsBulk(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scams'] });
+      queryClient.invalidateQueries({ queryKey: ['scams'] });
     },
   });
 }

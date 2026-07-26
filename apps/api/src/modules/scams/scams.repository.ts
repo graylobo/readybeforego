@@ -439,4 +439,87 @@ export class ScamsRepository {
       where: eq(schema.cities.id, id),
     });
   }
+
+  async findAdminScams(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    scope?: string;
+    countryCode?: string;
+    cityId?: string;
+    scamCategory?: string;
+  }) {
+    const { page, limit, search, scope, countryCode, cityId, scamCategory } = params;
+    const offset = (page - 1) * limit;
+
+    const conditions: SQL[] = [sql`${schema.scamInfos.deletedAt} is null`];
+
+    if (scope && scope !== 'all') {
+      conditions.push(eq(schema.scamInfos.scope, scope as any));
+    }
+    if (countryCode && countryCode !== 'all') {
+      conditions.push(eq(schema.scamInfos.countryCode, countryCode));
+    }
+    if (cityId && cityId !== 'all') {
+      conditions.push(eq(schema.scamInfos.cityId, cityId));
+    }
+    if (scamCategory && scamCategory !== 'all') {
+      conditions.push(eq(schema.scamInfos.scamCategory, scamCategory));
+    }
+    if (search && search.trim()) {
+      const queryStr = `%${search.trim()}%`;
+      conditions.push(
+        or(
+          sql`${schema.scamInfos.title} ILIKE ${queryStr}`,
+          sql`${schema.scamInfos.description} ILIKE ${queryStr}`
+        )!
+      );
+    }
+
+    const whereClause = and(...conditions);
+
+    const [{ total }] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(schema.scamInfos)
+      .where(whereClause);
+
+    const items = await this.db.query.scamInfos.findMany({
+      where: whereClause,
+      limit,
+      offset,
+      orderBy: [desc(schema.scamInfos.createdAt)],
+      with: {
+        region: true,
+        city: true,
+        country: true,
+      },
+    });
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async deleteAdminScam(id: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const [result] = await db
+      .update(schema.scamInfos)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.scamInfos.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteAdminScamsBulk(ids: string[], tx?: Transaction) {
+    if (!ids || ids.length === 0) return [];
+    const db = tx ?? this.db;
+    return db
+      .update(schema.scamInfos)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(inArray(schema.scamInfos.id, ids))
+      .returning();
+  }
 }
