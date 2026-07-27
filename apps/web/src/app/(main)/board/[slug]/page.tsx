@@ -128,29 +128,27 @@ function BoardContent({ slug }: { slug: string }) {
         router.push(`/board/${slug}?searchQuery=${encodeURIComponent(searchQuery)}&searchType=${searchType}`);
     };
 
-    if (isLoading && !postsData) {
+    if (boardLoading || (isLoading && !postsData)) {
         return (
-            <DelayedRender>
-                <PageContainer className="py-8">
-                    <div className="w-full">
-                        <main className="flex-1 min-w-0">
-                            <div className="space-y-4">
-                                <Skeleton className="h-10 w-1/4" />
-                                <Skeleton className="h-4 w-1/2" />
-                                <div className="mt-8 space-y-3">
-                                    {[...Array(10)].map((_, i) => (
-                                        <Skeleton key={i} className="h-16 w-full" />
-                                    ))}
-                                </div>
+            <PageContainer className="py-8">
+                <div className="w-full">
+                    <main className="flex-1 min-w-0">
+                        <div className="space-y-4">
+                            <Skeleton className="h-10 w-1/4" />
+                            <Skeleton className="h-4 w-1/2" />
+                            <div className="mt-8 space-y-3">
+                                {[...Array(10)].map((_, i) => (
+                                    <Skeleton key={i} className="h-16 w-full" />
+                                ))}
                             </div>
-                        </main>
-                    </div>
-                </PageContainer>
-            </DelayedRender>
+                        </div>
+                    </main>
+                </div>
+            </PageContainer>
         );
     }
 
-    if (!board) return <PageContainer className="py-8">Board not found</PageContainer>;
+    if (!board) return <PageContainer className="py-8">존재하지 않는 게시판입니다.</PageContainer>;
 
     return (
         <PageContainer className="py-8" maxWidth={(board.viewMode === 'feed' || board.viewMode === 'lounge') ? 'feed' : 'default'}>

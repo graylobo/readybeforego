@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { format, isToday } from 'date-fns';
-import { Eye, Image as ImageIcon, Pin, ThumbsUp, ChevronDown, ChevronUp, Heart, MessageSquare, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, Image as ImageIcon, Pin, ThumbsUp, ChevronDown, ChevronUp, Heart, MessageSquare, Pencil, Trash2, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Post as ApiPost } from '@/lib/api/board';
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Comments } from '@/components/comments/comments';
 import { useRef } from 'react';
 import { FeedPostEditModal } from '@/components/board/feed-post-edit-modal';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface PostListProps {
   posts: (ApiPost & { _isBestBlock?: boolean })[];
@@ -616,7 +617,7 @@ function FeedPostCard({
 // Instagram View Support Components
 // ----------------------------------------------------
 
-function InstagramImageSlider({ images }: { images: string[] }) {
+function InstagramImageSlider({ images, className }: { images: string[]; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -660,7 +661,7 @@ function InstagramImageSlider({ images }: { images: string[] }) {
   if (images.length === 0) return null;
 
   return (
-    <div className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden rounded-2xl group/slider border border-border/40">
+    <div className={cn("relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden rounded-2xl group/slider border border-border/40", className)}>
       <style>{`
         .no-scrollbar::-webkit-scrollbar {
           display: none;
@@ -692,16 +693,18 @@ function InstagramImageSlider({ images }: { images: string[] }) {
       {/* Navigation Arrows */}
       {images.length > 1 && currentIndex > 0 && (
         <button 
+          type="button"
           onClick={handlePrev}
-          className="absolute left-3 w-8 h-8 rounded-full bg-background/90 hover:bg-background text-foreground flex items-center justify-center shadow-md transition-all z-10 cursor-pointer"
+          className="absolute left-3 w-8 h-8 rounded-full bg-background/90 hover:bg-background text-foreground flex items-center justify-center shadow-md transition-all z-20 cursor-pointer"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
       )}
       {images.length > 1 && currentIndex < images.length - 1 && (
         <button 
+          type="button"
           onClick={handleNext}
-          className="absolute right-3 w-8 h-8 rounded-full bg-background/90 hover:bg-background text-foreground flex items-center justify-center shadow-md transition-all z-10 cursor-pointer"
+          className="absolute right-3 w-8 h-8 rounded-full bg-background/90 hover:bg-background text-foreground flex items-center justify-center shadow-md transition-all z-20 cursor-pointer"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
@@ -709,18 +712,21 @@ function InstagramImageSlider({ images }: { images: string[] }) {
 
       {/* Dot Indicators */}
       {images.length > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 bg-black/30 px-2 py-1 rounded-full backdrop-blur-sm">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-30 bg-black/60 px-2.5 py-1 rounded-full backdrop-blur-md shadow-md pointer-events-auto">
           {images.map((_, i) => (
             <button
               key={i}
+              type="button"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 scrollTo(i);
               }}
               className={cn(
-                "w-1.5 h-1.5 rounded-full transition-all cursor-pointer",
-                i === currentIndex ? "bg-white scale-110" : "bg-white/40 hover:bg-white/70"
+                "rounded-full transition-all cursor-pointer",
+                i === currentIndex 
+                  ? "bg-white w-2 h-2 shadow-xs scale-110" 
+                  : "bg-white/40 hover:bg-white/80 w-1.5 h-1.5"
               )}
             />
           ))}
@@ -741,50 +747,72 @@ function InstagramCommentModal({ isOpen, onOpenChange, post, slug }: InstagramCo
   if (!post) return null;
 
   const authorName = post.user?.name || post.guestName || '익명';
+  const authorAvatar = (post.user as any)?.image || post.user?.picture || (post.user as any)?.profileImage || '';
   const allImages = extractAllImages(post.content);
   const cleanBody = stripHtml(post.content);
+  const hasImages = allImages.length > 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl p-0 overflow-hidden bg-background border border-border rounded-2xl h-[85vh] md:h-[75vh] flex flex-col md:flex-row gap-0">
-        <DialogTitle className="sr-only">게시글 상세 및 댓글</DialogTitle>
+      <DialogContent 
+        className={cn(
+          "p-0 overflow-hidden bg-background border border-border rounded-2xl flex flex-col transition-all duration-300",
+          hasImages 
+            ? "max-w-5xl h-[85vh] md:h-[75vh] md:flex-row gap-0" 
+            : "max-w-2xl max-h-[85vh] h-auto"
+        )}
+      >
+        <DialogTitle className="sr-only">{authorName}님의 게시물</DialogTitle>
         
-        {/* Left Side: Images */}
-        <div className="w-full md:w-[55%] h-[35vh] md:h-full bg-black flex items-center justify-center relative overflow-hidden border-b md:border-b-0 md:border-r border-border">
-          {allImages.length > 0 ? (
-            <div className="w-full h-full flex items-center justify-center p-2 bg-zinc-950">
-              <InstagramImageSlider images={allImages} />
-            </div>
-          ) : (
-            <div className="text-muted-foreground text-sm">첨부된 이미지가 없습니다.</div>
-          )}
-        </div>
+        {/* Left Side: Images (Only when images exist) */}
+        {hasImages && (
+          <div className="w-full md:w-[55%] h-[40vh] md:h-full bg-zinc-950 flex items-center justify-center relative overflow-hidden border-b md:border-b-0 md:border-r border-border shrink-0">
+            <InstagramImageSlider images={allImages} className="aspect-auto h-full rounded-none border-0" />
+          </div>
+        )}
 
-        {/* Right Side: Post Contents and Comments */}
-        <div className="w-full md:w-[45%] h-[50vh] md:h-full flex flex-col min-w-0 bg-background">
+        {/* Content and Comments Container */}
+        <div className={cn(
+          "flex flex-col min-w-0 bg-background overflow-hidden",
+          hasImages ? "w-full md:w-[45%] h-[50vh] md:h-full" : "w-full max-h-[85vh]"
+        )}>
           {/* Header */}
-          <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-foreground">{authorName}</span>
-              <span className="text-[10px] text-muted-foreground">·</span>
-              <span className="text-[10px] text-muted-foreground">{getRelativeTimeStr(post.createdAt)}</span>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0 bg-muted/20">
+            <div className="font-bold text-sm text-foreground">
+              {authorName}님의 게시물
             </div>
           </div>
 
-          {/* Scrollable Comments & Post Body */}
+          {/* Scrollable Body & Comments */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Original Post Content */}
-            <div className="pb-4 border-b border-border/50">
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-sm text-foreground shrink-0">{authorName}</span>
-                <p className="text-sm text-muted-foreground/90 whitespace-pre-line leading-relaxed break-all">
-                  {cleanBody}
-                </p>
+            {/* Post Author Info & Content Body */}
+            <div className="space-y-3 pb-3 border-b border-border/50">
+              <div className="flex items-center gap-2.5">
+                <Avatar className="w-9 h-9 border border-border/40 shrink-0">
+                  <AvatarImage src={authorAvatar} alt={authorName} />
+                  <AvatarFallback className="bg-sky-500/10 text-sky-600 font-bold text-xs">
+                    {authorName.slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col text-xs leading-tight">
+                  <span className="font-bold text-sm text-foreground">{authorName}</span>
+                  <span className="text-[11px] text-muted-foreground mt-0.5">{getRelativeTimeStr(post.createdAt)}</span>
+                </div>
+              </div>
+
+              {/* Title (If distinct from body) */}
+              {post.title && post.title !== cleanBody.slice(0, 30) && (
+                <h3 className="font-bold text-base text-foreground leading-snug">{post.title}</h3>
+              )}
+
+              {/* Body Text */}
+              <div className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed break-words">
+                {cleanBody}
               </div>
             </div>
 
             {/* Comments Component */}
-            <div className="mt-2">
+            <div className="pt-1">
               <Comments 
                 targetType="post" 
                 targetId={post.id} 
@@ -816,6 +844,8 @@ function InstagramFeedCard({
   const toggleReactionMutation = useTogglePostReaction(post.id);
   const effectiveSlug = slug || (post as any).board?.slug;
   const authorName = post.user?.name || post.guestName || '익명';
+  const authorAvatar = (post.user as any)?.image || post.user?.picture || (post.user as any)?.profileImage || '';
+  const boardName = (post as any).board?.name || '라운지';
   const allImages = extractAllImages(post.content);
   const cleanBody = stripHtml(post.content);
 
@@ -839,26 +869,37 @@ function InstagramFeedCard({
   };
 
   const cleanBodyLines = cleanBody.split('\n');
-  const shouldShowMore = cleanBody.length > 90 || cleanBodyLines.length > 3;
+  const shouldShowMore = cleanBody.length > 140 || cleanBodyLines.length > 4;
   const displayedBody = isExpanded ? cleanBody : (
-    cleanBody.slice(0, 90) + (shouldShowMore ? '...' : '')
+    cleanBody.slice(0, 140) + (shouldShowMore ? '...' : '')
   );
 
   return (
-    <div className="bg-card text-card-foreground border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col gap-3 p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground pb-1 border-b border-border/20">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-sm text-foreground/90">{authorName}</span>
-          <span>·</span>
-          <span>{getRelativeTimeStr(post.createdAt)}</span>
-          {post.isNotice && (
-            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-destructive text-white rounded">공지</span>
-          )}
+    <div className="bg-card text-card-foreground border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col gap-3 p-4 hover:border-border/80 transition-all">
+      {/* 1. Header (Avatar + Name + Relative Time + Board Target + Actions) */}
+      <div className="flex items-center justify-between gap-2 pb-1 border-b border-border/30">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Avatar className="w-9 h-9 border border-border/40 shrink-0">
+            <AvatarImage src={authorAvatar} alt={authorName} />
+            <AvatarFallback className="bg-sky-500/10 text-sky-600 font-bold text-xs">
+              {authorName.slice(0, 2)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col text-xs leading-tight min-w-0">
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="font-bold text-sm text-foreground truncate">{authorName}</span>
+              {post.isNotice && (
+                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-destructive text-white rounded shrink-0">공지</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 truncate">
+              <span>{getRelativeTimeStr(post.createdAt)}</span>
+            </div>
+          </div>
         </div>
 
         {canManage && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={(e) => handleEdit(e, post.id, effectiveSlug)}
@@ -879,50 +920,73 @@ function InstagramFeedCard({
         )}
       </div>
 
-      {/* Image Slider */}
-      {allImages.length > 0 && (
-        <div className="w-full">
-          <InstagramImageSlider images={allImages} />
-        </div>
-      )}
+      {/* 2. Content Body (Main Text Content + Images) */}
+      <div className="space-y-2.5 text-sm">
+        {/* Title (If distinct from body) */}
+        {post.title && post.title !== cleanBody.slice(0, 30) && (
+          <h3 className="font-bold text-base text-foreground leading-snug">{post.title}</h3>
+        )}
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-4 text-muted-foreground/70 mt-1 select-none text-sm font-semibold">
-        <button 
-          onClick={handleLike}
-          disabled={toggleReactionMutation.isPending}
-          className={cn(
-            "flex items-center gap-1.5 transition-colors cursor-pointer hover:text-red-500",
-            isLiked && "text-rose-500 hover:text-rose-600"
-          )}
-        >
-          <Heart className={cn("w-5 h-5", isLiked && "fill-rose-500 text-rose-500")} />
-          <span className="text-foreground">{formatStatCount(post.likeCount || 0)}</span>
-        </button>
-        <button 
-          onClick={() => onCommentClick(post)}
-          className="flex items-center gap-1.5 hover:text-primary transition-colors cursor-pointer"
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-foreground">{formatStatCount(post.commentCount || 0)}</span>
-        </button>
-      </div>
-
-      {/* Text Area */}
-      <div className="space-y-1.5 text-sm">
-
-        {/* Caption */}
-        <div className="leading-relaxed whitespace-pre-line break-all">
-          <span className="font-bold text-foreground mr-2">{authorName}</span>
-          <span className="text-muted-foreground/90">{displayedBody}</span>
+        {/* Text Body */}
+        <div className="leading-relaxed whitespace-pre-line text-foreground/90 break-words">
+          {displayedBody}
           {shouldShowMore && !isExpanded && (
             <button 
               onClick={() => setIsExpanded(true)}
-              className="text-xs text-primary ml-1 hover:underline cursor-pointer"
+              className="text-xs text-primary font-bold ml-1.5 hover:underline cursor-pointer"
             >
               더 보기
             </button>
           )}
+        </div>
+
+        {/* Image Slider / Gallery */}
+        {allImages.length > 0 && (
+          <div className="w-full mt-2 rounded-xl overflow-hidden border border-border/40 shadow-xs">
+            <InstagramImageSlider images={allImages} />
+          </div>
+        )}
+      </div>
+
+      {/* 3. Bottom Action Bar (Likes, Comments, Shares & Views) */}
+      <div className="flex items-center justify-between text-muted-foreground/80 pt-2.5 border-t border-border/40 select-none text-xs font-semibold mt-1">
+        <div className="flex items-center gap-5">
+          {/* Like (Heart) Button */}
+          <button 
+            onClick={handleLike}
+            disabled={toggleReactionMutation.isPending}
+            className={cn(
+              "flex items-center gap-1.5 transition-colors cursor-pointer hover:text-rose-500 group",
+              isLiked && "text-rose-500 hover:text-rose-600"
+            )}
+          >
+            <Heart className={cn("w-4 h-4 transition-transform group-active:scale-125", isLiked && "fill-rose-500 text-rose-500")} />
+            <span className={cn("text-xs font-bold", isLiked ? "text-rose-500" : "text-muted-foreground")}>
+              {formatStatCount(post.likeCount || 0)}
+            </span>
+          </button>
+
+          {/* Comment Button */}
+          <button 
+            onClick={() => onCommentClick(post)}
+            className="flex items-center gap-1.5 hover:text-primary transition-colors cursor-pointer group"
+          >
+            <MessageSquare className="w-4 h-4 transition-transform group-active:scale-125" />
+            <span className="text-xs font-bold text-muted-foreground">{formatStatCount(post.commentCount || 0)}</span>
+          </button>
+
+          {/* Share / Copy Link Button */}
+          <button 
+            onClick={() => {
+              const url = `${window.location.origin}/board/${effectiveSlug}/${post.id}`;
+              navigator.clipboard.writeText(url);
+              toast.success("게시글 링크가 복사되었습니다.");
+            }}
+            className="flex items-center gap-1.5 hover:text-primary transition-colors cursor-pointer"
+            title="링크 복사"
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>

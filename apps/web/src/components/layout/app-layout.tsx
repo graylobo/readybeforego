@@ -81,7 +81,7 @@ export function AppLayout({
   const isAdminVariant = variant === 'admin';
   // 어드민 영역은 top 레이아웃을 지원하지 않고 항상 사이드바 모드로 통일한다.
   const layoutMode = isAdminVariant ? 'sidebar' : storeLayoutMode;
-  const firstBoardHref = clientMenuItems[0]?.subMenu?.[0]?.href || '/board/free';
+  const firstBoardHref = '/board/lounge';
 
   React.useEffect(() => {
     setMounted(true);
