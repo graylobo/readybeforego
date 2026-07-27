@@ -440,6 +440,16 @@ export class ScamsRepository {
     });
   }
 
+  async findRegionByName(name: string, cityId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.query.regions.findFirst({
+      where: and(
+        eq(schema.regions.name, name),
+        eq(schema.regions.cityId, cityId)
+      ),
+    });
+  }
+
   async findAdminScams(params: {
     page: number;
     limit: number;

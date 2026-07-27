@@ -61,3 +61,21 @@ export const ToggleScamReactionSchema = z.object({
   type: z.enum(['like', 'dislike']),
 });
 export class ToggleScamReactionZodDto extends createZodDto(ToggleScamReactionSchema) {}
+
+export const BulkImportScamsSchema = z.object({
+  items: z.array(z.object({
+    countryCode: z.string().min(2),
+    cityName: z.string().min(1),
+    regionName: z.string().optional(),
+    scope: z.enum(['spot', 'region', 'city', 'country']).optional().default('spot'),
+    scamCategory: z.string().min(1),
+    title: z.string().min(2),
+    description: z.string().min(5),
+    avoidanceTip: z.string().optional().nullable(),
+    latitude: z.number().optional().nullable(),
+    longitude: z.number().optional().nullable(),
+    sourceUrl: z.string().optional().nullable(),
+    imageUrls: z.array(z.string()).optional().nullable(),
+  })),
+});
+export class BulkImportScamZodDto extends createZodDto(BulkImportScamsSchema) {}

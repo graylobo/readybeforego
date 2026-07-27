@@ -625,4 +625,78 @@ export class ScamsService {
       }
     }
   }
+
+  async bulkImportAdminScams(items: any[]) {
+    if (!items || items.length === 0) return { importedCount: 0 };
+    let importedCount = 0;
+
+    for (const item of items) {
+      try {
+        const countryCode = (item.countryCode || 'KR').toUpperCase();
+        const cityName = item.cityName || '기타 도시';
+        const regionName = item.regionName || item.title || '일반 지역';
+        const latitude = item.latitude ?? 0;
+        const longitude = item.longitude ?? 0;
+        const scope = item.scope || 'spot';
+
+        // 1. findOrCreate Country
+        let country = await this.scamsRepository.findCountryByCode(countryCode);
+        if (!country) {
+          country = await this.scamsRepository.createCountry({
+            code: countryCode,
+            name: countryCode,
+            nameEn: countryCode,
+          });
+        }
+
+        // 2. findOrCreate City
+        let city = await this.scamsRepository.findCityByName(cityName, countryCode);
+        if (!city) {
+          city = await this.scamsRepository.createCity({
+            countryCode: countryCode,
+            name: cityName,
+            nameEn: cityName,
+            latitude: Number(latitude),
+            longitude: Number(longitude),
+          });
+        }
+
+        // 3. findOrCreate Region (spot 또는 region일 때)
+        let regionId: string | undefined = undefined;
+        if (scope === 'spot' || scope === 'region') {
+          let region = await this.scamsRepository.findRegionByName(regionName, city.id);
+          if (!region) {
+            region = await this.scamsRepository.createRegion({
+              cityId: city.id,
+              name: regionName,
+              nameEn: regionName,
+              latitude: Number(latitude),
+              longitude: Number(longitude),
+            });
+          }
+          regionId = region.id;
+        }
+
+        // 4. Create ScamInfo
+        await this.scamsRepository.create({
+          countryCode: countryCode,
+          cityId: city.id,
+          regionId: regionId,
+          scope: scope,
+          scamCategory: item.scamCategory || 'OVERCHARGING',
+          title: item.title,
+          description: item.description,
+          avoidanceTip: item.avoidanceTip || null,
+          sourceUrl: item.sourceUrl || null,
+          imageUrls: item.imageUrls || null,
+        });
+
+        importedCount++;
+      } catch (err) {
+        this.logger.error(`Failed to bulk import scam item: ${item.title}`, err);
+      }
+    }
+
+    return { importedCount };
+  }
 }

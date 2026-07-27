@@ -181,4 +181,9 @@ export const scamsApi = {
   deleteAdminScamsBulk: async (ids: string[]): Promise<void> => {
     await apiClient.post('/scams/admin/bulk-delete', { ids });
   },
+
+  bulkImportAdminScams: async (items: any[]): Promise<{ importedCount: number }> => {
+    const response = await apiClient.post('/scams/admin/bulk-import', { items });
+    return response.data?.data || response.data;
+  },
 };

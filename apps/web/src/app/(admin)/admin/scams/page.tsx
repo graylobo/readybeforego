@@ -7,7 +7,8 @@ import {
   useAdminCreateScam, 
   useAdminUpdateScam, 
   useAdminDeleteScam,
-  useAdminDeleteScamsBulk
+  useAdminDeleteScamsBulk,
+  useAdminBulkImportScams
 } from '@/hooks/queries/use-admin-queries';
 import { scamsApi } from '@/lib/api/scams';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { CommonPagination } from '@/components/common/common-pagination';
-import { Plus, Search, Trash2, Edit, AlertTriangle, ExternalLink, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, AlertTriangle, ExternalLink, ThumbsUp, ThumbsDown, FileJson, UploadCloud } from 'lucide-react';
 
 import { AgGridReact } from 'ag-grid-react';
 import { 
@@ -117,8 +118,37 @@ export default function AdminScamsPage() {
   const [deletingScam, setDeletingScam] = useState<any | null>(null);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
 
   const deleteScamsBulkMutation = useAdminDeleteScamsBulk();
+  const bulkImportMutation = useAdminBulkImportScams();
+
+  const parsedJsonItems = useMemo(() => {
+    if (!jsonInput.trim()) return null;
+    try {
+      const parsed = JSON.parse(jsonInput);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      return items;
+    } catch {
+      return null;
+    }
+  }, [jsonInput]);
+
+  const handleBulkImportScams = async () => {
+    if (!parsedJsonItems || parsedJsonItems.length === 0) {
+      toast.error('올바른 JSON 포맷 배열 데이터를 입력해 주세요.');
+      return;
+    }
+    try {
+      const res = await bulkImportMutation.mutateAsync(parsedJsonItems);
+      toast.success(`총 ${res.importedCount}개의 제보 데이터가 성공적으로 일괄 등록되었습니다.`);
+      setJsonInput('');
+      setIsBulkImportModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'JSON 일괄 등록 처리 중 오류가 발생했습니다.');
+    }
+  };
 
   const handleSelectionChanged = (event: any) => {
     const selectedNodes = event.api.getSelectedNodes();
@@ -374,6 +404,14 @@ export default function AdminScamsPage() {
               선택 삭제 ({selectedRows.length}개)
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setIsBulkImportModalOpen(true)}
+            className="flex items-center gap-1.5 shadow-sm"
+          >
+            <FileJson className="w-4 h-4 text-emerald-500" />
+            JSON 일괄 등록
+          </Button>
           <Button onClick={handleOpenCreate} className="bg-primary text-primary-foreground flex items-center gap-1.5 shadow-sm">
             <Plus className="w-4 h-4" />
             신규 제보 등록
@@ -663,6 +701,71 @@ export default function AdminScamsPage() {
             </Button>
             <Button variant="destructive" onClick={handleBulkDeleteScams} disabled={deleteScamsBulkMutation.isPending}>
               일괄 삭제 ({selectedRows.length}개)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={isBulkImportModalOpen} onOpenChange={setIsBulkImportModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileJson className="w-5 h-5 text-emerald-500" />
+              AI 수집 JSON 제보 데이터 일괄 등록
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              ChatGPT, Claude 등 AI로 수집한 제보 데이터 JSON 배열(<code className="bg-muted px-1.5 py-0.5 rounded text-foreground font-mono text-[11px]">[&#123;...&#125;]</code>)을 아래에 그대로 붙여넣으세요. 백엔드가 국가, 도시, 세부 장소를 자동 연결하여 1초 만에 일괄 적재합니다.
+            </p>
+            
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <Label htmlFor="jsonTextarea">JSON 데이터 입력</Label>
+                {parsedJsonItems ? (
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[11px] font-bold">
+                    ✓ {parsedJsonItems.length}개 항목 감지됨 (파싱 성공)
+                  </Badge>
+                ) : jsonInput.trim() ? (
+                  <Badge variant="outline" className="bg-rose-500/10 text-rose-500 border-rose-500/20 text-[11px] font-bold">
+                    ✕ 올바르지 않은 JSON 포맷
+                  </Badge>
+                ) : null}
+              </div>
+              <Textarea
+                id="jsonTextarea"
+                placeholder={`[
+  {
+    "countryCode": "TH",
+    "cityName": "방콕",
+    "regionName": "카오산로드",
+    "scope": "spot",
+    "scamCategory": "FAKE_TAXI",
+    "title": "방콕 카오산로드 입구 가짜 뚝뚝 사기",
+    "description": "피해 내용 설명...",
+    "avoidanceTip": "대처법 팁...",
+    "latitude": 13.7590,
+    "longitude": 100.4972
+  }
+]`}
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                className="font-mono text-xs h-64 leading-relaxed resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => { setIsBulkImportModalOpen(false); setJsonInput(''); }}>
+              취소
+            </Button>
+            <Button
+              onClick={handleBulkImportScams}
+              disabled={!parsedJsonItems || parsedJsonItems.length === 0 || bulkImportMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+            >
+              <UploadCloud className="w-4 h-4" />
+              {bulkImportMutation.isPending ? '일괄 등록 중...' : `일괄 등록 시작 (${parsedJsonItems?.length ?? 0}개)`}
             </Button>
           </DialogFooter>
         </DialogContent>

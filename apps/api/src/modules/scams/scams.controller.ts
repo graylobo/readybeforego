@@ -64,6 +64,13 @@ export class ScamsController {
     return this.scamsService.deleteAdminScamsBulk(ids);
   }
 
+  @Post('admin/bulk-import')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '어드민용 JSON 데이터 기반 사기 경고 정보 일괄 등록' })
+  async bulkImportAdminScams(@Body('items') items: any[]) {
+    return this.scamsService.bulkImportAdminScams(items);
+  }
+
   @Get('countries')
   @ApiOperation({ summary: '전체 국가 목록 조회' })
   async getCountries() {
