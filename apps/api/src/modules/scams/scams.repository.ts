@@ -450,6 +450,25 @@ export class ScamsRepository {
     });
   }
 
+  async findDuplicateScam(title: string, countryCode: string, cityId?: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    const trimmedTitle = title.trim();
+
+    const conditions: SQL[] = [
+      eq(schema.scamInfos.title, trimmedTitle),
+      eq(schema.scamInfos.countryCode, countryCode),
+      sql`${schema.scamInfos.deletedAt} is null`,
+    ];
+
+    if (cityId) {
+      conditions.push(eq(schema.scamInfos.cityId, cityId));
+    }
+
+    return db.query.scamInfos.findFirst({
+      where: and(...conditions),
+    });
+  }
+
   async findAdminScams(params: {
     page: number;
     limit: number;

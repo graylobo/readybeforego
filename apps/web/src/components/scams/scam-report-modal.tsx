@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { PlusCircle, Image as ImageIcon, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
+import { formatExternalUrl } from "@/lib/utils/url";
 
 const CATEGORY_ITEMS = [
   { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
@@ -468,7 +469,7 @@ export function ScamReportModal() {
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
-          sourceUrl: sourceUrl.trim() || undefined,
+          sourceUrl: sourceUrl.trim() ? formatExternalUrl(sourceUrl.trim()) : undefined,
           imageUrls: urls,
         });
       } else {
@@ -481,7 +482,7 @@ export function ScamReportModal() {
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
-          sourceUrl: sourceUrl.trim() || undefined,
+          sourceUrl: sourceUrl.trim() ? formatExternalUrl(sourceUrl.trim()) : undefined,
           imageUrls: urls,
         });
       }

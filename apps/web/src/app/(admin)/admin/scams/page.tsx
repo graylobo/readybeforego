@@ -142,7 +142,11 @@ export default function AdminScamsPage() {
     }
     try {
       const res = await bulkImportMutation.mutateAsync(parsedJsonItems);
-      toast.success(`총 ${res.importedCount}개의 제보 데이터가 성공적으로 일괄 등록되었습니다.`);
+      if (res.skippedCount > 0) {
+        toast.success(`신규 제보 ${res.importedCount}개 등록 완료 (중복 제보 ${res.skippedCount}개 제외됨)`);
+      } else {
+        toast.success(`총 ${res.importedCount}개의 제보 데이터가 성공적으로 일괄 등록되었습니다.`);
+      }
       setJsonInput('');
       setIsBulkImportModalOpen(false);
     } catch (err: any) {

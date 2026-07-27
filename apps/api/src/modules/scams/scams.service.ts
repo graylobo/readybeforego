@@ -26,6 +26,20 @@ export interface GeocodingProvider {
   searchAddress(query: string): Promise<GeocodeResponse[]>;
 }
 
+function formatExternalUrl(url?: string | null): string | null {
+  if (!url || typeof url !== 'string') return null;
+  let trimmed = url.trim();
+  if (!trimmed) return null;
+
+  trimmed = trimmed.replace(/^(https?):?\/?(?!\/)/i, '$1://');
+
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+
+  return trimmed;
+}
+
 // 3. Nominatim(OSM) 지오코딩 제공자 구현 🔴
 export class NominatimProvider implements GeocodingProvider {
   async reverseGeocode(lat: number, lng: number): Promise<GeocodeResponse> {
@@ -381,7 +395,7 @@ export class ScamsService {
         description: createDto.description,
         avoidanceTip: createDto.avoidanceTip ?? null,
         scamCategory: createDto.scamCategory,
-        sourceUrl: createDto.sourceUrl ?? null,
+        sourceUrl: formatExternalUrl(createDto.sourceUrl),
         imageUrls: createDto.imageUrls ?? [],
       }, tx);
     });
@@ -399,7 +413,12 @@ export class ScamsService {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
 
-    const updateResult = await this.scamsRepository.update(id, updateDto);
+    const payload = { ...updateDto };
+    if (payload.sourceUrl !== undefined) {
+      payload.sourceUrl = formatExternalUrl(payload.sourceUrl);
+    }
+
+    const updateResult = await this.scamsRepository.update(id, payload);
 
     // 이미지 리스트가 수정 요청에 포함되어 있는 경우 (undefined가 아닌 경우)
     if (updateDto.imageUrls !== undefined) {
@@ -627,11 +646,14 @@ export class ScamsService {
   }
 
   async bulkImportAdminScams(items: any[]) {
-    if (!items || items.length === 0) return { importedCount: 0 };
+    if (!items || items.length === 0) return { importedCount: 0, skippedCount: 0 };
     let importedCount = 0;
+    let skippedCount = 0;
 
     for (const item of items) {
       try {
+        if (!item.title || !item.title.trim()) continue;
+
         const countryCode = (item.countryCode || 'KR').toUpperCase();
         const cityName = item.cityName || '기타 도시';
         const regionName = item.regionName || item.title || '일반 지역';
@@ -661,7 +683,20 @@ export class ScamsService {
           });
         }
 
-        // 3. findOrCreate Region (spot 또는 region일 때)
+        // 3. 중복 제보 검사 (동일 제목 + 동일 국가/도시)
+        const duplicateScam = await this.scamsRepository.findDuplicateScam(
+          item.title,
+          countryCode,
+          city.id
+        );
+
+        if (duplicateScam) {
+          this.logger.log(`Skipping duplicate scam item: "${item.title}"`);
+          skippedCount++;
+          continue;
+        }
+
+        // 4. findOrCreate Region (spot 또는 region일 때)
         let regionId: string | undefined = undefined;
         if (scope === 'spot' || scope === 'region') {
           let region = await this.scamsRepository.findRegionByName(regionName, city.id);
@@ -677,17 +712,17 @@ export class ScamsService {
           regionId = region.id;
         }
 
-        // 4. Create ScamInfo
+        // 5. Create ScamInfo
         await this.scamsRepository.create({
           countryCode: countryCode,
           cityId: city.id,
           regionId: regionId,
           scope: scope,
           scamCategory: item.scamCategory || 'OVERCHARGING',
-          title: item.title,
+          title: item.title.trim(),
           description: item.description,
           avoidanceTip: item.avoidanceTip || null,
-          sourceUrl: item.sourceUrl || null,
+          sourceUrl: formatExternalUrl(item.sourceUrl),
           imageUrls: item.imageUrls || null,
         });
 
@@ -697,6 +732,6 @@ export class ScamsService {
       }
     }
 
-    return { importedCount };
+    return { importedCount, skippedCount };
   }
 }

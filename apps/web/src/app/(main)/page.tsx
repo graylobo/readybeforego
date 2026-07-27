@@ -10,6 +10,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
 import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
+import { formatExternalUrl } from "@/lib/utils/url";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -734,7 +735,7 @@ export default function Home() {
                       <div className="flex items-center gap-2 shrink-0">
                         {scam.sourceUrl && (
                           <a 
-                            href={scam.sourceUrl} 
+                            href={formatExternalUrl(scam.sourceUrl)} 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
