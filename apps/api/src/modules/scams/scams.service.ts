@@ -31,13 +31,23 @@ function formatExternalUrl(url?: string | null): string | null {
   let trimmed = url.trim();
   if (!trimmed) return null;
 
-  trimmed = trimmed.replace(/^(https?):?\/?(?!\/)/i, '$1://');
-
-  if (!/^https?:\/\//i.test(trimmed)) {
-    trimmed = `https://${trimmed}`;
+  // 1. 마크다운 링크 패턴 [text](https://...) 또는 [https://...](https://...) 정제
+  const markdownMatch = trimmed.match(/\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+  if (markdownMatch && markdownMatch[1]) {
+    trimmed = markdownMatch[1];
+  } else {
+    trimmed = trimmed.replace(/^\[+/, '').replace(/\]+$/, '');
   }
 
-  return trimmed;
+  const isHttp = /^http:\/\//i.test(trimmed);
+
+  // 2. 모든 프로토콜 접두사 및 중복 기호(e.g., "https://://://", "https:/", "http://https://", "https:") 완전히 제거
+  trimmed = trimmed.replace(/^(https?|http)[\s::/\\=]+/gi, '');
+
+  if (!trimmed) return null;
+
+  // 3. 단 하나의 올바른 프로토콜 접두사 재결합 (Idempotent 100% 보장)
+  return isHttp ? `http://${trimmed}` : `https://${trimmed}`;
 }
 
 // 3. Nominatim(OSM) 지오코딩 제공자 구현 🔴

@@ -26,6 +26,7 @@ import { ko } from 'date-fns/locale';
 import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { CommonPagination } from '@/components/common/common-pagination';
 import { Plus, Search, Trash2, Edit, AlertTriangle, ExternalLink, ThumbsUp, ThumbsDown, FileJson, UploadCloud } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 
 import { AgGridReact } from 'ag-grid-react';
 import { 
@@ -63,18 +64,24 @@ const ScopeRenderer = (params: any) => {
 
 // Category Badge Renderer
 const CategoryRenderer = (params: any) => {
-  const category = params.data.scamCategory;
+  const categoryStr = params.data.scamCategory || '';
   const categoryLabels: Record<string, string> = {
     FORCED_SHOPPING: '🛍️ 호객/강매',
     OVERCHARGING: '💸 바가지 요금',
-    FAKE_TAXI: '🚕 가짜 택시/미터기',
+    FAKE_TAXI: '🚕 가짜 택시',
     DRUG_HAZARD: '💊 약물 위험',
-    LIES_TOURISM: '🗣️ 가짜 정보/사기',
+    LIES_TOURISM: '🗣️ 가짜 정보',
   };
+
+  const categories = categoryStr.split(',').filter(Boolean);
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border">
-      {categoryLabels[category] || category}
-    </span>
+    <div className="flex flex-wrap gap-1 items-center h-full py-1">
+      {categories.map((cat: string) => (
+        <span key={cat} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border">
+          {categoryLabels[cat] || cat}
+        </span>
+      ))}
+    </div>
   );
 };
 
@@ -108,6 +115,14 @@ const ActionsRenderer = (params: any) => {
 export default function AdminScamsPage() {
   const { resolvedTheme } = useTheme();
   const gridThemeClass = resolvedTheme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz';
+
+  const CATEGORY_OPTIONS = useMemo(() => [
+    { value: 'FORCED_SHOPPING', label: '🛍️ 호객/강매' },
+    { value: 'OVERCHARGING', label: '💸 바가지 요금' },
+    { value: 'FAKE_TAXI', label: '🚕 가짜 택시' },
+    { value: 'DRUG_HAZARD', label: '💊 약물 위험' },
+    { value: 'LIES_TOURISM', label: '🗣️ 가짜 정보' },
+  ], []);
 
   const [page, setPage] = usePaginationLimit('admin-scams-page', 1);
   const [limit, setLimit] = usePaginationLimit('admin-scams-limit', 10);
@@ -218,6 +233,17 @@ export default function AdminScamsPage() {
     return Math.max(1, Math.ceil(totalItems / limit));
   }, [totalItems, limit]);
 
+  const toggleCategory = (value: string) => {
+    const current = formData.scamCategory ? formData.scamCategory.split(',').filter(Boolean) : [];
+    let updated: string[];
+    if (current.includes(value)) {
+      updated = current.filter(v => v !== value);
+    } else {
+      updated = [...current, value];
+    }
+    setFormData({ ...formData, scamCategory: updated.join(',') });
+  };
+
   const handleOpenEdit = (scam: any) => {
     setEditingScam(scam);
     setFormData({
@@ -258,6 +284,10 @@ export default function AdminScamsPage() {
       toast.error('피해 내용을 입력해 주세요.');
       return;
     }
+    if (!formData.scamCategory || !formData.scamCategory.trim()) {
+      toast.error('사기 카테고리를 최소 1개 이상 선택해 주세요.');
+      return;
+    }
 
     try {
       if (editingScam) {
@@ -268,6 +298,7 @@ export default function AdminScamsPage() {
             description: formData.description,
             avoidanceTip: formData.avoidanceTip,
             scamCategory: formData.scamCategory,
+            scope: formData.scope,
             sourceUrl: formData.sourceUrl,
           },
         });
@@ -562,10 +593,10 @@ export default function AdminScamsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>도시 선택 (선택사항)</Label>
-                  <Select value={formData.cityId} onValueChange={(v) => setFormData({ ...formData, cityId: v, regionId: '' })}>
+                  <Select value={formData.cityId || 'none'} onValueChange={(v) => setFormData({ ...formData, cityId: v === 'none' ? '' : v, regionId: '' })}>
                     <SelectTrigger><SelectValue placeholder="도시 선택" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">선택 안 함</SelectItem>
+                      <SelectItem value="none">선택 안 함</SelectItem>
                       {cities?.map((city) => (
                         <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>
                       ))}
@@ -575,35 +606,43 @@ export default function AdminScamsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>카테고리</Label>
-                <Select value={formData.scamCategory} onValueChange={(v) => setFormData({ ...formData, scamCategory: v })}>
-                  <SelectTrigger><SelectValue placeholder="카테고리" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FORCED_SHOPPING">🛍️ 호객/강매</SelectItem>
-                    <SelectItem value="OVERCHARGING">💸 바가지 요금</SelectItem>
-                    <SelectItem value="FAKE_TAXI">🚕 가짜 택시</SelectItem>
-                    <SelectItem value="DRUG_HAZARD">💊 약물 위험</SelectItem>
-                    <SelectItem value="LIES_TOURISM">🗣️ 가짜 정보</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label>제보 범위 (Scope)</Label>
+              <Select value={formData.scope} onValueChange={(v) => setFormData({ ...formData, scope: v })}>
+                <SelectTrigger><SelectValue placeholder="범위" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="spot">📍 특정 위치 (Spot)</SelectItem>
+                  <SelectItem value="region">🗺️ 구역 전체 (Region)</SelectItem>
+                  <SelectItem value="city">🏙️ 도시 전체 (City)</SelectItem>
+                  <SelectItem value="country">🇹🇭 국가 전체 (Country)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              {!editingScam && (
-                <div className="space-y-1.5">
-                  <Label>제보 범위 (Scope)</Label>
-                  <Select value={formData.scope} onValueChange={(v) => setFormData({ ...formData, scope: v })}>
-                    <SelectTrigger><SelectValue placeholder="범위" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="spot">📍 특정 위치 (Spot)</SelectItem>
-                      <SelectItem value="region">🗺️ 구역 전체 (Region)</SelectItem>
-                      <SelectItem value="city">🏙️ 도시 전체 (City)</SelectItem>
-                      <SelectItem value="country">🇹🇭 국가 전체 (Country)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+            <div className="space-y-1.5">
+              <Label>사기 카테고리 (복수 선택 가능)</Label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {CATEGORY_OPTIONS.map((cat) => {
+                  const selectedList = formData.scamCategory ? formData.scamCategory.split(',').filter(Boolean) : [];
+                  const isSelected = selectedList.includes(cat.value);
+                  return (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => toggleCategory(cat.value)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <span>{cat.label}</span>
+                      {isSelected && <span className="text-[10px] font-bold">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-1.5">
