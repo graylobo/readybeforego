@@ -193,10 +193,18 @@ interface MapEventsHandlerProps {
 }
 
 function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
-  const { setMapZoom, setMapCenter } = useScamMapStore();
+  const { setMapZoom, setMapCenter, resetFeedSelections, setIsMobileFeedOpen } = useScamMapStore();
+  const prevZoomRef = useRef<number | null>(null);
+
   const map = useMapEvents({
     zoomend() {
       const z = map.getZoom();
+      // 지도 축소(Zoom Out) 발생 시 선택된 제보 피드 영역 및 모바일 피드를 자동으로 닫음 🚪
+      if (prevZoomRef.current !== null && z < prevZoomRef.current) {
+        resetFeedSelections();
+        setIsMobileFeedOpen(false);
+      }
+      prevZoomRef.current = z;
       onZoomChange(z);
       setMapZoom(z);
     },

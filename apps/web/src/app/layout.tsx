@@ -54,9 +54,12 @@ export const metadata: Metadata = {
     follow: UI_CONFIG.robotsFollow,
   },
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico?v=2" },
+      { url: "/icon.png?v=2", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico?v=2",
+    apple: "/apple-icon.png?v=2",
   },
   verification: {
     google: SITE_CONFIG.googleConsoleId,

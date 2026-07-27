@@ -10,7 +10,7 @@ interface LayoutState {
 }
 
 export const useLayoutStore = create<LayoutState>()((set) => ({
-  layoutMode: "sidebar",
+  layoutMode: "top",
   pendingPath: null,
   setPendingPath: (path) => set({ pendingPath: path }),
   setLayoutMode: (mode) => {

@@ -23,6 +23,7 @@ import { NotificationBell } from './notification-bell';
 import { UserMenu } from './user-menu';
 
 import { isAdmin, isStaff } from '@community/shared-types';
+import { BrandLogo } from '@/components/common/brand-logo';
 import { TopNav } from './top-nav';
 import { SearchBar } from './search-bar';
 
@@ -95,8 +96,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
           )}
           onClick={() => router.push('/')}
         >
-          <Film className="w-8 h-8 shrink-0" />
-          <span className="text-xl font-bold select-none truncate hidden sm:block">Community</span>
+          <BrandLogo size="md" />
         </div>
 
         {!isAdminVariant && <SearchBar />}

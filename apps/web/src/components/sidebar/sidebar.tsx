@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useSidebarStore } from "@/lib/stores/sidebar.store";
 import { useSidebarToggleStore } from "@/lib/stores/sidebar-toggle.store";
 import { useLayoutStore } from "@/lib/stores/layout.store";
+import { BrandLogo } from "@/components/common/brand-logo";
 
 interface SubMenuItem {
   id: string;
@@ -140,17 +141,11 @@ export function Sidebar({ items }: SidebarProps) {
       >
         {/* Sidebar Header (Logo + Close) */}
         <div className="flex h-16 items-center justify-between px-4 shrink-0">
-           {/* Logo - Placeholder for now */}
           <div 
             className="flex items-center gap-2 cursor-pointer overflow-hidden"
             onClick={() => (window.location.href = '/')}
           >
-            <span className={cn(
-              "text-xl font-bold select-none truncate transition-all duration-300",
-              isVisualOpen ? "opacity-100 w-auto" : "opacity-0 w-0"
-            )}>
-              BOILER PLATE
-            </span>
+            <BrandLogo size="sm" className={cn("transition-all duration-300", isVisualOpen ? "opacity-100 w-auto" : "opacity-0 w-0")} />
           </div>
           <Button 
             variant="ghost" 
