@@ -580,11 +580,49 @@ export class ScamsService {
     if (!scam) {
       throw new NotFoundException('해당 사기 정보를 찾을 수 없습니다.');
     }
+
+    // 연관 이미지 스토리지 삭제
+    await this.deleteScamImagesFromStorage(scam.imageUrls);
+
     return this.scamsRepository.deleteAdminScam(id);
   }
 
   async deleteAdminScamsBulk(ids: string[]) {
     if (!ids || ids.length === 0) return [];
+
+    const scams = await this.scamsRepository.findByIds(ids);
+    for (const scam of scams) {
+      await this.deleteScamImagesFromStorage(scam.imageUrls);
+    }
+
     return this.scamsRepository.deleteAdminScamsBulk(ids);
+  }
+
+  private async deleteScamImagesFromStorage(imageUrls: any) {
+    if (!imageUrls) return;
+    let urls: string[] = [];
+    if (Array.isArray(imageUrls)) {
+      urls = imageUrls.filter((u) => typeof u === 'string');
+    } else if (typeof imageUrls === 'string') {
+      try {
+        const parsed = JSON.parse(imageUrls);
+        if (Array.isArray(parsed)) urls = parsed.filter((u) => typeof u === 'string');
+        else urls = [imageUrls];
+      } catch {
+        urls = [imageUrls];
+      }
+    }
+
+    for (const url of urls) {
+      try {
+        const path = this.uploadsService.extractPathFromUrl(url);
+        if (path) {
+          await this.uploadsService.deleteImage(path);
+          this.logger.log(`Deleted scam image file from storage: ${path}`);
+        }
+      } catch (err) {
+        this.logger.error(`Failed to delete scam image file from storage: ${url}`, err);
+      }
+    }
   }
 }

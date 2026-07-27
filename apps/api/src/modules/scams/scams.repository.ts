@@ -36,7 +36,7 @@ export class ScamsRepository {
   async findById(id: string, tx?: Transaction) {
     const db = tx ?? this.db;
     const scam = await db.query.scamInfos.findFirst({
-      where: and(eq(schema.scamInfos.id, id), sql`${schema.scamInfos.deletedAt} is null`),
+      where: eq(schema.scamInfos.id, id),
       with: {
         region: {
           with: {
@@ -503,11 +503,18 @@ export class ScamsRepository {
     };
   }
 
+  async findByIds(ids: string[], tx?: Transaction) {
+    if (!ids || ids.length === 0) return [];
+    const db = tx ?? this.db;
+    return db.query.scamInfos.findMany({
+      where: inArray(schema.scamInfos.id, ids),
+    });
+  }
+
   async deleteAdminScam(id: string, tx?: Transaction) {
     const db = tx ?? this.db;
     const [result] = await db
-      .update(schema.scamInfos)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .delete(schema.scamInfos)
       .where(eq(schema.scamInfos.id, id))
       .returning();
     return result;
@@ -517,8 +524,7 @@ export class ScamsRepository {
     if (!ids || ids.length === 0) return [];
     const db = tx ?? this.db;
     return db
-      .update(schema.scamInfos)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .delete(schema.scamInfos)
       .where(inArray(schema.scamInfos.id, ids))
       .returning();
   }
