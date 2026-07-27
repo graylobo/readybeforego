@@ -96,27 +96,24 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
-    const region = await db.query.regions.findFirst({
-      where: eq(schema.regions.id, regionId),
-      with: {
-        city: true,
-      },
-    });
+
+    // 1. 사전 동기 쿼리없이 SQL 서브쿼리를 이용해 단 1번의 쿼리로 병합
+    const cityIdSubquery = db
+      .select({ cityId: schema.regions.cityId })
+      .from(schema.regions)
+      .where(eq(schema.regions.id, regionId));
+
+    const countryCodeSubquery = db
+      .select({ countryCode: schema.cities.countryCode })
+      .from(schema.regions)
+      .innerJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))
+      .where(eq(schema.regions.id, regionId));
 
     const whereConditions = [
       and(eq(schema.scamInfos.regionId, regionId), inArray(schema.scamInfos.scope, ['spot', 'region'])),
+      and(inArray(schema.scamInfos.cityId, cityIdSubquery), eq(schema.scamInfos.scope, 'city')),
+      and(inArray(schema.scamInfos.countryCode, countryCodeSubquery), eq(schema.scamInfos.scope, 'country')),
     ];
-
-    if (region) {
-      whereConditions.push(
-        and(eq(schema.scamInfos.cityId, region.cityId), eq(schema.scamInfos.scope, 'city'))
-      );
-      if (region.city?.countryCode) {
-        whereConditions.push(
-          and(eq(schema.scamInfos.countryCode, region.city.countryCode), eq(schema.scamInfos.scope, 'country'))
-        );
-      }
-    }
 
     const scams = await db.query.scamInfos.findMany({
       where: and(
@@ -149,24 +146,22 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
-    const city = await db.query.cities.findFirst({
-      where: eq(schema.cities.id, cityId),
-    });
 
-    const regionIdsSubquery = db.select({ id: schema.regions.id })
+    const countryCodeSubquery = db
+      .select({ countryCode: schema.cities.countryCode })
+      .from(schema.cities)
+      .where(eq(schema.cities.id, cityId));
+
+    const regionIdsSubquery = db
+      .select({ id: schema.regions.id })
       .from(schema.regions)
       .where(eq(schema.regions.cityId, cityId));
 
     const whereConditions = [
       and(inArray(schema.scamInfos.regionId, regionIdsSubquery), inArray(schema.scamInfos.scope, ['spot', 'region'])),
       and(eq(schema.scamInfos.cityId, cityId), eq(schema.scamInfos.scope, 'city')),
+      and(inArray(schema.scamInfos.countryCode, countryCodeSubquery), eq(schema.scamInfos.scope, 'country')),
     ];
-
-    if (city?.countryCode) {
-      whereConditions.push(
-        and(eq(schema.scamInfos.countryCode, city.countryCode), eq(schema.scamInfos.scope, 'country'))
-      );
-    }
 
     const scams = await db.query.scamInfos.findMany({
       where: and(
