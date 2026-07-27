@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import { useTheme } from 'next-themes';
 import { useAdminReports, useResolveReport } from '@/hooks/queries/use-report-queries';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -104,6 +105,9 @@ const ActionsRenderer = (params: any) => {
 };
 
 export default function AdminReportsPage() {
+  const { resolvedTheme } = useTheme();
+  const gridThemeClass = resolvedTheme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz';
+
   const [page, setPage] = usePaginationLimit('admin-reports-page', 1);
   const [limit, setLimit] = usePaginationLimit('admin-reports-limit', 20);
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
@@ -262,7 +266,7 @@ export default function AdminReportsPage() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ag-theme-quartz-dark dark:ag-theme-quartz-dark h-full w-full">
+      <div className={`flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ${gridThemeClass} h-full w-full`}>
         <AgGridReact
           rowData={data?.items || []}
           columnDefs={columnDefs}

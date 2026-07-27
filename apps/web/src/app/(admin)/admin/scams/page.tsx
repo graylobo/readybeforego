@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useTheme } from 'next-themes';
 import { useQuery } from '@tanstack/react-query';
 import { 
   useAdminScams, 
@@ -105,6 +106,9 @@ const ActionsRenderer = (params: any) => {
 };
 
 export default function AdminScamsPage() {
+  const { resolvedTheme } = useTheme();
+  const gridThemeClass = resolvedTheme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz';
+
   const [page, setPage] = usePaginationLimit('admin-scams-page', 1);
   const [limit, setLimit] = usePaginationLimit('admin-scams-limit', 10);
   const [search, setSearch] = useState('');
@@ -486,7 +490,7 @@ export default function AdminScamsPage() {
       </div>
 
       {/* AG Grid Table Container (뷰포트 맞춤 100% 확장 flex-1 min-h-0) */}
-      <div className="flex-1 min-h-0 bg-card rounded-xl border shadow-sm overflow-hidden ag-theme-quartz dark:ag-theme-quartz-dark w-full">
+      <div className={`flex-1 min-h-0 bg-card rounded-xl border shadow-sm overflow-hidden ${gridThemeClass} w-full`}>
         {isLoading ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-10 w-full" />

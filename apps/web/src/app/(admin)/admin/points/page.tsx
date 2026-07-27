@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
+import { useTheme } from 'next-themes';
 import { useAdminPointPolicies, useUpdatePointPolicy } from '@/hooks/queries/use-admin-queries';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,6 +81,8 @@ const ActionsRenderer = (params: any) => {
 };
 
 export default function PointPoliciesPage() {
+  const { resolvedTheme } = useTheme();
+  const gridThemeClass = resolvedTheme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz';
   const { data: policies, isLoading } = useAdminPointPolicies();
   const updateMutation = useUpdatePointPolicy();
 
@@ -186,7 +189,7 @@ export default function PointPoliciesPage() {
        
       </div>
 
-      <div className="flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ag-theme-quartz-dark dark:ag-theme-quartz-dark h-full w-full">
+      <div className={`flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ${gridThemeClass} h-full w-full`}>
         <AgGridReact
           rowData={policies}
           columnDefs={columnDefs}
