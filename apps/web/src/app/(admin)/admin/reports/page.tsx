@@ -1,36 +1,32 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { useTheme } from 'next-themes';
-import { useAdminReports, useResolveReport } from '@/hooks/queries/use-report-queries';
+import { CommonPagination } from '@/components/common/common-pagination';
+import { UserProfilePopover } from '@/components/common/user-profile-popover';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAdminReports, useResolveReport } from '@/hooks/queries/use-report-queries';
+import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
 import Link from 'next/link';
-import { usePaginationLimit } from '@/hooks/use-pagination-limit';
-import { CommonPagination } from '@/components/common/common-pagination';
-import { UserProfilePopover } from '@/components/common/user-profile-popover';
+import React, { useMemo } from 'react';
+import { toast } from 'sonner';
 
-import { AgGridReact } from 'ag-grid-react';
-import { 
-  ClientSideRowModelModule, 
-  ModuleRegistry, 
+import {
+  AllCommunityModule,
   ColDef,
-  TextFilterModule,
-  NumberFilterModule
+  ModuleRegistry
 } from 'ag-grid-community';
+import { AgGridReact } from 'ag-grid-react';
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([
-  ClientSideRowModelModule, 
-  TextFilterModule,
-  NumberFilterModule
+  AllCommunityModule
 ]);
 
 // Component for Status Badge
@@ -268,6 +264,7 @@ export default function AdminReportsPage() {
 
       <div className={`flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ${gridThemeClass} h-full w-full`}>
         <AgGridReact
+          theme="legacy"
           rowData={data?.items || []}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
@@ -275,7 +272,6 @@ export default function AdminReportsPage() {
             handleStatusChange,
             isPending: resolveReport.isPending
           }}
-          theme="legacy"
           rowHeight={64}
         />
       </div>

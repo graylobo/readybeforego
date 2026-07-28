@@ -1,40 +1,40 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useTheme } from 'next-themes';
-import { useQuery } from '@tanstack/react-query';
-import { 
-  useAdminScams, 
-  useAdminCreateScam, 
-  useAdminUpdateScam, 
-  useAdminDeleteScam,
-  useAdminDeleteScamsBulk,
-  useAdminBulkImportScams
-} from '@/hooks/queries/use-admin-queries';
-import { scamsApi } from '@/lib/api/scams';
+import { CommonPagination } from '@/components/common/common-pagination';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
+import {
+  useAdminBulkImportScams,
+  useAdminCreateScam,
+  useAdminDeleteScam,
+  useAdminDeleteScamsBulk,
+  useAdminScams,
+  useAdminUpdateScam
+} from '@/hooks/queries/use-admin-queries';
+import { usePaginationLimit } from '@/hooks/use-pagination-limit';
+import { scamsApi } from '@/lib/api/scams';
+import { cn } from '@/lib/utils/cn';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { usePaginationLimit } from '@/hooks/use-pagination-limit';
-import { CommonPagination } from '@/components/common/common-pagination';
-import { Plus, Search, Trash2, Edit, AlertTriangle, ExternalLink, ThumbsUp, ThumbsDown, FileJson, UploadCloud } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
+import { AlertTriangle, Edit, FileJson, Plus, Search, ThumbsDown, ThumbsUp, Trash2, UploadCloud } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
-import { AgGridReact } from 'ag-grid-react';
-import { 
+import {
   AllCommunityModule,
-  RowSelectionModule,
-  ModuleRegistry, 
-  ColDef
+  ColDef,
+  ModuleRegistry,
+  RowSelectionModule
 } from 'ag-grid-community';
+import { AgGridReact } from 'ag-grid-react';
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
@@ -531,6 +531,7 @@ export default function AdminScamsPage() {
           </div>
         ) : (
           <AgGridReact
+            theme="legacy"
             rowData={data?.items || []}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
@@ -540,7 +541,6 @@ export default function AdminScamsPage() {
               onEdit: handleOpenEdit,
               onDelete: (scam: any) => setDeletingScam(scam),
             }}
-            theme="legacy"
             rowHeight={52}
             overlayNoRowsTemplate="<span class='text-muted-foreground text-sm'>조건에 일치하는 사기 제보 데이터가 없습니다.</span>"
           />

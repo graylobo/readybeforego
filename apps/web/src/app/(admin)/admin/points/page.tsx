@@ -1,46 +1,32 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
-import { useTheme } from 'next-themes';
-import { useAdminPointPolicies, useUpdatePointPolicy } from '@/hooks/queries/use-admin-queries';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  Coins, 
-  RefreshCw, 
-  CheckCircle2, 
-  XCircle,
+import { useAdminPointPolicies, useUpdatePointPolicy } from '@/hooks/queries/use-admin-queries';
+import {
+  CheckCircle2,
   TrendingUp,
-  Wallet
+  Wallet,
+  XCircle
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useCallback, useMemo } from 'react';
 
-import { AgGridReact } from 'ag-grid-react';
-import { 
-  ClientSideRowModelModule, 
-  ModuleRegistry, 
-  ColDef,
-  CellValueChangedEvent,
+import {
+  AllCommunityModule,
   CellStyle,
-  ValidationModule,
-  TextFilterModule,
-  NumberFilterModule,
-  TextEditorModule,
-  NumberEditorModule,
-  CellStyleModule
+  CellValueChangedEvent,
+  ColDef,
+  ModuleRegistry
 } from 'ag-grid-community';
+import { AgGridReact } from 'ag-grid-react';
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([
-  ClientSideRowModelModule, 
-  ValidationModule,
-  TextFilterModule,
-  NumberFilterModule,
-  TextEditorModule,
-  NumberEditorModule,
-  CellStyleModule
+  AllCommunityModule
 ]);
 
 // Component for Status Badge
@@ -191,12 +177,12 @@ export default function PointPoliciesPage() {
 
       <div className={`flex-1 min-h-[500px] bg-card rounded-xl border shadow-sm overflow-hidden ${gridThemeClass} h-full w-full`}>
         <AgGridReact
+          theme="legacy"
           rowData={policies}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           onCellValueChanged={onCellValueChanged}
           context={{ handleToggleActive }}
-          theme="legacy"
         />
       </div>
 

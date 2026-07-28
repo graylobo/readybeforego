@@ -74,11 +74,16 @@ export class NotificationsListener {
             if (notifyOnAllReplies || isTopLevelComment) {
                 if (post.receiveCommentNotification !== false) {
                     const boardSlug = (post as any).board?.slug;
+                    const isInquiry = boardSlug === 'inquiry';
+                    const content = isInquiry 
+                      ? `내 문의 [${post.title}]에 답변이 등록되었습니다.`
+                      : `내 글 [${post.title}]에 새로운 댓글이 달렸습니다.`;
+
                     await this.notificationsService.create({
                       userId: post.userId,
                       actorId: event.userId,
                       type: 'COMMENT',
-                      content: `내 글 [${post.title}]에 새로운 댓글이 달렸습니다.`,
+                      content,
                       targetId: post.id,
                       targetType: 'POST',
                       link: `/board/${boardSlug}/${post.id}?commentId=${event.commentId}#comment-${event.commentId}`,
