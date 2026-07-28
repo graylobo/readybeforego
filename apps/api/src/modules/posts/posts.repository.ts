@@ -191,6 +191,39 @@ export class PostsRepository {
       .where(eq(schema.posts.id, id));
   }
 
+  async findCommentImagesByPost(postId: string, tx?: Transaction): Promise<string[]> {
+    const db = tx ?? this.db;
+    const commentsList = await db.select({
+      imageUrl: schema.comments.imageUrl,
+      content: schema.comments.content,
+    })
+    .from(schema.comments)
+    .where(and(
+      eq(schema.comments.targetId, postId),
+      eq(schema.comments.targetType, 'post'),
+      isNull(schema.comments.deletedAt)
+    ));
+
+    const imageUrls: string[] = [];
+    for (const c of commentsList) {
+      if (c.imageUrl) {
+        imageUrls.push(c.imageUrl);
+      }
+      if (c.content) {
+        const matches = c.content.match(/<img[^>]+src=["']([^"']+)["']/g);
+        if (matches) {
+          for (const match of matches) {
+            const srcMatch = match.match(/src=["']([^"']+)["']/);
+            if (srcMatch && srcMatch[1]) {
+              imageUrls.push(srcMatch[1]);
+            }
+          }
+        }
+      }
+    }
+    return imageUrls;
+  }
+
   async softDeleteCommentsByPost(postId: string, tx?: Transaction) {
     const db = tx ?? this.db;
     await db.update(schema.comments)

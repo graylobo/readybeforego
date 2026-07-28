@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SQL, and, asc, desc, eq, sql, inArray, or } from 'drizzle-orm';
+import { SQL, and, asc, desc, eq, sql, inArray, or, isNull } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -551,5 +551,49 @@ export class ScamsRepository {
       .delete(schema.scamInfos)
       .where(inArray(schema.scamInfos.id, ids))
       .returning();
+  }
+
+  async findCommentImagesByScam(scamId: string, tx?: Transaction): Promise<string[]> {
+    const db = tx ?? this.db;
+    const commentsList = await db.select({
+      imageUrl: schema.comments.imageUrl,
+      content: schema.comments.content,
+    })
+    .from(schema.comments)
+    .where(and(
+      eq(schema.comments.targetId, scamId),
+      eq(schema.comments.targetType, 'scam_info'),
+      isNull(schema.comments.deletedAt)
+    ));
+
+    const imageUrls: string[] = [];
+    for (const c of commentsList) {
+      if (c.imageUrl) {
+        imageUrls.push(c.imageUrl);
+      }
+      if (c.content) {
+        const matches = c.content.match(/<img[^>]+src=["']([^"']+)["']/g);
+        if (matches) {
+          for (const match of matches) {
+            const srcMatch = match.match(/src=["']([^"']+)["']/);
+            if (srcMatch && srcMatch[1]) {
+              imageUrls.push(srcMatch[1]);
+            }
+          }
+        }
+      }
+    }
+    return imageUrls;
+  }
+
+  async softDeleteCommentsByScam(scamId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    await db.update(schema.comments)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(schema.comments.targetId, scamId),
+        eq(schema.comments.targetType, 'scam_info'),
+        isNull(schema.comments.deletedAt)
+      ));
   }
 }

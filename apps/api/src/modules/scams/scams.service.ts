@@ -467,9 +467,13 @@ export class ScamsService {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
 
+    // 제보에 달린 댓글들의 이미지 URL 사전 수집 및 댓글 소프트 딜리트
+    const commentImages = await this.scamsRepository.findCommentImagesByScam(id);
+    await this.scamsRepository.softDeleteCommentsByScam(id);
+
     const deleteResult = await this.scamsRepository.update(id, { deletedAt: new Date() });
 
-    // 제보 삭제 완료 후, 업로드된 이미지가 있으면 스토리지에서 비동기 삭제
+    // 제보 본문 이미지 삭제
     if (scam.imageUrls && Array.isArray(scam.imageUrls)) {
       const urls = scam.imageUrls as string[];
       for (const url of urls) {
@@ -481,6 +485,21 @@ export class ScamsService {
           }
         } catch (err) {
           this.logger.error(`Failed to delete scam image from storage: ${url}`, err);
+        }
+      }
+    }
+
+    // 제보 관련 댓글 이미지 개별 스토리지 클린업
+    for (const url of commentImages) {
+      if (url) {
+        try {
+          const imagePath = this.uploadsService.extractPathFromUrl(url);
+          if (imagePath) {
+            await this.uploadsService.deleteImage(imagePath);
+            this.logger.log(`Successfully deleted comment image for deleted scam ${id}: ${url}`);
+          }
+        } catch (err) {
+          this.logger.error(`Failed to delete comment image ${url} for scam ${id}:`, err);
         }
       }
     }

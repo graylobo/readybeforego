@@ -404,6 +404,9 @@ export class PostsService {
           }
       }
 
+      // 게시글에 달린 댓글들의 이미지 URL 사전 수집 (고아 이미지 방지)
+      const commentImages = await this.postsRepo.findCommentImagesByPost(id);
+
       await this.postsRepo.transaction(async (tx) => {
           // Soft delete post
           await this.postsRepo.softDeletePost(id, tx);
@@ -415,6 +418,21 @@ export class PostsService {
       await this.uploadsService.deleteDirectory(`posts/${id}`).catch(err => {
           this.logger.error(`Failed to delete images for post ${id}:`, err);
       });
+
+      // 댓글 관련 이미지 개별 스토리지 클린업
+      for (const imageUrl of commentImages) {
+          if (imageUrl) {
+              try {
+                  const imagePath = this.uploadsService.extractPathFromUrl(imageUrl);
+                  if (imagePath) {
+                      await this.uploadsService.deleteImage(imagePath);
+                      this.logger.log(`Successfully deleted comment image for deleted post ${id}: ${imageUrl}`);
+                  }
+              } catch (err) {
+                  this.logger.error(`Failed to delete comment image ${imageUrl} for post ${id}:`, err);
+              }
+          }
+      }
 
       if (userId) {
           this.eventEmitter.emit(
