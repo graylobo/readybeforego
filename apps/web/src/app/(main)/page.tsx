@@ -678,11 +678,11 @@ export default function Home() {
                   onClick={() => handleCardClick(scam)}
                 >
                   <CardHeader className="p-4 pb-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                         {/* 적용 범위 배지 뱃지 🏷️ */}
                         {scam.scope === "country" && (
-                          <Badge variant="outline" className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                          <Badge variant="outline" className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             {scam.countryCode ? `🇹🇭 ${getCountryName(scam.countryCode, lang)} 전체` : "🇹🇭 국가 경보"}
                           </Badge>
                         )}
@@ -690,18 +690,18 @@ export default function Home() {
                           const matchedRegion = allRegions.find(r => r.cityId === scam.cityId);
                           const cityName = matchedRegion?.cityName || "도시";
                           return (
-                            <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                            <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                               🏙️ {cityName} 전체
                             </Badge>
                           );
                         })()}
                         {scam.scope === "region" && (
-                          <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                          <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             🗺️ 구역 전체
                           </Badge>
                         )}
                         {scam.scope === "spot" && (
-                          <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none">
+                          <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             📍 특정 위치
                           </Badge>
                         )}
@@ -711,7 +711,7 @@ export default function Home() {
                           const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
                           if (currentScamRegion) {
                             return (
-                              <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold py-0.5 px-2">
+                              <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold py-0.5 px-2 max-w-full truncate">
                                 📍 {currentScamRegion.cityName} · {currentScamRegion.name}
                               </Badge>
                             );
@@ -721,27 +721,27 @@ export default function Home() {
                         {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
                           const cat = getCategoryInfo(catKey, t);
                           return (
-                            <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2`}>
+                            <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2 shrink-0`}>
                               {cat.label}
                             </Badge>
                           );
                         })}
-                        <span className="text-[10px] text-muted-foreground select-none">
+                        <span className="text-[10px] text-muted-foreground select-none shrink-0">
                           {formatDate(scam.createdAt)}
                           {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
                         </span>
                       </div>
                       
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 ml-auto whitespace-nowrap">
                         {scam.sourceUrl && (
                           <a 
                             href={formatExternalUrl(scam.sourceUrl)} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5" />
+                            {t("common.source_link")} <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                           </a>
                         )}
 
@@ -1075,26 +1075,24 @@ export default function Home() {
       {/* --- 모바일 전용 바텀 시트 (마커 클릭 시 아래서 올라오는 팝업 카드) --- */}
       <Dialog open={isMobileFeedOpen} onOpenChange={setIsMobileFeedOpen}>
         <DialogContent className="md:hidden sm:max-w-[480px] h-[75vh] bottom-0 top-auto translate-y-0 rounded-t-2xl rounded-b-none p-0 overflow-hidden flex flex-col gap-0 border-t border-border bg-card/98 backdrop-blur-lg">
-          <DialogHeader className="px-6 py-4 bg-muted/40 border-b border-border flex flex-row items-center justify-between gap-2 shrink-0 space-y-0">
-            <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-red-600 mt-0.5" />
-              <div className="space-y-0.5 text-left">
-                <DialogTitle className="font-bold text-sm text-card-foreground">
-                  {selectedRegionId 
-                    ? "이 위치 내 주의 정보" 
-                    : selectedCityId 
-                      ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                      : (getCountryName(selectedCountryCode, lang) || "국가")
-                  } 
-                </DialogTitle>
-              </div>
+          <DialogHeader className="px-4 py-3 bg-muted/40 border-b border-border flex flex-row items-center justify-between gap-2 shrink-0 space-y-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <MapPin className="w-4 h-4 text-red-600 shrink-0" />
+              <DialogTitle className="font-bold text-xs sm:text-sm text-card-foreground whitespace-nowrap truncate">
+                {selectedRegionId 
+                  ? "이 위치 내 주의 정보" 
+                  : selectedCityId 
+                    ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
+                    : (getCountryName(selectedCountryCode, lang) || "국가")
+                } 
+              </DialogTitle>
             </div>
 
             {selectedRegionId && (
               <div className="flex items-center gap-1.5 mr-6 shrink-0">
                 <Button
                   size="sm"
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95"
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                   onClick={() => {
                     if (!isAuthenticated) {
                       if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
@@ -1110,14 +1108,15 @@ export default function Home() {
                   }}
                 >
                   <span>➕</span>
-                  <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
+                  <span className="hidden xs:inline">{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
+                  <span className="xs:hidden">추가 제보하기</span>
                 </Button>
 
                 {/* 모바일 공유하기 버튼 */}
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-7 w-7 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                  className="h-7 w-7 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors shrink-0 flex items-center justify-center"
                   onClick={handleShare}
                   title="공유하기"
                 >
