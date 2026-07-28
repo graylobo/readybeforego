@@ -44,6 +44,7 @@ async function bootstrap() {
       'https://readybeforego-web.vercel.app',
     ],
     credentials: true,
+    maxAge: 86400, // 24시간 동안 Preflight(OPTIONS) 결과를 브라우저에 캐싱 ⚡
   });
 
   // Global Filter & Interceptor

@@ -194,7 +194,8 @@ export class ScamsController {
     @Req() req: any
   ) {
     const userId = req.user?.id;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    return this.scamsService.toggleReaction(id, body.type, userId, ip as string);
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = (typeof rawIp === 'string' ? rawIp.split(',')[0] : Array.isArray(rawIp) ? rawIp[0] : rawIp)?.trim() || '127.0.0.1';
+    return this.scamsService.toggleReaction(id, body.type, userId, ip);
   }
 }

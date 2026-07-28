@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { ScamsRepository } from './scams.repository';
 import { getKoreanCountryName } from '@community/shared-types';
 import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
@@ -534,41 +534,51 @@ export class ScamsService {
     userId?: string,
     ipAddress?: string
   ) {
+    if (!scamInfoId || typeof scamInfoId !== 'string') {
+      throw new BadRequestException('제보 ID가 전달되지 않았습니다.');
+    }
+
     const scam = await this.scamsRepository.findById(scamInfoId);
     if (!scam) {
       throw new NotFoundException('해당 사기 정보를 찾을 수 없습니다.');
     }
 
-    return this.scamsRepository.transaction(async (tx) => {
-      const existingReaction = await this.scamsRepository.findReaction(
-        scamInfoId,
-        userId,
-        ipAddress,
-        tx
-      );
-
-      if (existingReaction) {
-        if (existingReaction.type === type) {
-          await this.scamsRepository.deleteReaction(existingReaction.id, tx);
-        } else {
-          await this.scamsRepository.updateReaction(existingReaction.id, type, tx);
-        }
-      } else {
-        await this.scamsRepository.addReaction(
-          {
-            scamInfoId,
-            userId: userId ?? null,
-            ipAddress: userId ? null : ipAddress,
-            type,
-          },
+    try {
+      return await this.scamsRepository.transaction(async (tx) => {
+        const existingReaction = await this.scamsRepository.findReaction(
+          scamInfoId,
+          userId,
+          ipAddress,
           tx
         );
-      }
 
-      await this.scamsRepository.recalculateReactionCounts(scamInfoId, tx);
+        if (existingReaction) {
+          if (existingReaction.type === type) {
+            await this.scamsRepository.deleteReaction(existingReaction.id, tx);
+          } else {
+            await this.scamsRepository.updateReaction(existingReaction.id, type, tx);
+          }
+        } else {
+          await this.scamsRepository.addReaction(
+            {
+              scamInfoId,
+              userId: userId ?? null,
+              ipAddress: userId ? null : ipAddress,
+              type,
+            },
+            tx
+          );
+        }
 
-      return this.scamsRepository.findById(scamInfoId, tx);
-    });
+        await this.scamsRepository.recalculateReactionCounts(scamInfoId, tx);
+
+        return this.scamsRepository.findById(scamInfoId, tx);
+      });
+    } catch (err: any) {
+      this.logger.warn(`Reaction toggle conflict gracefully handled for scam ${scamInfoId}: ${err?.message}`);
+      await this.scamsRepository.recalculateReactionCounts(scamInfoId).catch(() => {});
+      return this.scamsRepository.findById(scamInfoId);
+    }
   }
 
   async getCountries() {
