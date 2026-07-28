@@ -151,16 +151,6 @@ export function AppLayout({
         </button>
 
         <button
-          onClick={() => router.push('/event/checkin')}
-          className={cn(
-            "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
-            pathname.startsWith('/event') || pathname.startsWith('/points') ? "text-primary" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Tag className="h-5 w-5" />
-        </button>
-
-        <button
           onClick={() => router.push('/profile')}
           className={cn(
             "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",

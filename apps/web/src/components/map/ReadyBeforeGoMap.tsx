@@ -255,7 +255,12 @@ export default function ReadyBeforeGoMap() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
   const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
-  const [isLegendOpen, setIsLegendOpen] = useState(true);
+  const [isLegendOpen, setIsLegendOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 640;
+    }
+    return false;
+  });
   
   // 임시 제보 마커 참조 레퍼런스
   const markerRef = useRef<L.Marker>(null);
@@ -1025,7 +1030,7 @@ export default function ReadyBeforeGoMap() {
       </Dialog>
 
       {/* 범례 플로팅 카드 (Map Legend) 🗺️ */}
-      <div className="absolute bottom-4 right-4 z-[1000] select-none">
+      <div className="absolute bottom-20 right-3 sm:bottom-4 sm:right-4 z-[1000] select-none">
         {isLegendOpen ? (
           <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3.5 shadow-2xl flex flex-col gap-2.5 w-[160px] animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">

@@ -37,17 +37,19 @@ export function BrandLogo({ className, size = 'md', onClick }: BrandLogoProps) {
         className
       )}
     >
-      {/* READY */}
+      {/* READY (Desktop: READY / Mobile: R) */}
       <span className="text-foreground tracking-tighter group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
-        READY
+        <span className="hidden sm:inline">READY</span>
+        <span className="sm:hidden">R</span>
       </span>
 
       {/* Trip.com Style Tight Accent Dot (Centered Vertically with Uppercase Text) */}
       <span className={cn('inline-block rounded-full bg-amber-500 shrink-0 self-center', dotSizes[size])} />
 
-      {/* BEFORE */}
+      {/* BEFORE (Desktop: BEFORE / Mobile: B) */}
       <span className="text-foreground tracking-tighter group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
-        BEFORE
+        <span className="hidden sm:inline">BEFORE</span>
+        <span className="sm:hidden">B</span>
       </span>
 
       {/* Trip.com Style Tight Accent Dot */}
