@@ -99,12 +99,12 @@ export function Header({ variant = 'client' }: HeaderProps) {
           <BrandLogo size="md" />
         </div>
 
-        {!isAdminVariant && <SearchBar />}
+        {/* {!isAdminVariant && <SearchBar />} */}
         {!isAdminVariant && <TopNav />}
       </div>
       
       <div className="flex items-center gap-2 md:gap-4 shrink-0">
-        {!isAdminVariant && (
+        {/* {!isAdminVariant && (
           <Button
             variant="ghost"
             size="icon"
@@ -117,7 +117,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
           >
             <LayoutTemplate className="h-5 w-5" />
           </Button>
-        )}
+        )} */}
         <ThemeToggle />
         {user ? (
           <>
