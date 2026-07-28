@@ -2,7 +2,8 @@ import { useBoards } from '@/hooks/queries/use-board-queries';
 import {
   FileText,
   Gift,
-  MessageSquare,
+  MessageCircleMore,
+  MessageCircleQuestionMark,
   SmilePlus,
 } from 'lucide-react';
 import React from 'react';
@@ -44,13 +45,13 @@ export function useMenuItems() {
      {
       id: 'community',
       label: '라운지',
-      icon: <MessageSquare className="h-5 w-5" />,
+      icon: <MessageCircleMore className="h-5 w-5" />,
       href: '/board/lounge',
     },
       {
       id: 'inquiry',
       label: '문의하기',
-      icon: <MessageSquare className="h-5 w-5" />,
+      icon: <MessageCircleQuestionMark className="h-5 w-5" />,
       href: '/board/inquiry',
     },
     {

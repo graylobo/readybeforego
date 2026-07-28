@@ -8,12 +8,12 @@ import { cn } from '@/lib/utils/cn';
 import React from 'react';
 import { Header } from './header';
 
-import { useMenuItems, type MenuItem } from '@/hooks/use-menu-items';
-import { useLayoutStore } from '@/lib/stores/layout.store';
-import { useAuthStore } from '@/lib/stores/auth.store';
-import { usePathname, useRouter } from 'next/navigation';
 import Loading from '@/app/(main)/loading';
-import { Map, MessageSquare, ShoppingBag, Tag, SlidersHorizontal } from 'lucide-react';
+import { useMenuItems, type MenuItem } from '@/hooks/use-menu-items';
+import { useAuthStore } from '@/lib/stores/auth.store';
+import { useLayoutStore } from '@/lib/stores/layout.store';
+import { Map, MessageCircleMore, MessageCircleQuestionMark, SlidersHorizontal } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 
 function SidebarOverlay() {
   const { isOpen, toggle } = useSidebarToggleStore();
@@ -137,17 +137,17 @@ export function AppLayout({
             pathname.startsWith('/board') ? "text-primary" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <MessageSquare className="h-5 w-5" />
+          <MessageCircleMore className="h-5 w-5" />
         </button>
 
         <button
-          onClick={() => router.push('/emoticons')}
+          onClick={() => router.push('/board/inquiry')}
           className={cn(
             "flex flex-col items-center justify-center flex-1 h-full gap-1 cursor-pointer transition-colors",
             pathname.startsWith('/emoticons') ? "text-primary" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <ShoppingBag className="h-5 w-5" />
+          <MessageCircleQuestionMark className="h-5 w-5" />
         </button>
 
         <button

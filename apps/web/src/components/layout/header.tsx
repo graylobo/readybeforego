@@ -60,7 +60,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
     )}>
       <div className="flex items-center gap-2 md:gap-6 lg:gap-8 flex-1">
         <div className="flex items-center gap-1 md:gap-2">
-          <Button
+          {/* <Button
             variant="ghost"
             size="icon"
             onClick={toggle}
@@ -72,7 +72,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
             aria-label="Toggle Menu"
           >
             {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          </Button> */}
 
           <Button
             variant="ghost"
