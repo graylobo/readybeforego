@@ -3,6 +3,7 @@ import { SQL, and, asc, desc, eq, sql, inArray, or, isNull } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
+import { getKoreanCountryName } from '@community/shared-types';
 
 export type Transaction = any;
 
@@ -324,7 +325,11 @@ export class ScamsRepository {
 
   async findAllCountries(tx?: Transaction) {
     const db = tx ?? this.db;
-    return db.select().from(schema.countries).orderBy(asc(schema.countries.name));
+    const countriesList = await db.select().from(schema.countries).orderBy(asc(schema.countries.name));
+    return countriesList.map(c => ({
+      ...c,
+      name: getKoreanCountryName(c.code || c.name),
+    }));
   }
 
   async findCitiesByCountry(countryCode: string, tx?: Transaction) {

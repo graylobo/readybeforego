@@ -646,11 +646,17 @@ export function ScamReportModal() {
                       )}
                     </SelectTrigger>
                     <SelectContent>
-                      {countries.map((c) => (
-                        <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                          {getCountryName(c.code, lang)}
-                        </SelectItem>
-                      ))}
+                      {countries
+                        .map((c) => ({
+                          ...c,
+                          displayName: getCountryName(c.code || c.name, lang) || c.name || c.code
+                        }))
+                        .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ko'))
+                        .map((c) => (
+                          <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                            {c.displayName}
+                          </SelectItem>
+                        ))}
                       {detectedCountryName && detectedCountryCode !== "ETC" && (
                         <SelectItem value="NEW_COUNTRY" className="cursor-pointer text-blue-600 font-semibold">
                           {detectedCountryName}

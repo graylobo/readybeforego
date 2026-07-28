@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { ScamsRepository } from './scams.repository';
+import { getKoreanCountryName } from '@community/shared-types';
 import { CreateScamInfoZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
 import { UploadsService } from '../uploads/uploads.service';
 
@@ -693,9 +694,10 @@ export class ScamsService {
         // 1. findOrCreate Country
         let country = await this.scamsRepository.findCountryByCode(countryCode);
         if (!country) {
+          const koreanName = getKoreanCountryName(countryCode);
           country = await this.scamsRepository.createCountry({
             code: countryCode,
-            name: countryCode,
+            name: koreanName,
             nameEn: countryCode,
           });
         }

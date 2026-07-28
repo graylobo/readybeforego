@@ -1140,9 +1140,6 @@ export default function Home() {
             <DialogTitle className="text-base font-extrabold flex items-center gap-1.5">
               🧭 {t("common.welcome_title")}
             </DialogTitle>
-            <DialogDescription className="text-[11px]">
-              필터를 변경해 타겟 지역의 사기 주의보를 확인하세요.
-            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 pt-2">
@@ -1156,11 +1153,17 @@ export default function Home() {
                     <SelectValue placeholder={t("report_modal.country_select")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {countries.map((c) => (
-                      <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                        {c.name}
-                      </SelectItem>
-                    ))}
+                    {countries
+                      .map((c) => ({
+                        ...c,
+                        displayName: getCountryName(c.code || c.name, lang) || c.name || c.code
+                      }))
+                      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ko'))
+                      .map((c) => (
+                        <SelectItem key={c.code} value={c.code} className="cursor-pointer">
+                          {c.displayName}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
