@@ -292,11 +292,6 @@ export default function Home() {
 
   // scams의 데이터 갱신 시 순서 동결(Freeze) 처리하여 Layout Instability 방지
   useEffect(() => {
-    if (isScamsPending) {
-      setDisplayScams([]);
-      return;
-    }
-
     const scamsIds = scams.map((s) => s.id).sort().join(",");
     const prevIds = displayScams.map((s) => s.id).sort().join(",");
     
@@ -323,7 +318,7 @@ export default function Home() {
         setDisplayScams(updated);
       }
     }
-  }, [scams, displayScams, isScamsPending]);
+  }, [scams, displayScams]);
 
   // URL regionId 파라미터 실시간 동기화 🔗
   useEffect(() => {
