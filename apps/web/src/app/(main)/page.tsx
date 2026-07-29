@@ -362,10 +362,58 @@ export default function Home() {
   }, [mounted, allRegions, setSelectedRegionId, setSelectedRegion, setSelectedCityId, setSelectedCountryCode, setMapCenter, setMapZoom, setIsMobileFeedOpen]);
 
 
-  // Upvote/Downvote mutation
+  // Upvote/Downvote mutation (낙관적 업데이트로 클릭 즉시 반응 & 깜빡임 차단)
   const reactionMutation = useMutation({
     mutationFn: ({ scamId, type }: { scamId: string; type: "like" | "dislike" }) =>
       scamsApi.toggleReaction(scamId, type),
+    onMutate: async ({ scamId, type }) => {
+      // 로컬 displayScams에 즉시 반응 반영 (Optimistic Update)
+      setDisplayScams((prev) =>
+        prev.map((s) => {
+          if (s.id !== scamId) return s;
+          const reactions = s.reactions || [];
+          const hasLike = reactions.some((r) => r.type === "like");
+          const hasDislike = reactions.some((r) => r.type === "dislike");
+
+          let newUpvoteCount = s.upvoteCount;
+          let newDownvoteCount = s.downvoteCount;
+          let newReactions = [...reactions];
+
+          if (type === "like") {
+            if (hasLike) {
+              newUpvoteCount = Math.max(0, newUpvoteCount - 1);
+              newReactions = newReactions.filter((r) => r.type !== "like");
+            } else {
+              newUpvoteCount += 1;
+              newReactions.push({ id: 'temp-like', type: 'like' });
+              if (hasDislike) {
+                newDownvoteCount = Math.max(0, newDownvoteCount - 1);
+                newReactions = newReactions.filter((r) => r.type !== "dislike");
+              }
+            }
+          } else {
+            if (hasDislike) {
+              newDownvoteCount = Math.max(0, newDownvoteCount - 1);
+              newReactions = newReactions.filter((r) => r.type !== "dislike");
+            } else {
+              newDownvoteCount += 1;
+              newReactions.push({ id: 'temp-dislike', type: 'dislike' });
+              if (hasLike) {
+                newUpvoteCount = Math.max(0, newUpvoteCount - 1);
+                newReactions = newReactions.filter((r) => r.type !== "like");
+              }
+            }
+          }
+
+          return {
+            ...s,
+            upvoteCount: newUpvoteCount,
+            downvoteCount: newDownvoteCount,
+            reactions: newReactions,
+          };
+        })
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scams"] });
     },
@@ -640,7 +688,7 @@ export default function Home() {
           })}
         </div>
 
-        {isScamsPending || isScamsFetching ? (
+        {isScamsPending && displayScams.length === 0 ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
               <Card key={i} className="border-border">
