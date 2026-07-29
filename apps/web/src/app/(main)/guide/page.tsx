@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   CheckSquare, 
   Square, 
@@ -29,6 +29,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Comments } from "@/components/comments/comments";
+import { ExchangeRateModal } from "@/components/guide/exchange-rate-modal";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { 
   useCountryGuides, 
@@ -37,12 +38,12 @@ import {
 import { toast } from "sonner";
 
 const POPULAR_COUNTRIES = [
-  { code: "JP", name: "일본", emoji: "🇯🇵", plug: "110V (돼지코 필수)", visa: "무비자 90일", currency: "엔 (JPY)" },
-  { code: "TH", name: "태국", emoji: "🇹🇭", plug: "220V / 220V 겸용", visa: "무비자 90일", currency: "바트 (THB)" },
-  { code: "VN", name: "베트남", emoji: "🇻🇳", plug: "220V", visa: "무비자 45일", currency: "동 (VND)" },
-  { code: "KR", name: "대한민국", emoji: "🇰🇷", plug: "220V", visa: "내국인", currency: "원 (KRW)" },
-  { code: "PH", name: "필리핀", emoji: "🇵🇭", plug: "220V / 110V", visa: "무비자 30일", currency: "페소 (PHP)" },
-  { code: "US", name: "미국", emoji: "🇺🇸", plug: "110V (돼지코 필수)", visa: "ESTA 전자비자", currency: "달러 (USD)" },
+  { code: "JP", name: "일본", emoji: "🇯🇵", plug: "110V (돼지코 필수)", visa: "무비자 90일", currency: "엔 (JPY)", currencyCode: "JPY" },
+  { code: "TH", name: "태국", emoji: "🇹🇭", plug: "220V / 220V 겸용", visa: "무비자 90일", currency: "바트 (THB)", currencyCode: "THB" },
+  { code: "VN", name: "베트남", emoji: "🇻🇳", plug: "220V", visa: "무비자 45일", currency: "동 (VND)", currencyCode: "VND" },
+  { code: "PH", name: "필리핀", emoji: "🇵🇭", plug: "220V / 110V", visa: "무비자 30일", currency: "페소 (PHP)", currencyCode: "PHP" },
+  { code: "US", name: "미국", emoji: "🇺🇸", plug: "110V (돼지코 필수)", visa: "ESTA 전자비자", currency: "달러 (USD)", currencyCode: "USD" },
+  { code: "KR", name: "대한민국", emoji: "🇰🇷", plug: "220V", visa: "내국인", currency: "원 (KRW)", currencyCode: "KRW" },
 ];
 
 export default function GuidePage() {
@@ -88,12 +89,31 @@ export default function GuidePage() {
     plug: "220V / 변환 어댑터 확인",
     visa: "무비자 여부 확인 필요",
     currency: "현지 통화",
+    currencyCode: selectedCountry === "JP" ? "JPY" : selectedCountry === "TH" ? "THB" : selectedCountry === "VN" ? "VND" : selectedCountry === "US" ? "USD" : "USD",
   };
 
   const guides = guideData?.guides || [];
-  const userTips = guideData?.userTips || [];
 
-  const filteredGuides = guides.filter(g => activeTab === "all" || g.category === activeTab);
+  // 전체보기 상황: 1. 클릭이 안 되는 요소(isCheckable === false) 제외 2. 필수(isRequired) 항목 우선 배치 정렬
+  const filteredGuides = useMemo(() => {
+    const list = guides.filter(g => {
+      const categoryMatch = activeTab === "all" || g.category === activeTab;
+      if (activeTab === "all") {
+        return categoryMatch && g.isCheckable !== false;
+      }
+      return categoryMatch;
+    });
+
+    if (activeTab === "all") {
+      return [...list].sort((a, b) => {
+        if (a.isRequired && !b.isRequired) return -1;
+        if (!a.isRequired && b.isRequired) return 1;
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      });
+    }
+
+    return list;
+  }, [guides, activeTab]);
 
   // 카테고리별 개수 계산
   const totalCheckable = guides.filter(g => g.isCheckable).length;
@@ -113,11 +133,10 @@ export default function GuidePage() {
           </Badge>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-300">
-            실수 없는 해외여행 필수 가이드북 🎒
+            해외여행 필수 가이드북 🎒
           </h1>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            110V 돼지코부터 공항 수하물 규정, 필수 사전등록 및 현지 꿀팁까지! <br className="hidden sm:inline" />
-            체크리스트로 꼼꼼하게 짐을 싸고 안전하게 떠나세요.
+            여행 전 체크리스트로 꼼꼼하게 짐을 싸고 안전하게 떠나세요.
           </p>
 
           {/* 🌏 국가 선택 드롭다운 & 인기 칩 UI */}
@@ -148,29 +167,6 @@ export default function GuidePage() {
                   )}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* 인기 국가 빠른 칩 (Popular Quick Chips) */}
-            <div className="flex items-center justify-center gap-1.5 flex-wrap text-xs">
-              <span className="text-slate-400 font-medium text-[11px] mr-1">🔥 인기 국가:</span>
-              {POPULAR_COUNTRIES.slice(0, 4).map((country) => {
-                const isSelected = selectedCountry === country.code;
-                return (
-                  <button
-                    key={country.code}
-                    type="button"
-                    onClick={() => setSelectedCountry(country.code)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
-                      isSelected
-                        ? "bg-white text-slate-900 shadow-md font-bold"
-                        : "bg-white/10 text-slate-300 hover:bg-white/20 backdrop-blur-sm"
-                    }`}
-                  >
-                    <span>{country.emoji}</span>
-                    <span>{country.name}</span>
-                  </button>
-                );
-              })}
             </div>
           </div>
         </div>
@@ -216,8 +212,8 @@ export default function GuidePage() {
               </div>
             </div>
 
-            {/* 3대 정보 태그 (플러그, 비자, 통화) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
+            {/* 3대 정보 태그 (플러그, 비자, 통화 + 실시간 환율 모달 버튼) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs items-center">
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <span className="font-bold text-slate-400">🔌 전압/플러그:</span>
                 <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.plug}</span>
@@ -226,9 +222,16 @@ export default function GuidePage() {
                 <span className="font-bold text-slate-400">🛂 비자 조건:</span>
                 <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.visa}</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <span className="font-bold text-slate-400">💰 통화 단위:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.currency}</span>
+              <div className="flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-400">💰 통화 단위:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.currency}</span>
+                </div>
+                <ExchangeRateModal
+                  countryName={currentCountryInfo.name}
+                  currencyCode={currentCountryInfo.currencyCode}
+                  flagEmoji={currentCountryInfo.emoji}
+                />
               </div>
             </div>
           </CardContent>

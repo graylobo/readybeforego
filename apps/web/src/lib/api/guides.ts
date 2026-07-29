@@ -54,6 +54,22 @@ export const guidesApi = {
     return response.data;
   },
 
+  // 어드민 전용 CRUD API
+  createGuide: async (dto: Partial<CountryGuideItem>): Promise<CountryGuideItem> => {
+    const response = await apiClient.post('/guides/admin', dto);
+    return response.data;
+  },
+
+  updateGuide: async (id: string, dto: Partial<CountryGuideItem>): Promise<CountryGuideItem> => {
+    const response = await apiClient.patch(`/guides/admin/${id}`, dto);
+    return response.data;
+  },
+
+  deleteGuide: async (id: string): Promise<{ success: boolean }> => {
+    const response = await apiClient.delete(`/guides/admin/${id}`);
+    return response.data;
+  },
+
   createUserTip: async (countryCode: string, content: string): Promise<CountryUserTip> => {
     const response = await apiClient.post('/guides/tips', { countryCode, content });
     return response.data;

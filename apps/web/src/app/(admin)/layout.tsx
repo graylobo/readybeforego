@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { isAdmin } from '@community/shared-types';
-import { AlertOctagon, AlertTriangle, Award, Film, HelpCircle, Home, MessageSquare, Settings, Shield, Users } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Award, BookOpen, Film, HelpCircle, Home, MessageSquare, Settings, Shield, Users } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
 
@@ -62,6 +62,12 @@ export default function AdminLayout({
       label: '사기 제보 관리',
       icon: <AlertTriangle className="h-5 w-5 text-amber-500" />,
       href: '/admin/scams',
+    },
+    {
+      id: 'admin-guides',
+      label: '여행 가이드 관리',
+      icon: <BookOpen className="h-5 w-5 text-blue-500" />,
+      href: '/admin/guides',
     },
     {
       id: 'admin-users',
