@@ -263,6 +263,62 @@ export class ScamsRepository {
     });
   }
 
+  async findReactions(
+    scamInfoId: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    let whereClause;
+    
+    if (userId) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        eq(schema.scamInfoReactions.userId, userId)
+      );
+    } else if (ipAddress) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        sql`${schema.scamInfoReactions.userId} is null`,
+        eq(schema.scamInfoReactions.ipAddress, ipAddress)
+      );
+    } else {
+      return [];
+    }
+
+    return db.query.scamInfoReactions.findMany({
+      where: whereClause,
+    });
+  }
+
+  async deleteAllReactionsByUser(
+    scamInfoId: string,
+    userId?: string,
+    ipAddress?: string,
+    tx?: Transaction
+  ) {
+    const db = tx ?? this.db;
+    let whereClause;
+
+    if (userId) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        eq(schema.scamInfoReactions.userId, userId)
+      );
+    } else if (ipAddress) {
+      whereClause = and(
+        eq(schema.scamInfoReactions.scamInfoId, scamInfoId),
+        sql`${schema.scamInfoReactions.userId} is null`,
+        eq(schema.scamInfoReactions.ipAddress, ipAddress)
+      );
+    } else {
+      return [];
+    }
+
+    return db.delete(schema.scamInfoReactions).where(whereClause).returning();
+  }
+
   async addReaction(
     data: typeof schema.scamInfoReactions.$inferInsert,
     tx?: Transaction

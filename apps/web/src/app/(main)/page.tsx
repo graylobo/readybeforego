@@ -841,7 +841,8 @@ export default function Home() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                              disabled={reactionMutation.isPending}
+                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isLiked ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/20' : ''
                               }`}
                               onClick={(e) => {
@@ -862,7 +863,8 @@ export default function Home() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group ${
+                              disabled={reactionMutation.isPending}
+                              className={`h-7 w-7 rounded-full hover:bg-slate-100 cursor-pointer active:scale-95 transition-transform group disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isDisliked ? 'text-red-600 bg-red-50 dark:bg-red-950/20' : ''
                               }`}
                               onClick={(e) => {

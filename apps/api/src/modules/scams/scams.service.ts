@@ -545,20 +545,26 @@ export class ScamsService {
 
     try {
       return await this.scamsRepository.transaction(async (tx) => {
-        const existingReaction = await this.scamsRepository.findReaction(
+        // 1. 해당 유저/IP의 모든 기존 반응 조회 (중복 데이터가 존재할 가능성 사전 탐지)
+        const existingReactions = await this.scamsRepository.findReactions(
           scamInfoId,
           userId,
           ipAddress,
           tx
         );
 
-        if (existingReaction) {
-          if (existingReaction.type === type) {
-            await this.scamsRepository.deleteReaction(existingReaction.id, tx);
-          } else {
-            await this.scamsRepository.updateReaction(existingReaction.id, type, tx);
-          }
-        } else {
+        const hadSameReaction = existingReactions.some((r) => r.type === type);
+
+        // 2. 기존 반응 레코드 전체 원자적 삭제 (중복 데이터 자동 청소)
+        await this.scamsRepository.deleteAllReactionsByUser(
+          scamInfoId,
+          userId,
+          ipAddress,
+          tx
+        );
+
+        // 3. 기존에 동일한 타입의 반응을 클릭하지 않은 경우(새 반응 등록 또는 다른 반응으로 변경)만 1개 추가
+        if (!hadSameReaction) {
           await this.scamsRepository.addReaction(
             {
               scamInfoId,
@@ -570,6 +576,7 @@ export class ScamsService {
           );
         }
 
+        // 4. 카운트 재계산 후 최신 객체 반환
         await this.scamsRepository.recalculateReactionCounts(scamInfoId, tx);
 
         return this.scamsRepository.findById(scamInfoId, tx);
