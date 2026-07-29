@@ -264,7 +264,7 @@ export default function Home() {
   const selectedRegionIds = sharingRegions.map((r) => r.id);
 
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
-  const { data: scams = EMPTY_ARRAY, isPending: isScamsPending } = useQuery<ScamInfo[]>({
+  const { data: scams = EMPTY_ARRAY, isPending: isScamsPending, isFetching: isScamsFetching } = useQuery<ScamInfo[]>({
     queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId, selectedRegionIds.join(",")],
     queryFn: async () => {
       if (selectedRegionId) {
@@ -640,7 +640,7 @@ export default function Home() {
           })}
         </div>
 
-        {isScamsPending ? (
+        {isScamsPending || isScamsFetching ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
               <Card key={i} className="border-border">
