@@ -31,11 +31,13 @@ import { UsersModule } from './modules/users/users.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ScamsModule } from './modules/scams/scams.module';
+import { GuidesModule } from './modules/guides/guides.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
     }),
     CacheModule.registerAsync({
       isGlobal: true,
@@ -98,6 +100,7 @@ import { ScamsModule } from './modules/scams/scams.module';
     SettingsModule,
     ReportsModule,
     ScamsModule,
+    GuidesModule,
   ],
   controllers: [AppController],
   providers: [

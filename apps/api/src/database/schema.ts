@@ -644,3 +644,31 @@ export const scamInfoReactionsRelations = relations(scamInfoReactions, ({ one })
   }),
 }));
 
+// Country Guides table (가이드 및 준비물)
+export const countryGuides = pgTable('country_guides', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code')
+    .notNull()
+    .references(() => countries.code, { onDelete: 'cascade' }),
+  category: text('category').notNull(), // 'pre_travel' | 'essentials' | 'baggage' | 'tips'
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  icon: text('icon'),
+  isRequired: boolean('is_required').default(false).notNull(),
+  isCheckable: boolean('is_checkable').default(true).notNull(),
+  sortOrder: integer('sort_order').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  countryIdx: index('country_guides_country_idx').on(table.countryCode),
+  categoryIdx: index('country_guides_category_idx').on(table.category),
+}));
+
+export const countryGuidesRelations = relations(countryGuides, ({ one }) => ({
+  country: one(countries, {
+    fields: [countryGuides.countryCode],
+    references: [countries.code],
+  }),
+}));
+
+

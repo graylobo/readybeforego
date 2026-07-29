@@ -2,6 +2,7 @@ import { useBoards } from '@/hooks/queries/use-board-queries';
 import {
   FileText,
   Gift,
+  Luggage,
   MessageCircleMore,
   MessageCircleQuestionMark,
   SmilePlus,
@@ -28,27 +29,19 @@ export function useMenuItems() {
   const { data: boards = [] } = useBoards();
 
   const menuItems: MenuItem[] = [
-    // {
-    //   id: 'community',
-    //   label: '커뮤니티',
-    //   icon: <MessageSquare className="h-5 w-5" />,
-    //   href: '#',
-    //   subMenu: boards
-    //     .filter(board => !board.isPrivate)
-    //     .map(board => ({
-    //       id: `board-${board.slug}`,
-    //       label: board.name,
-    //       href: `/board/${board.slug}`,
-    //       icon: <FileText className="h-4 w-4" />,
-    //     })),
-    // },
-     {
+    {
+      id: 'guide',
+      label: '여행 가이드',
+      icon: <Luggage className="h-5 w-5" />,
+      href: '/guide',
+    },
+    {
       id: 'community',
       label: '라운지',
       icon: <MessageCircleMore className="h-5 w-5" />,
       href: '/board/lounge',
     },
-      {
+    {
       id: 'inquiry',
       label: '문의하기',
       icon: <MessageCircleQuestionMark className="h-5 w-5" />,
