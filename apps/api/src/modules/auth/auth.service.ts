@@ -67,6 +67,12 @@ export class AuthService {
   }
 
   async validateUser(payload: any) {
-    return this.usersService.findById(payload.sub);
+    const t0 = Date.now();
+    const user = await this.usersService.findById(payload.sub);
+    const elapsed = Date.now() - t0;
+    if (elapsed > 500) {
+      console.log(`[PERF][validateUser] SLOW | userId=${payload.sub} | ${elapsed}ms`);
+    }
+    return user;
   }
 }

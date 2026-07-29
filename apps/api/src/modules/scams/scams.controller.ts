@@ -102,9 +102,16 @@ export class ScamsController {
     @Param('regionId') regionId: string,
     @Req() req: any
   ) {
+    const t0 = Date.now();
     const userId = req.user?.id;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    return this.scamsService.getScamsByRegion(regionId, userId, ip as string);
+    console.log(`[PERF][getByRegion] Guard done | regionId=${regionId} userId=${userId || 'anon'} | +${Date.now() - t0}ms`);
+
+    const t1 = Date.now();
+    const result = await this.scamsService.getScamsByRegion(regionId, userId, ip as string);
+    console.log(`[PERF][getByRegion] Service done | scams=${Array.isArray(result) ? result.length : '?'} | service=${Date.now() - t1}ms | total=${Date.now() - t0}ms`);
+
+    return result;
   }
 
   @Get('city/:cityId')

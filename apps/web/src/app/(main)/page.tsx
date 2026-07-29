@@ -288,6 +288,8 @@ export default function Home() {
       return [];
     },
     enabled: !!selectedRegionId || !!selectedCityId || !!selectedCountryCode,
+    staleTime: 1000 * 60 * 5, // 5분간 캐시 신선도 유지하여 클릭했던 마커 교차 이동 시 304 대기 없이 0ms 즉시 렌더링 ⚡
+    placeholderData: (previousData) => previousData,
   });
 
   // scams의 데이터 갱신 시 순서 동결(Freeze) 처리하여 Layout Instability 방지

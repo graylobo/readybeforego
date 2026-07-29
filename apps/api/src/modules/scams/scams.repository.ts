@@ -97,6 +97,7 @@ export class ScamsRepository {
     tx?: Transaction
   ) {
     const db = tx ?? this.db;
+    const t0 = Date.now();
 
     // 1. 사전 동기 쿼리없이 SQL 서브쿼리를 이용해 단 1번의 쿼리로 병합
     const cityIdSubquery = db
@@ -137,7 +138,13 @@ export class ScamsRepository {
           : undefined,
       },
     });
-    return this.attachCommentCounts(scams, db);
+    const t1 = Date.now();
+    console.log(`[PERF][findByRegion] findMany done | regionId=${regionId} rows=${scams.length} | query=${t1 - t0}ms`);
+
+    const result = await this.attachCommentCounts(scams, db);
+    console.log(`[PERF][findByRegion] commentCounts done | +${Date.now() - t1}ms | total=${Date.now() - t0}ms`);
+
+    return result;
   }
 
   async findByCity(
