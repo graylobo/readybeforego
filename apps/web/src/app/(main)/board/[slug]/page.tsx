@@ -154,32 +154,30 @@ function BoardContent({ slug }: { slug: string }) {
                             <h1 className="text-3xl font-bold mb-2">{board.name}</h1>
                             <p className="text-muted-foreground">{board.description}</p>
                         </div>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className="inline-block">
-                                        <Button 
-                                            disabled={!user && !board.allowAnonymous}
-                                            onClick={() => {
-                                                if (board.viewMode === 'feed' || board.viewMode === 'lounge') {
-                                                    setIsWriteModalOpen(true);
-                                                } else {
-                                                    router.push(`/board/${slug}/write`);
-                                                }
-                                            }}
-                                        >
-                                            <PenSquare className="w-4 h-4 mr-2" />
-                                            글쓰기
-                                        </Button>
-                                    </div>
-                                </TooltipTrigger>
-                                {!user && !board.allowAnonymous && (
-                                    <TooltipContent>
-                                        <p>로그인후 글을 작성할 수 있습니다.</p>
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
-                        </TooltipProvider>
+                        <Button 
+                            onClick={() => {
+                                // 비로그인 유저이고 익명 작성이 금지된 게시판인 경우 🔒
+                                if (!user && !board.allowAnonymous) {
+                                    const confirmLogin = confirm(
+                                        "로그인 해야만 작성이 가능한 게시판 입니다. 로그인페이지로 이동하시겠습니까?"
+                                    );
+                                    if (confirmLogin) {
+                                        const currentPath = window.location.pathname + window.location.search;
+                                        router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+                                    }
+                                    return;
+                                }
+
+                                if (board.viewMode === 'feed' || board.viewMode === 'lounge') {
+                                    setIsWriteModalOpen(true);
+                                } else {
+                                    router.push(`/board/${slug}/write`);
+                                }
+                            }}
+                        >
+                            <PenSquare className="w-4 h-4 mr-2" />
+                            글쓰기
+                        </Button>
                     </div>
 
                     <PostList 
