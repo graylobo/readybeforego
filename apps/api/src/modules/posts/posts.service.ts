@@ -33,7 +33,8 @@ export class PostsService {
     currentUserId?: string,
     authorId?: string,
     isBest?: string,
-    isNotice?: string
+    isNotice?: string,
+    includeBlocks?: string
   ) {
       const offset = (page - 1) * limit;
       const conditions: (SQL | undefined)[] = [isNull(posts.deletedAt)];
@@ -157,9 +158,23 @@ export class PostsService {
           };
       });
       
+      let notices: any[] = [];
+      let bests: any[] = [];
+
+      if (includeBlocks === 'true' && page === 1 && !searchQuery) {
+        const [noticeRes, bestRes] = await Promise.all([
+          this.findAll(boardSlug, 1, 5, undefined, undefined, currentUserId, undefined, undefined, 'true'),
+          this.findAll(boardSlug, 1, 10, undefined, undefined, currentUserId, undefined, 'true', 'false'),
+        ]);
+        notices = noticeRes.items || [];
+        bests = bestRes.items || [];
+      }
+
       return {
           items: itemsWithCounts,
           total: totalCount,
+          notices,
+          bests,
       };
   }
 

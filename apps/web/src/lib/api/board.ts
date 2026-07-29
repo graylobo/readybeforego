@@ -21,10 +21,11 @@ export const boardApi = {
         searchQuery?: string,
         authorId?: string,
         isBest?: string,
-        isNotice?: string
-    ): Promise<{ items: Post[], total: number }> => {
+        isNotice?: string,
+        includeBlocks?: string
+    ): Promise<{ items: Post[]; total: number; notices?: Post[]; bests?: Post[] }> => {
         const response = await apiClient.get('/posts', {
-            params: { board: boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice }
+            params: { board: boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeBlocks }
         });
         return response.data;
     },

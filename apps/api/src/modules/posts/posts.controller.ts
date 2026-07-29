@@ -28,7 +28,8 @@ export class PostsController {
     @Query('searchQuery') searchQuery?: string,
     @Query('authorId') authorId?: string,
     @Query('isBest') isBest?: string,
-    @Query('isNotice') isNotice?: string
+    @Query('isNotice') isNotice?: string,
+    @Query('includeBlocks') includeBlocks?: string
   ) {
       const userId = req.user?.id;
       return this.postsService.findAll(
@@ -40,7 +41,8 @@ export class PostsController {
         userId,
         authorId,
         isBest,
-        isNotice
+        isNotice,
+        includeBlocks
       );
   }
 

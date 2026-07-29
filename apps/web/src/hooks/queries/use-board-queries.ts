@@ -19,10 +19,16 @@ export function useBoards() {
 }
 
 export function useBoard(slug: string) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: boardKeys.detail(slug),
     queryFn: () => boardApi.getBoard(slug),
     enabled: !!slug,
+    staleTime: 1000 * 60 * 5, // 5분간 캐시 신선도 유지
+    initialData: () => {
+      const boards = queryClient.getQueryData<any[]>(boardKeys.lists());
+      return boards?.find((b: any) => b.slug === slug);
+    },
   });
 }
 
@@ -35,12 +41,14 @@ export function usePosts(
   authorId?: string,
   isBest?: string,
   isNotice?: string,
+  includeBlocks?: string,
   options?: { enabled?: boolean }
 ) {
   return useQuery({
-    queryKey: [...boardKeys.all, 'posts', boardSlug || 'all', { page, limit, searchType, searchQuery, authorId, isBest, isNotice }],
-    queryFn: () => boardApi.getPosts(boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice),
-    enabled: options?.enabled ?? true, 
+    queryKey: [...boardKeys.all, 'posts', boardSlug || 'all', { page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeBlocks }],
+    queryFn: () => boardApi.getPosts(boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeBlocks),
+    enabled: options?.enabled ?? true,
+    staleTime: 1000 * 30, // 30초간 신선도 유지하여 탭/페이지 전환 시 즉시 렌더링 ⚡
     placeholderData: (previousData: any) => previousData,
   });
 }

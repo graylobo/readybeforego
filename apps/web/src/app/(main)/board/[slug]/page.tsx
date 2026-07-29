@@ -84,19 +84,13 @@ function BoardContent({ slug }: { slug: string }) {
         activeSearch.query,
         undefined,
         undefined,
-        showBlocks ? 'false' : undefined // if showing blocks, exclude notice from normal feed
-    );
-
-    const { data: noticeData, isLoading: noticeLoading } = usePosts(
-        slug, 1, 5, undefined, undefined, undefined, undefined, 'true', { enabled: showBlocks }
-    );
-    const { data: bestData, isLoading: bestLoading } = usePosts(
-        slug, 1, 10, undefined, undefined, undefined, 'true', 'false', { enabled: showBlocks }
+        showBlocks ? 'false' : undefined, // if showing blocks, exclude notice from normal feed
+        showBlocks ? 'true' : undefined   // include notices and bests in a single response batch ⚡
     );
 
     const mainPosts = postsData?.items || [];
-    const noticePosts = noticeData?.items || [];
-    const bestPosts = bestData?.items || [];
+    const noticePosts = postsData?.notices || [];
+    const bestPosts = postsData?.bests || [];
 
     const combinedPosts = [];
     if (showBlocks) {
@@ -117,7 +111,7 @@ function BoardContent({ slug }: { slug: string }) {
         }
     }, [board?.name, slug, addBoard]);
 
-    const isLoading = boardLoading || postsLoading || (showBlocks && (noticeLoading || bestLoading));
+    const isMainLoading = postsLoading && !postsData;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -128,7 +122,7 @@ function BoardContent({ slug }: { slug: string }) {
         router.push(`/board/${slug}?searchQuery=${encodeURIComponent(searchQuery)}&searchType=${searchType}`);
     };
 
-    if (boardLoading || (isLoading && !postsData)) {
+    if ((boardLoading && !board) || isMainLoading) {
         return (
             <PageContainer className="py-8">
                 <div className="w-full">
