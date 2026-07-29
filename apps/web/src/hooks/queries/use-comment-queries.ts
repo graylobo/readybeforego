@@ -75,8 +75,8 @@ export function useUpdateComment(targetType: CommentTargetType, targetId: string
 export function useDeleteComment(targetType: CommentTargetType, targetId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; guestPassword?: string; removedCount?: number }) => 
-      commentsApi.deleteComment(data.id, data.guestPassword),
+    mutationFn: (data: { id: string; guestPassword?: string; deleteMode?: 'soft' | 'hard' }) => 
+      commentsApi.deleteComment(data.id, data.guestPassword, data.deleteMode),
     onSuccess: (data: { commentCount?: number }) => {
       queryClient.invalidateQueries({ queryKey: commentKeys.lists(targetType, targetId) });
       

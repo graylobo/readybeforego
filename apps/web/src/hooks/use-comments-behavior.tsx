@@ -22,9 +22,10 @@ interface UseCommentsBehaviorProps {
   targetId: string;
   defaultRepliesVisible?: boolean;
   onMutationSuccess?: () => void;
+  deleteMode?: 'soft' | 'hard';
 }
 
-export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisible = true, onMutationSuccess }: UseCommentsBehaviorProps) {
+export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisible = true, onMutationSuccess, deleteMode = 'soft' }: UseCommentsBehaviorProps) {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -281,6 +282,7 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
       await deleteCommentMutation.mutateAsync({
         id: commentId,
         guestPassword: guestPasswordInput,
+        deleteMode,
       }, {
         onSuccess: () => {
           onMutationSuccess?.();

@@ -135,6 +135,12 @@ export class CommentsRepository {
           .where(eq(schema.comments.id, id));
   }
 
+  async hardDeleteComment(id: string, tx?: Transaction) {
+      const db = tx ?? this.db;
+      await db.delete(schema.comments)
+          .where(eq(schema.comments.id, id));
+  }
+
   async findUserReaction(commentId: string, userId?: string, ipAddress?: string, tx?: Transaction) {
       const db = tx ?? this.db;
 

@@ -351,6 +351,7 @@ export default function GuidePage() {
               targetType="country_guide"
               targetId={selectedCountry}
               allowAnonymous={true}
+              deleteMode="hard"
             />
           </CardContent>
         </Card>

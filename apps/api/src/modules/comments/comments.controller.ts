@@ -80,13 +80,15 @@ export class CommentsController {
   @UseGuards(UserStatusGuard)
   remove(
       @Param('id') id: string, 
-      @Body() body: { guestPassword?: string },
+      @Body() body: { guestPassword?: string; deleteMode?: 'soft' | 'hard' },
+      @Query('deleteMode') queryDeleteMode: 'soft' | 'hard',
       @Req() req: any
   ) {
       const userId = req.user?.id;
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       const userAgent = req.headers['user-agent'];
-      return this.commentsService.remove(id, userId, body.guestPassword, ip as string, userAgent);
+      const deleteMode = body?.deleteMode || queryDeleteMode || 'soft';
+      return this.commentsService.remove(id, userId, body?.guestPassword, deleteMode, ip as string, userAgent);
   }
 
   @Post(':id/reaction')

@@ -344,7 +344,14 @@ export class CommentsService {
     return updated;
   }
 
-  async remove(id: string, userId: string | undefined, guestPassword?: string, ip?: string, userAgent?: string) {
+  async remove(
+    id: string, 
+    userId: string | undefined, 
+    guestPassword?: string, 
+    deleteMode: 'soft' | 'hard' = 'soft',
+    ip?: string, 
+    userAgent?: string
+  ) {
     const comment = await this.commentsRepo.findById(id);
 
     if (!comment) throw new ApiException(ErrorCode.COMMENT_NOT_FOUND, HttpStatus.NOT_FOUND);
@@ -358,7 +365,11 @@ export class CommentsService {
     }
 
     const result = await this.commentsRepo.transaction(async (tx) => {
-        await this.commentsRepo.softDeleteComment(id, tx);
+        if (deleteMode === 'hard') {
+            await this.commentsRepo.hardDeleteComment(id, tx);
+        } else {
+            await this.commentsRepo.softDeleteComment(id, tx);
+        }
 
         // Update Post commentCount if target is post
         let commentCount: number | undefined;

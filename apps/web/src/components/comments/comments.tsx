@@ -19,6 +19,7 @@ type CommentsProps = {
   defaultRepliesVisible?: boolean; 
   onMutationSuccess?: () => void; 
   allowAnonymous?: boolean; 
+  deleteMode?: 'soft' | 'hard';
 };
 
 const generateRandomId = () => {
@@ -34,6 +35,7 @@ export function Comments({
   defaultRepliesVisible = true,
   onMutationSuccess,
   allowAnonymous = false,
+  deleteMode = 'soft',
 }: CommentsProps) {
   const {
     user,
@@ -54,7 +56,7 @@ export function Comments({
     updatePending,
     handleCreateComment,
     commentRefs,
-  } = useCommentsBehavior({ targetType, targetId, defaultRepliesVisible, onMutationSuccess });
+  } = useCommentsBehavior({ targetType, targetId, defaultRepliesVisible, onMutationSuccess, deleteMode });
 
   if (loading && !isPlaceholderData) {
     return (

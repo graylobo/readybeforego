@@ -50,9 +50,10 @@ export const commentsApi = {
         return response.data;
     },
 
-    deleteComment: async (id: string, guestPassword?: string): Promise<{ success: true, commentCount?: number }> => {
+    deleteComment: async (id: string, guestPassword?: string, deleteMode: 'soft' | 'hard' = 'soft'): Promise<{ success: true, commentCount?: number }> => {
         const response = await apiClient.delete(`/comments/${id}`, {
-            data: { guestPassword }
+            data: { guestPassword, deleteMode },
+            params: { deleteMode },
         });
         return response.data;
     },
