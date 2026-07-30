@@ -354,6 +354,74 @@ export default function AdminGuidesPage() {
           --ag-border-color: #1e293b;
           --ag-input-focus-border-color: #3b82f6;
           --ag-data-color: #f1f5f9;
+          --ag-wrapper-border-radius: 0;
+          --ag-modal-overlay-background-color: rgba(0, 0, 0, 0.5);
+          --ag-chrome-background-color: #090d16;
+          --ag-subheader-background-color: #090d16;
+        }
+
+        /* AG Grid 내부 DOM 요소에 직접 배경색 적용 (alpine 테마 기본값 오버라이드) */
+        .ag-theme-dark-mode .ag-root-wrapper {
+          background-color: #090d16 !important;
+          border-color: #1e293b !important;
+        }
+
+        .ag-theme-dark-mode .ag-body-viewport,
+        .ag-theme-dark-mode .ag-body,
+        .ag-theme-dark-mode .ag-center-cols-viewport,
+        .ag-theme-dark-mode .ag-center-cols-container {
+          background-color: #090d16 !important;
+        }
+
+        .ag-theme-dark-mode .ag-header {
+          background-color: #111c38 !important;
+          border-bottom-color: #1e293b !important;
+        }
+
+        .ag-theme-dark-mode .ag-header-cell {
+          color: #f8fafc !important;
+        }
+
+        .ag-theme-dark-mode .ag-paging-panel {
+          background-color: #090d16 !important;
+          border-top-color: #1e293b !important;
+          color: #94a3b8 !important;
+        }
+
+        .ag-theme-dark-mode .ag-paging-button {
+          color: #94a3b8 !important;
+        }
+
+        .ag-theme-dark-mode .ag-paging-page-size .ag-picker-field-wrapper {
+          background-color: #1e293b !important;
+          border-color: #334155 !important;
+        }
+
+        .ag-theme-dark-mode .ag-overlay-no-rows-wrapper,
+        .ag-theme-dark-mode .ag-overlay-loading-wrapper {
+          background-color: #090d16 !important;
+          color: #94a3b8 !important;
+        }
+
+        .ag-theme-dark-mode .ag-pinned-right-cols-container,
+        .ag-theme-dark-mode .ag-pinned-left-cols-container {
+          background-color: #090d16 !important;
+        }
+
+        .ag-theme-dark-mode .ag-row {
+          color: #f1f5f9 !important;
+        }
+
+        .ag-theme-dark-mode .ag-row-odd {
+          background-color: #090d16 !important;
+        }
+
+        .ag-theme-dark-mode .ag-row-even {
+          background-color: #0e162b !important;
+        }
+
+        .ag-theme-dark-mode .ag-row:hover {
+          background-color: #1e293b !important;
         }
 
         .ag-theme-dark-mode select {
