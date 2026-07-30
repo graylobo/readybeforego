@@ -28,6 +28,7 @@ export function ExchangeRateModal({ countryName, currencyCode, flagEmoji, trigge
   const config = CURRENCY_CONFIG[currencyCode] || { unit: 1, symbol: currencyCode, name: currencyCode };
 
   const [calcMode, setCalcMode] = useState<'base' | 'buying'>('base'); // 매매기준율 vs 현찰살때
+  const [isSwapped, setIsSwapped] = useState(false); // 좌우 방향 스위칭
   const [foreignAmount, setForeignAmount] = useState<string>("");
   const [krwAmount, setKrwAmount] = useState<string>("");
 
@@ -64,6 +65,10 @@ export function ExchangeRateModal({ countryName, currencyCode, flagEmoji, trigge
     }
     const calculated = (num / activeRate) * rateInfo.unit;
     setForeignAmount(String(Math.round(calculated * 100) / 100));
+  };
+
+  const handleSwap = () => {
+    setIsSwapped((prev) => !prev);
   };
 
   if (currencyCode === "KRW") return null;
@@ -223,35 +228,47 @@ export function ExchangeRateModal({ countryName, currencyCode, flagEmoji, trigge
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-11 gap-2.5 items-center">
+                  {/* 왼쪽 입력 창 (isSwapped 조건에 따라 KRW 또는 외화) */}
                   <div className="sm:col-span-5 relative">
                     <Input
                       type="number"
-                      value={foreignAmount}
-                      onChange={(e) => handleForeignChange(e.target.value)}
+                      value={isSwapped ? krwAmount : foreignAmount}
+                      onChange={(e) => isSwapped ? handleKrwChange(e.target.value) : handleForeignChange(e.target.value)}
                       placeholder="0"
-                      className="pr-12 text-sm font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-xl focus:ring-blue-500"
+                      className={`pr-12 text-sm font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-xl focus:ring-blue-500 ${
+                        isSwapped ? "text-blue-600 dark:text-blue-400" : "text-slate-900 dark:text-white"
+                      }`}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      {config.symbol}
+                      {isSwapped ? "₩" : config.symbol}
                     </span>
                   </div>
 
+                  {/* 중앙 스위칭 토글 버튼 */}
                   <div className="sm:col-span-1 flex justify-center py-1 sm:py-0">
-                    <div className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
-                      <ArrowLeftRight className="w-4 h-4 rotate-90 sm:rotate-0" />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSwap}
+                      title="통화 입력 스위칭"
+                      className="p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer shadow-xs active:scale-90"
+                    >
+                      <ArrowLeftRight className={`w-4 h-4 transition-transform duration-300 ${isSwapped ? 'rotate-180' : 'rotate-0'}`} />
+                    </button>
                   </div>
 
+                  {/* 오른쪽 입력 창 (isSwapped 조건에 따라 외화 또는 KRW) */}
                   <div className="sm:col-span-5 relative">
                     <Input
                       type="number"
-                      value={krwAmount}
-                      onChange={(e) => handleKrwChange(e.target.value)}
+                      value={isSwapped ? foreignAmount : krwAmount}
+                      onChange={(e) => isSwapped ? handleForeignChange(e.target.value) : handleKrwChange(e.target.value)}
                       placeholder="0"
-                      className="pr-10 text-sm font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-xl text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                      className={`pr-12 text-sm font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-xl focus:ring-blue-500 ${
+                        isSwapped ? "text-slate-900 dark:text-white" : "text-blue-600 dark:text-blue-400"
+                      }`}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      ₩
+                      {isSwapped ? config.symbol : "₩"}
                     </span>
                   </div>
                 </div>
