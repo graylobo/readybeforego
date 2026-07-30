@@ -237,19 +237,19 @@ export default function GuidePage() {
             </div>
 
             {/* 3대 정보 태그 (플러그, 비자, 통화 + 실시간 환율 모달 버튼) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs items-center">
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <span className="font-bold text-slate-400">🔌 전압/플러그:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.plug}</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs items-center">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 shrink-0">
+                <span className="font-bold text-slate-400 whitespace-nowrap shrink-0">🔌 전압/플러그:</span>
+                <span className="font-semibold text-slate-900 dark:text-white whitespace-nowrap">{currentCountryInfo.plug}</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <span className="font-bold text-slate-400">🛂 비자 조건:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.visa}</span>
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 shrink-0">
+                <span className="font-bold text-slate-400 whitespace-nowrap shrink-0">🛂 비자 조건:</span>
+                <span className="font-semibold text-slate-900 dark:text-white whitespace-nowrap">{currentCountryInfo.visa}</span>
               </div>
-              <div className="flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-400">💰 통화 단위:</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">{currentCountryInfo.currency}</span>
+              <div className="flex items-center justify-between sm:justify-start md:justify-between gap-3 text-slate-600 dark:text-slate-300 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                  <span className="font-bold text-slate-400 whitespace-nowrap shrink-0">💰 통화 단위:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white whitespace-nowrap">{currentCountryInfo.currency}</span>
                 </div>
                 <ExchangeRateModal
                   countryName={currentCountryInfo.name}
@@ -290,66 +290,68 @@ export default function GuidePage() {
           })}
         </div>
 
-        {/* 📋 가이드 & 준비물 체크리스트 목록 */}
-        <div className="space-y-3">
+        {/* 📋 가이드 & 준비물 체크리스트 목록 (슬림 컴팩트 뷰 & 카드 전체 클릭) */}
+        <div className="space-y-2">
           {isPending ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="p-4 border-slate-200/80 dark:border-slate-800">
-                  <div className="space-y-2">
-                    <Skeleton className="h-5 w-1/3" />
-                    <Skeleton className="h-4 w-3/4" />
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="p-3 border-slate-200/80 dark:border-slate-800">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-3 w-3/4" />
                   </div>
                 </Card>
               ))}
             </div>
           ) : filteredGuides.length === 0 ? (
-            <Card className="p-12 text-center border-dashed">
-              <Info className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <Card className="p-8 text-center border-dashed">
+              <Info className="w-7 h-7 text-slate-300 mx-auto mb-2" />
               <p className="text-xs text-slate-500">해당 카테고리의 가이드 항목이 아직 등록되지 않았습니다.</p>
             </Card>
           ) : (
             filteredGuides.map((item) => {
               const isChecked = !!checkedIds[item.id];
+              const isClickable = item.isCheckable !== false;
+
               return (
                 <Card 
                   key={item.id} 
-                  className={`transition-all duration-300 border overflow-hidden ${
+                  onClick={() => isClickable && toggleCheck(item.id)}
+                  className={`transition-all duration-200 border overflow-hidden select-none ${
+                    isClickable ? "cursor-pointer" : "cursor-default"
+                  } ${
                     isChecked 
-                      ? "bg-slate-50/80 dark:bg-slate-900/50 border-slate-200/50 dark:border-slate-800 opacity-75"
-                      : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm"
+                      ? "bg-slate-100/70 dark:bg-slate-900/40 border-slate-200/60 dark:border-slate-800/80 opacity-70"
+                      : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-sm"
                   }`}
                 >
-                  <CardContent className="p-4 sm:p-5">
-                    <div className="flex items-start gap-3.5">
-                      {/* 체크박스 버튼 */}
+                  <CardContent className="p-2.5 sm:px-3.5 sm:py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      {/* 체크박스 아이콘 */}
                       {item.isCheckable && (
-                        <button
-                          type="button"
-                          onClick={() => toggleCheck(item.id)}
-                          className="mt-0.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer shrink-0"
-                        >
+                        <div className="shrink-0 text-slate-400 dark:text-slate-500">
                           {isChecked ? (
-                            <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            <CheckSquare className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-blue-600 dark:text-blue-400" />
                           ) : (
-                            <Square className="w-5 h-5" />
+                            <Square className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                           )}
-                        </button>
+                        </div>
                       )}
 
-                      <div className="space-y-1 flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {item.icon && <span className="text-base">{item.icon}</span>}
-                          <h3 className={`text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 ${isChecked ? "line-through text-slate-500" : ""}`}>
+                      {/* 텍스트 정보 (슬림 정렬) */}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {item.icon && <span className="text-sm leading-none">{item.icon}</span>}
+                          <h3 className={`text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight ${isChecked ? "line-through text-slate-500 dark:text-slate-500" : ""}`}>
                             {item.title}
                           </h3>
                           {item.isRequired && (
-                            <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 dark:bg-red-950/20 dark:border-red-900 text-[10px] font-bold px-1.5 py-0">
+                            <Badge variant="outline" className="bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/60 text-[10px] font-bold px-1.5 py-0 leading-none h-4">
                               필수
                             </Badge>
                           )}
                         </div>
-                        <p className={`text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed ${isChecked ? "text-slate-400 dark:text-slate-500" : ""}`}>
+                        <p className={`text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 leading-normal line-clamp-2 ${isChecked ? "text-slate-400 dark:text-slate-500" : ""}`}>
                           {item.description}
                         </p>
                       </div>

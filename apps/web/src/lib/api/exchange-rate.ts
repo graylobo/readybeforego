@@ -88,6 +88,8 @@ export async function getExchangeRate(currencyCode: string): Promise<ExchangeRat
     if (!data || !Array.isArray(data) || data.length === 0) return null;
     const item = data[0];
 
+    const changeRate = Math.round((item.changeRate || 0) * 100) / 100;
+
     return {
       currency: code,
       unit: config.unit,
@@ -95,7 +97,7 @@ export async function getExchangeRate(currencyCode: string): Promise<ExchangeRat
       basePrice: item.basePrice,
       change: item.change,
       changePrice: item.changePrice,
-      changeRate: Math.round(item.changeRate * 10000) / 100, // 백분율 %
+      changeRate: changeRate,
       cashBuyingPrice: item.cashBuyingPrice,
       cashSellingPrice: item.cashSellingPrice,
       ttSellingPrice: item.ttSellingPrice,
