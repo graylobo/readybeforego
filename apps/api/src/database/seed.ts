@@ -40,6 +40,7 @@ async function main() {
   try {
     // 1. 국가 데이터 (Countries)
     const countriesData = [
+      { code: 'ALL', name: '전체 공통 🌐', nameEn: 'All Countries' },
       { code: 'TH', name: '태국', nameEn: 'Thailand' },
       { code: 'VN', name: '베트남', nameEn: 'Vietnam' },
       { code: 'FR', name: '프랑스', nameEn: 'France' },
@@ -435,6 +436,52 @@ async function main() {
     }
     // 5. 가이드 및 준비물 (CountryGuides) 시딩 🎒
     const countryGuidesData = [
+      // 🌐 전체 공통 (ALL) - 모든 해외 여행에 통용되는 공통 필수/권장 준비물
+      {
+        id: '70000000-0000-0000-0000-000000000000',
+        countryCode: 'ALL',
+        category: 'pre_travel',
+        title: '여권 잔여 유효기간 6개월 이상 필수 확인',
+        description: '대부분의 국가 입국 시 여권 유효기간이 최소 6개월 이상 남아있어야 출국 및 입국이 허가됩니다.',
+        icon: '🛂',
+        isRequired: true,
+        isCheckable: true,
+        sortOrder: 1,
+      },
+      {
+        id: '70000000-0000-0000-0000-000000000099',
+        countryCode: 'ALL',
+        category: 'pre_travel',
+        title: '해외 결제 및 CD기 출금 가능 신용/체크카드 (트래블월렛 등)',
+        description: '현지 현금 부족 및 비상 상황에 대비해 마스터/비자 해외 결제 승인 카드를 반드시 지참하세요.',
+        icon: '💳',
+        isRequired: true,
+        isCheckable: true,
+        sortOrder: 2,
+      },
+      {
+        id: '70000000-0000-0000-0000-000000000098',
+        countryCode: 'ALL',
+        category: 'baggage',
+        title: '보조배터리는 반드시 기내용 가방에 지참 (위탁 금지)',
+        description: '리튬 보조배터리는 위탁 수하물(Carrier) 보관이 전면 금지되어 있습니다. 160Wh 이하 제품을 기내에 가지고 타세요.',
+        icon: '🔋',
+        isRequired: true,
+        isCheckable: true,
+        sortOrder: 1,
+      },
+      {
+        id: '70000000-0000-0000-0000-000000000097',
+        countryCode: 'ALL',
+        category: 'tips',
+        title: '해외 여행자 보험 가입 및 비상 연락처 저장',
+        description: '해외 질병, 소지품 도난, 항공편 지연 등의 비상 대처를 위해 여행자 보험 증권과 영사콜센터(+82-2-3210-0404)를 저장해두세요.',
+        icon: '🏥',
+        isRequired: false,
+        isCheckable: false,
+        sortOrder: 1,
+      },
+
       // 🇯🇵 일본 (JP)
       {
         id: '70000000-0000-0000-0000-000000000001',
@@ -446,17 +493,6 @@ async function main() {
         isRequired: true,
         isCheckable: true,
         sortOrder: 1,
-      },
-      {
-        id: '70000000-0000-0000-0000-000000000002',
-        countryCode: 'JP',
-        category: 'pre_travel',
-        title: '트래블월렛 / 트래블로그 수수료 0원 카드',
-        description: '엔화 환전 수수료가 100% 우대되며 현지 이온(AEON) ATM 등에서 현금 인출 시 수수료가 무료입니다.',
-        icon: '💳',
-        isRequired: false,
-        isCheckable: true,
-        sortOrder: 2,
       },
       {
         id: '70000000-0000-0000-0000-000000000003',
@@ -479,17 +515,6 @@ async function main() {
         isRequired: false,
         isCheckable: true,
         sortOrder: 2,
-      },
-      {
-        id: '70000000-0000-0000-0000-000000000005',
-        countryCode: 'JP',
-        category: 'baggage',
-        title: '보조배터리는 반드시 기내용 가방에 지참',
-        description: '리튬 보조배터리는 위탁 수하물(Carrier) 보관이 전면 금지되어 있습니다. 160Wh(약 30,000mAh) 이하 제품을 기내에 가지고 타세요.',
-        icon: '🔋',
-        isRequired: true,
-        isCheckable: true,
-        sortOrder: 1,
       },
       {
         id: '70000000-0000-0000-0000-000000000006',
@@ -572,17 +597,6 @@ async function main() {
       },
 
       // 🇻🇳 베트남 (VN)
-      {
-        id: '70000000-0000-0000-0000-000000000013',
-        countryCode: 'VN',
-        category: 'pre_travel',
-        title: '여권 잔여 유효기간 6개월 이상 필수 확인',
-        description: '베트남 무비자 45일 입국 조건으로 여권 유효기간이 최소 6개월 이상 남아있어야 입국이 허가됩니다.',
-        icon: '🛂',
-        isRequired: true,
-        isCheckable: true,
-        sortOrder: 1,
-      },
       {
         id: '70000000-0000-0000-0000-000000000014',
         countryCode: 'VN',

@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { eq, asc, sql } from 'drizzle-orm';
+import { eq, inArray, ne, asc, sql } from 'drizzle-orm';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
 import { CreateGuideZodDto, UpdateGuideZodDto } from './dto/guides.dto';
@@ -12,9 +12,13 @@ export class GuidesRepository {
     private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
-  async findByCountry(countryCode: string) {
+  async findByCountry(countryCode: string, includeCommon: boolean = true) {
+    const whereClause = includeCommon
+      ? inArray(schema.countryGuides.countryCode, Array.from(new Set([countryCode, 'ALL'])))
+      : eq(schema.countryGuides.countryCode, countryCode);
+
     const guides = await this.db.query.countryGuides.findMany({
-      where: eq(schema.countryGuides.countryCode, countryCode),
+      where: whereClause,
       orderBy: [asc(schema.countryGuides.sortOrder), asc(schema.countryGuides.createdAt)],
     });
 
@@ -33,6 +37,7 @@ export class GuidesRepository {
       })
       .from(schema.countryGuides)
       .innerJoin(schema.countries, eq(schema.countryGuides.countryCode, schema.countries.code))
+      .where(ne(schema.countryGuides.countryCode, 'ALL'))
       .groupBy(
         schema.countryGuides.countryCode,
         schema.countries.name,
@@ -40,6 +45,16 @@ export class GuidesRepository {
       );
 
     return results;
+  }
+
+  async findAll() {
+    const guides = await this.db.query.countryGuides.findMany({
+      orderBy: [asc(schema.countryGuides.countryCode), asc(schema.countryGuides.sortOrder), asc(schema.countryGuides.createdAt)],
+    });
+
+    return {
+      guides,
+    };
   }
 
   async createGuide(data: CreateGuideZodDto) {
@@ -64,5 +79,13 @@ export class GuidesRepository {
       .delete(schema.countryGuides)
       .where(eq(schema.countryGuides.id, id));
     return { success: true };
+  }
+
+  async deleteGuides(ids: string[]) {
+    if (!ids || ids.length === 0) return { success: true, count: 0 };
+    await this.db
+      .delete(schema.countryGuides)
+      .where(inArray(schema.countryGuides.id, ids));
+    return { success: true, count: ids.length };
   }
 }

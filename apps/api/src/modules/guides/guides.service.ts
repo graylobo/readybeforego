@@ -6,8 +6,12 @@ import { CreateGuideZodDto, UpdateGuideZodDto } from './dto/guides.dto';
 export class GuidesService {
   constructor(private readonly guidesRepository: GuidesRepository) {}
 
-  async getGuidesByCountry(countryCode: string) {
-    return this.guidesRepository.findByCountry(countryCode.toUpperCase());
+  async getGuidesByCountry(countryCode: string, includeCommon: boolean = true) {
+    const code = countryCode.toUpperCase();
+    if (code === 'ALL_TOTAL' || code === 'ALL_COUNTRIES') {
+      return this.guidesRepository.findAll();
+    }
+    return this.guidesRepository.findByCountry(code, includeCommon);
   }
 
   async getAvailableCountries() {
@@ -30,5 +34,9 @@ export class GuidesService {
 
   async deleteGuide(id: string) {
     return this.guidesRepository.deleteGuide(id);
+  }
+
+  async deleteGuides(ids: string[]) {
+    return this.guidesRepository.deleteGuides(ids);
   }
 }

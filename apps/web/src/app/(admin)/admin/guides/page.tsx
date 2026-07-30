@@ -38,12 +38,14 @@ import { toast } from "sonner";
 import { AgGridReact } from "ag-grid-react";
 import { ModuleRegistry, AllCommunityModule, ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-alpine.css";
+import "ag-grid-community/styles/ag-theme-quartz.css";
 
 // AG Grid v35 모듈 등록
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const COUNTRIES = [
+  { code: "ALL_TOTAL", name: "전체 국가 보기 🌍" },
+  { code: "ALL", name: "전체 공통 🌐" },
   { code: "JP", name: "일본 🇯🇵" },
   { code: "TH", name: "태국 🇹🇭" },
   { code: "VN", name: "베트남 🇻🇳" },
@@ -64,9 +66,10 @@ export default function AdminGuidesPage() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const [selectedCountry, setSelectedCountry] = useState<string>("JP");
+  const [selectedCountry, setSelectedCountry] = useState<string>("ALL_TOTAL");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,7 +99,7 @@ export default function AdminGuidesPage() {
   // 해당 국가 가이드 항목 조회
   const { data: guideData, isLoading, refetch } = useQuery({
     queryKey: ['admin-guides', selectedCountry],
-    queryFn: () => guidesApi.getGuidesByCountry(selectedCountry),
+    queryFn: () => guidesApi.getGuidesByCountry(selectedCountry, false),
     enabled: !!selectedCountry,
   });
 
@@ -107,8 +110,7 @@ export default function AdminGuidesPage() {
     mutationFn: (dto: any) => guidesApi.createGuide(dto),
     onSuccess: () => {
       toast.success("가이드 항목이 생성되었습니다.");
-      queryClient.invalidateQueries({ queryKey: ['admin-guides', selectedCountry] });
-      queryClient.invalidateQueries({ queryKey: ['guides', 'country', selectedCountry] });
+      queryClient.invalidateQueries({ queryKey: ['admin-guides'] });
       setIsModalOpen(false);
     },
     onError: () => {
@@ -121,8 +123,7 @@ export default function AdminGuidesPage() {
     mutationFn: ({ id, dto }: { id: string; dto: any }) => guidesApi.updateGuide(id, dto),
     onSuccess: () => {
       toast.success("가이드 항목이 수정되었습니다.");
-      queryClient.invalidateQueries({ queryKey: ['admin-guides', selectedCountry] });
-      queryClient.invalidateQueries({ queryKey: ['guides', 'country', selectedCountry] });
+      queryClient.invalidateQueries({ queryKey: ['admin-guides'] });
       setIsModalOpen(false);
     },
     onError: () => {
@@ -135,19 +136,44 @@ export default function AdminGuidesPage() {
     mutationFn: (id: string) => guidesApi.deleteGuide(id),
     onSuccess: () => {
       toast.success("가이드 항목이 삭제되었습니다.");
-      queryClient.invalidateQueries({ queryKey: ['admin-guides', selectedCountry] });
-      queryClient.invalidateQueries({ queryKey: ['guides', 'country', selectedCountry] });
+      queryClient.invalidateQueries({ queryKey: ['admin-guides'] });
     },
     onError: () => {
       toast.error("가이드 항목 삭제에 실패했습니다.");
     },
   });
 
+  // 다중 삭제 Mutation
+  const deleteBulkMutation = useMutation({
+    mutationFn: (ids: string[]) => guidesApi.deleteGuides(ids),
+    onSuccess: (res: any) => {
+      toast.success(`${res.count || selectedIds.length}개 항목이 삭제되었습니다.`);
+      setSelectedIds([]);
+      queryClient.invalidateQueries({ queryKey: ['admin-guides'] });
+    },
+    onError: () => {
+      toast.error("항목 삭제 중 오류가 발생했습니다.");
+    },
+  });
+
+  const handleSelectionChanged = useCallback((event: any) => {
+    const selectedNodes = event.api.getSelectedNodes();
+    const ids = selectedNodes.map((node: any) => node.data?.id).filter(Boolean);
+    setSelectedIds(ids);
+  }, []);
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`선택한 ${selectedIds.length}개 항목을 삭제하시겠습니까?`)) {
+      deleteBulkMutation.mutate(selectedIds);
+    }
+  };
+
   // 모달 열기 (신규)
   const handleOpenCreateModal = () => {
     setEditingItem(null);
     setFormData({
-      countryCode: selectedCountry,
+      countryCode: selectedCountry === "ALL_TOTAL" || selectedCountry === "ALL" ? "JP" : selectedCountry,
       category: "pre_travel",
       title: "",
       description: "",
@@ -204,6 +230,15 @@ export default function AdminGuidesPage() {
 
   // AG Grid 컬럼 정의 (ColDef)
   const columnDefs: ColDef<CountryGuideItem>[] = useMemo(() => [
+    {
+      headerCheckboxSelection: true,
+      checkboxSelection: true,
+      width: 48,
+      pinned: "left",
+      lockPosition: "left",
+      suppressMenu: true,
+      resizable: false,
+    },
     {
       headerName: "순서",
       field: "sortOrder",
@@ -336,198 +371,118 @@ export default function AdminGuidesPage() {
   ], [handleOpenEditModal, handleDelete]);
 
   return (
-    <div className="space-y-6">
-      {/* AG Grid v35 공식 CSS 변수 주입 방식 (레이아웃 보존 + 배경/컬러만 다크 세팅) */}
-      <style jsx global>{`
-        .ag-theme-dark-mode {
-          --ag-background-color: #090d16;
-          --ag-header-background-color: #111c38;
-          --ag-odd-row-background-color: #090d16;
-          --ag-even-row-background-color: #0e162b;
-          --ag-row-border-color: #1e293b;
-          --ag-header-foreground-color: #f8fafc;
-          --ag-foreground-color: #f1f5f9;
-          --ag-secondary-foreground-color: #94a3b8;
-          --ag-selected-row-background-color: #1e293b;
-          --ag-row-hover-color: #1e293b;
-          --ag-control-panel-background-color: #111c38;
-          --ag-border-color: #1e293b;
-          --ag-input-focus-border-color: #3b82f6;
-          --ag-data-color: #f1f5f9;
-          --ag-wrapper-border-radius: 0;
-          --ag-modal-overlay-background-color: rgba(0, 0, 0, 0.5);
-          --ag-chrome-background-color: #090d16;
-          --ag-subheader-background-color: #090d16;
-        }
-
-        /* AG Grid 내부 DOM 요소에 직접 배경색 적용 (alpine 테마 기본값 오버라이드) */
-        .ag-theme-dark-mode .ag-root-wrapper {
-          background-color: #090d16 !important;
-          border-color: #1e293b !important;
-        }
-
-        .ag-theme-dark-mode .ag-body-viewport,
-        .ag-theme-dark-mode .ag-body,
-        .ag-theme-dark-mode .ag-center-cols-viewport,
-        .ag-theme-dark-mode .ag-center-cols-container {
-          background-color: #090d16 !important;
-        }
-
-        .ag-theme-dark-mode .ag-header {
-          background-color: #111c38 !important;
-          border-bottom-color: #1e293b !important;
-        }
-
-        .ag-theme-dark-mode .ag-header-cell {
-          color: #f8fafc !important;
-        }
-
-        .ag-theme-dark-mode .ag-paging-panel {
-          background-color: #090d16 !important;
-          border-top-color: #1e293b !important;
-          color: #94a3b8 !important;
-        }
-
-        .ag-theme-dark-mode .ag-paging-button {
-          color: #94a3b8 !important;
-        }
-
-        .ag-theme-dark-mode .ag-paging-page-size .ag-picker-field-wrapper {
-          background-color: #1e293b !important;
-          border-color: #334155 !important;
-        }
-
-        .ag-theme-dark-mode .ag-overlay-no-rows-wrapper,
-        .ag-theme-dark-mode .ag-overlay-loading-wrapper {
-          background-color: #090d16 !important;
-          color: #94a3b8 !important;
-        }
-
-        .ag-theme-dark-mode .ag-pinned-right-cols-container,
-        .ag-theme-dark-mode .ag-pinned-left-cols-container {
-          background-color: #090d16 !important;
-        }
-
-        .ag-theme-dark-mode .ag-row {
-          color: #f1f5f9 !important;
-        }
-
-        .ag-theme-dark-mode .ag-row-odd {
-          background-color: #090d16 !important;
-        }
-
-        .ag-theme-dark-mode .ag-row-even {
-          background-color: #0e162b !important;
-        }
-
-        .ag-theme-dark-mode .ag-row:hover {
-          background-color: #1e293b !important;
-        }
-
-        .ag-theme-dark-mode select {
-          background-color: #1e293b;
-          color: #f1f5f9;
-          border-color: #334155;
-          border-radius: 6px;
-          padding: 2px 6px;
-        }
-      `}</style>
-
-      {/* 🌟 헤더 배너 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-2xl shadow-lg">
-        <div className="space-y-1">
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-blue-400" />
-            <span>국가별 여행 가이드 & 준비물 관리 (AG Grid)</span>
+    <div className="space-y-4">
+      {/* 🌟 상단 타이틀 & 액션 툴바 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-blue-500" />
+            <span>국가별 여행 가이드 & 준비물 관리</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300">
-            고성능 AG Grid 데이터 테이블을 통해 국가별 체크리스트와 가이드 항목을 실시간 관리합니다.
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            국가별 체크리스트와 가이드 항목을 실시간 검색, 수정, 삭제 및 등록 관리합니다.
           </p>
         </div>
 
         <Button
           onClick={handleOpenCreateModal}
-          className="bg-blue-600 hover:bg-blue-500 font-bold text-xs sm:text-sm gap-1.5 rounded-xl self-start sm:self-center cursor-pointer shadow-md"
+          className="bg-blue-600 hover:bg-blue-500 font-bold text-xs sm:text-sm gap-1.5 rounded-xl self-start sm:self-center cursor-pointer shadow-sm"
         >
           <Plus className="w-4 h-4" />
           <span>신규 가이드 항목 추가</span>
         </Button>
       </div>
 
-      {/* 🎛️ 필터 및 검색 컨트롤 */}
-      <Card className="border-slate-200/80 dark:border-slate-800">
-        <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* 국가 셀렉터 */}
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-slate-400" />
-              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                <SelectTrigger className="w-36 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <SelectValue placeholder="국가 선택" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 text-white border-slate-800">
-                  {COUNTRIES.map(c => (
-                    <SelectItem key={c.code} value={c.code} className="cursor-pointer hover:bg-slate-800 font-semibold">
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 카테고리 필터 */}
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-36 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                <SelectValue placeholder="카테고리 전체" />
+      {/* 🎛️ 필터 및 검색 컨트롤 툴바 (슬림 컴팩트 바) */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-xl border shadow-sm">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* 국가 셀렉터 */}
+          <div className="flex items-center gap-1.5">
+            <Globe className="w-4 h-4 text-muted-foreground" />
+            <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+              <SelectTrigger className="w-40 h-9 text-xs font-bold rounded-lg bg-background">
+                <SelectValue placeholder="국가 선택" />
               </SelectTrigger>
-              <SelectContent className="bg-slate-900 text-white border-slate-800">
-                <SelectItem value="all" className="cursor-pointer hover:bg-slate-800">전체 카테고리</SelectItem>
-                <SelectItem value="pre_travel" className="cursor-pointer hover:bg-slate-800">🛫 사전 준비</SelectItem>
-                <SelectItem value="essentials" className="cursor-pointer hover:bg-slate-800">🎒 필수 준비물</SelectItem>
-                <SelectItem value="baggage" className="cursor-pointer hover:bg-slate-800">✈️ 수하물 규정</SelectItem>
-                <SelectItem value="tips" className="cursor-pointer hover:bg-slate-800">💡 현지 팁</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                {COUNTRIES.map(c => (
+                  <SelectItem key={c.code} value={c.code} className="cursor-pointer font-semibold text-xs">
+                    {c.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* AG Grid 빠른 검색창 */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="테이블 실시간 필터 검색..."
-              className="pl-9 text-xs rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
-            />
-          </div>
-        </CardContent>
-      </Card>
+          {/* 카테고리 필터 */}
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-36 h-9 text-xs font-bold rounded-lg bg-background">
+              <SelectValue placeholder="카테고리 전체" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border text-xs">
+              <SelectItem value="all" className="cursor-pointer">전체 카테고리</SelectItem>
+              <SelectItem value="pre_travel" className="cursor-pointer">🛫 사전 준비</SelectItem>
+              <SelectItem value="essentials" className="cursor-pointer">🎒 필수 준비물</SelectItem>
+              <SelectItem value="baggage" className="cursor-pointer">✈️ 수하물 규정</SelectItem>
+              <SelectItem value="tips" className="cursor-pointer">💡 현지 팁</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* AG Grid 빠른 검색창 */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="테이블 실시간 필터 검색..."
+            className="pl-9 h-9 text-xs rounded-lg bg-background"
+          />
+        </div>
+      </div>
 
       {/* 📊 AG Grid 테이블 카드 */}
-      <Card className="border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900">
-        <CardHeader className="p-4 sm:p-5 pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-bold flex items-center gap-2">
+      <Card className="border-border shadow-sm overflow-hidden bg-card">
+        <CardHeader className="p-3 sm:px-4 py-3 border-b border-border flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
             <span>가이드 데이터 목록 ({rowData.length}개)</span>
           </CardTitle>
 
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => refetch()} 
-            className="h-7 px-2 text-xs text-slate-500 hover:text-blue-600 gap-1 rounded-md cursor-pointer"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>새로고침</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedIds.length > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={deleteBulkMutation.isPending}
+                className="h-7 px-2.5 text-xs font-bold gap-1 rounded-md cursor-pointer animate-in fade-in"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>선택 삭제 ({selectedIds.length})</span>
+              </Button>
+            )}
+
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => refetch()} 
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 rounded-md cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>새로고침</span>
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="p-0">
           {/* AG Grid 35 CSS 변수 방식: ag-theme-alpine + ag-theme-dark-mode */}
-          <div className={`ag-theme-alpine ${isDark ? "ag-theme-dark-mode" : ""} w-full h-[540px]`}>
+          <div className={`${isDark ? 'ag-theme-quartz-dark' : 'ag-theme-quartz'} w-full h-[540px]`}>
             <AgGridReact<CountryGuideItem>
+              theme="legacy"
               rowData={rowData}
               columnDefs={columnDefs}
               quickFilterText={searchTerm}
+              rowSelection="multiple"
+              onSelectionChanged={handleSelectionChanged}
               pagination={true}
               paginationPageSize={15}
               paginationPageSizeSelector={[10, 15, 25, 50]}

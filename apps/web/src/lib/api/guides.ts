@@ -49,8 +49,10 @@ export const guidesApi = {
     return response.data;
   },
 
-  getGuidesByCountry: async (countryCode: string): Promise<CountryGuideData> => {
-    const response = await apiClient.get(`/guides/country/${countryCode}`);
+  getGuidesByCountry: async (countryCode: string, includeCommon: boolean = true): Promise<CountryGuideData> => {
+    const response = await apiClient.get(`/guides/country/${countryCode}`, {
+      params: { includeCommon },
+    });
     return response.data;
   },
 
@@ -67,6 +69,11 @@ export const guidesApi = {
 
   deleteGuide: async (id: string): Promise<{ success: boolean }> => {
     const response = await apiClient.delete(`/guides/admin/${id}`);
+    return response.data;
+  },
+
+  deleteGuides: async (ids: string[]): Promise<{ success: boolean; count: number }> => {
+    const response = await apiClient.post('/guides/admin/bulk-delete', { ids });
     return response.data;
   },
 

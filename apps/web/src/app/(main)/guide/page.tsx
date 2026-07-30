@@ -1,48 +1,42 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { 
-  CheckSquare, 
-  Square, 
-  Sparkles, 
-  Luggage, 
-  Plane, 
-  Lightbulb, 
-  ShieldCheck, 
-  ThumbsUp, 
-  Send, 
-  Info,
-  CheckCircle2,
-  Trash2,
-  Globe
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
 import { Comments } from "@/components/comments/comments";
 import { ExchangeRateModal } from "@/components/guide/exchange-rate-modal";
-import { useAuthStore } from "@/lib/stores/auth.store";
-import { 
-  useCountryGuides, 
-  useAvailableGuideCountries, 
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useAvailableGuideCountries,
+  useCountryGuides,
 } from "@/hooks/queries/use-guide-queries";
-import { toast } from "sonner";
+import { useAuthStore } from "@/lib/stores/auth.store";
+import {
+  CheckCircle2,
+  CheckSquare,
+  Globe,
+  Info,
+  Lightbulb,
+  Luggage,
+  Plane,
+  ShieldCheck,
+  Sparkles,
+  Square
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 const POPULAR_COUNTRIES = [
-  { code: "JP", name: "일본", emoji: "🇯🇵", plug: "110V (돼지코 필수)", visa: "무비자 90일", currency: "엔 (JPY)", currencyCode: "JPY" },
+  { code: "JP", name: "일본", emoji: "🇯🇵", plug: "110V", visa: "무비자 90일", currency: "엔 (JPY)", currencyCode: "JPY" },
   { code: "TH", name: "태국", emoji: "🇹🇭", plug: "220V / 220V 겸용", visa: "무비자 90일", currency: "바트 (THB)", currencyCode: "THB" },
   { code: "VN", name: "베트남", emoji: "🇻🇳", plug: "220V", visa: "무비자 45일", currency: "동 (VND)", currencyCode: "VND" },
   { code: "PH", name: "필리핀", emoji: "🇵🇭", plug: "220V / 110V", visa: "무비자 30일", currency: "페소 (PHP)", currencyCode: "PHP" },
-  { code: "US", name: "미국", emoji: "🇺🇸", plug: "110V (돼지코 필수)", visa: "ESTA 전자비자", currency: "달러 (USD)", currencyCode: "USD" },
+  { code: "US", name: "미국", emoji: "🇺🇸", plug: "110V", visa: "ESTA 전자비자", currency: "달러 (USD)", currencyCode: "USD" },
   { code: "KR", name: "대한민국", emoji: "🇰🇷", plug: "220V", visa: "내국인", currency: "원 (KRW)", currencyCode: "KRW" },
 ];
 

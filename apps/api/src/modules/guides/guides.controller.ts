@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, UsePipes } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards, UsePipes } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GuidesService } from './guides.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,8 +18,12 @@ export class GuidesController {
 
   @Get('country/:countryCode')
   @ApiOperation({ summary: '특정 국가의 가이드 항목 목록 조회' })
-  async getGuidesByCountry(@Param('countryCode') countryCode: string) {
-    return this.guidesService.getGuidesByCountry(countryCode);
+  async getGuidesByCountry(
+    @Param('countryCode') countryCode: string,
+    @Query('includeCommon') includeCommon?: string,
+  ) {
+    const isIncludeCommon = includeCommon !== 'false';
+    return this.guidesService.getGuidesByCountry(countryCode, isIncludeCommon);
   }
 
   // --- Admin Endpoints ---
@@ -39,6 +43,13 @@ export class GuidesController {
   @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 수정' })
   async updateGuide(@Param('id') id: string, @Body() dto: UpdateGuideZodDto) {
     return this.guidesService.updateGuide(id, dto);
+  }
+
+  @Post('admin/bulk-delete')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 다중 일괄 삭제' })
+  async deleteGuides(@Body() body: { ids: string[] }) {
+    return this.guidesService.deleteGuides(body.ids || []);
   }
 
   @Delete('admin/:id')
