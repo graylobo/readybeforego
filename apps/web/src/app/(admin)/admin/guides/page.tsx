@@ -8,13 +8,16 @@ import {
   Trash2, 
   BookOpen, 
   RefreshCw,
-  Globe
+  Globe,
+  FileJson,
+  UploadCloud
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
   Select, 
   SelectContent, 
@@ -71,7 +74,45 @@ export default function AdminGuidesPage() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // 모달 상태
+  // JSON 일괄 등록 모달 상태
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
+
+  // JSON 파싱 및 유효성 검사
+  const parsedJsonItems = useMemo(() => {
+    if (!jsonInput.trim()) return null;
+    try {
+      const parsed = JSON.parse(jsonInput);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [jsonInput]);
+
+  // JSON 일괄 등록 Mutation
+  const bulkImportMutation = useMutation({
+    mutationFn: (items: any[]) => guidesApi.bulkImportAdminGuides(items),
+    onSuccess: (res: any) => {
+      toast.success(`${res.count || 0}개의 가이드 항목이 일괄 적재되었습니다! 🎉`);
+      setJsonInput('');
+      setIsBulkImportModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-guides'] });
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error('JSON 일괄 등록 중 오류가 발생했습니다. 포맷을 확인해 주세요.');
+    },
+  });
+
+  const handleBulkImport = () => {
+    if (!parsedJsonItems || parsedJsonItems.length === 0) return;
+    bulkImportMutation.mutate(parsedJsonItems);
+  };
+
+  // 모달 상태 (신규/수정)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CountryGuideItem | null>(null);
 
@@ -384,13 +425,24 @@ export default function AdminGuidesPage() {
           </p>
         </div>
 
-        <Button
-          onClick={handleOpenCreateModal}
-          className="bg-blue-600 hover:bg-blue-500 font-bold text-xs sm:text-sm gap-1.5 rounded-xl self-start sm:self-center cursor-pointer shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>신규 가이드 항목 추가</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <Button
+            variant="outline"
+            onClick={() => setIsBulkImportModalOpen(true)}
+            className="font-bold text-xs sm:text-sm gap-1.5 rounded-xl cursor-pointer shadow-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+          >
+            <FileJson className="w-4 h-4 text-emerald-500" />
+            <span>JSON 일괄 등록</span>
+          </Button>
+
+          <Button
+            onClick={handleOpenCreateModal}
+            className="bg-blue-600 hover:bg-blue-500 font-bold text-xs sm:text-sm gap-1.5 rounded-xl cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>신규 가이드 항목 추가</span>
+          </Button>
+        </div>
       </div>
 
       {/* 🎛️ 필터 및 검색 컨트롤 툴바 (슬림 컴팩트 바) */}
@@ -634,6 +686,69 @@ export default function AdminGuidesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 📦 JSON 일괄 등록 모달 Dialog */}
+      <Dialog open={isBulkImportModalOpen} onOpenChange={setIsBulkImportModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <FileJson className="w-5 h-5 text-emerald-500" />
+              <span>가이드 & 준비물 JSON 데이터 일괄 등록</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              ChatGPT, Claude 등 AI 또는 준비물 목록 JSON 배열(<code className="bg-muted px-1.5 py-0.5 rounded text-foreground font-mono text-[11px]">[&#123;...&#125;]</code>)을 아래에 그대로 붙여넣으세요. 백엔드가 국가, 카테고리, 필수여부 등을 판별하여 즉시 일괄 적재합니다.
+            </p>
+            
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <Label htmlFor="jsonTextarea">JSON 데이터 입력</Label>
+                {parsedJsonItems ? (
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[11px] font-bold">
+                    ✓ {parsedJsonItems.length}개 항목 감지됨 (파싱 성공)
+                  </Badge>
+                ) : jsonInput.trim() ? (
+                  <Badge variant="outline" className="bg-rose-500/10 text-rose-500 border-rose-500/20 text-[11px] font-bold">
+                    ✕ 올바르지 않은 JSON 포맷
+                  </Badge>
+                ) : null}
+              </div>
+              <Textarea
+                id="jsonTextarea"
+                placeholder={`[
+  {
+    "countryCode": "JP",
+    "category": "pre_travel",
+    "title": "Visit Japan Web 사전 등록",
+    "description": "입국 수속과 세관 신고를 모바일 QR코드로 사전 작성...",
+    "icon": "📲",
+    "isRequired": true,
+    "isCheckable": true,
+    "sortOrder": 1
+  }
+]`}
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                className="font-mono text-xs h-64 leading-relaxed resize-none rounded-xl"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => { setIsBulkImportModalOpen(false); setJsonInput(''); }} className="rounded-xl text-xs font-bold">
+              취소
+            </Button>
+            <Button
+              onClick={handleBulkImport}
+              disabled={!parsedJsonItems || parsedJsonItems.length === 0 || bulkImportMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+            >
+              <UploadCloud className="w-4 h-4" />
+              {bulkImportMutation.isPending ? '일괄 등록 중...' : `일괄 등록 시작 (${parsedJsonItems?.length ?? 0}개)`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

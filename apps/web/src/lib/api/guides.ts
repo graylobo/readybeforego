@@ -77,6 +77,11 @@ export const guidesApi = {
     return response.data;
   },
 
+  bulkImportAdminGuides: async (items: any[]): Promise<{ count: number }> => {
+    const response = await apiClient.post('/guides/admin/bulk-import', { items });
+    return response.data;
+  },
+
   createUserTip: async (countryCode: string, content: string): Promise<CountryUserTip> => {
     const response = await apiClient.post('/guides/tips', { countryCode, content });
     return response.data;

@@ -52,6 +52,13 @@ export class GuidesController {
     return this.guidesService.deleteGuides(body.ids || []);
   }
 
+  @Post('admin/bulk-import')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '[어드민] JSON 기반 가이드/준비물 항목 일괄 등록' })
+  async bulkImportAdminGuides(@Body('items') items: any[]) {
+    return this.guidesService.bulkImportAdminGuides(items || []);
+  }
+
   @Delete('admin/:id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 삭제' })

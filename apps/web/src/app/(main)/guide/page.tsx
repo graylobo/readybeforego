@@ -20,6 +20,7 @@ import { useAuthStore } from "@/lib/stores/auth.store";
 import {
   CheckCircle2,
   CheckSquare,
+  AlertTriangle,
   Globe,
   Info,
   Lightbulb,
@@ -109,10 +110,17 @@ export default function GuidePage() {
     return list;
   }, [guides, activeTab]);
 
-  // 카테고리별 개수 계산
-  const totalCheckable = guides.filter(g => g.isCheckable).length;
-  const checkedCount = guides.filter(g => g.isCheckable && checkedIds[g.id]).length;
-  const progressPercent = totalCheckable > 0 ? Math.round((checkedCount / totalCheckable) * 100) : 0;
+  // 카테고리별 개수 계산 (필수 vs 일반/선택 분리)
+  const checkableGuides = useMemo(() => guides.filter(g => g.isCheckable), [guides]);
+
+  const requiredGuides = useMemo(() => checkableGuides.filter(g => g.isRequired), [checkableGuides]);
+  const optionalGuides = useMemo(() => checkableGuides.filter(g => !g.isRequired), [checkableGuides]);
+
+  const requiredChecked = useMemo(() => requiredGuides.filter(g => checkedIds[g.id]).length, [requiredGuides, checkedIds]);
+  const optionalChecked = useMemo(() => optionalGuides.filter(g => checkedIds[g.id]).length, [optionalGuides, checkedIds]);
+
+  const requiredPercent = requiredGuides.length > 0 ? Math.round((requiredChecked / requiredGuides.length) * 100) : 100;
+  const optionalPercent = optionalGuides.length > 0 ? Math.round((optionalChecked / optionalGuides.length) * 100) : 100;
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 pb-20">
@@ -186,22 +194,44 @@ export default function GuidePage() {
                 </div>
               </div>
 
-              {/* 진행률 프로그레스 바 */}
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200/50 dark:border-slate-800 min-w-[220px]">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    준비물 체크 완료
-                  </span>
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">
-                    {checkedCount} / {totalCheckable} ({progressPercent}%)
-                  </span>
+              {/* 📊 분리된 진행률 프로그레스 바 (필수 vs 일반 준비물) */}
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+                {/* 🚨 필수 준비물 진행률 */}
+                <div className="w-full sm:w-48 bg-rose-500/10 dark:bg-rose-950/30 p-2.5 rounded-2xl border border-rose-500/20 dark:border-rose-900/50">
+                  <div className="flex items-center justify-between text-xs font-semibold text-rose-900 dark:text-rose-200 mb-1">
+                    <span className="flex items-center gap-1 font-bold">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                      필수 준비물
+                    </span>
+                    <span className="text-rose-600 dark:text-rose-400 font-extrabold text-[11px]">
+                      {requiredChecked}/{requiredGuides.length} ({requiredPercent}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-rose-200/50 dark:bg-rose-950/80 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-rose-500 to-amber-500 h-full transition-all duration-500 rounded-full"
+                      style={{ width: `${requiredPercent}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full transition-all duration-500 rounded-full"
-                    style={{ width: `${progressPercent}%` }}
-                  />
+
+                {/* 🎒 일반/선택 준비물 진행률 */}
+                <div className="w-full sm:w-48 bg-blue-500/10 dark:bg-blue-950/30 p-2.5 rounded-2xl border border-blue-500/20 dark:border-blue-900/50">
+                  <div className="flex items-center justify-between text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                    <span className="flex items-center gap-1 font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+                      선택 준비물
+                    </span>
+                    <span className="text-blue-600 dark:text-blue-400 font-extrabold text-[11px]">
+                      {optionalChecked}/{optionalGuides.length} ({optionalPercent}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-200/50 dark:bg-blue-950/80 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full transition-all duration-500 rounded-full"
+                      style={{ width: `${optionalPercent}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -65,6 +65,15 @@ export class GuidesRepository {
     return guide;
   }
 
+  async createGuidesBulk(items: any[]) {
+    if (!items || items.length === 0) return { count: 0 };
+    const inserted = await this.db
+      .insert(schema.countryGuides)
+      .values(items)
+      .returning();
+    return { count: inserted.length };
+  }
+
   async updateGuide(id: string, data: UpdateGuideZodDto) {
     const [updated] = await this.db
       .update(schema.countryGuides)
