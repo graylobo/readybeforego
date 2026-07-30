@@ -139,10 +139,12 @@ export default function AdminCountriesPage() {
       return;
     }
 
+    const { createdAt, updatedAt, ...purePayload } = formData;
+
     if (editingItem) {
-      updateMutation.mutate({ code: editingItem.code, dto: formData });
+      updateMutation.mutate({ code: editingItem.code, dto: purePayload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(purePayload);
     }
   };
 

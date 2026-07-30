@@ -83,11 +83,13 @@ export class CountriesRepository {
     const upperCode = code.toUpperCase();
     await this.findOne(upperCode);
 
+    const { createdAt, updatedAt, ...cleanData } = dto as any;
+
     const [updated] = await this.db
       .update(schema.countries)
       .set({
-        ...dto,
-        code: dto.code ? dto.code.toUpperCase() : upperCode,
+        ...cleanData,
+        code: cleanData.code ? cleanData.code.toUpperCase() : upperCode,
         updatedAt: new Date(),
       })
       .where(eq(schema.countries.code, upperCode))
