@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { messagesApi } from '@/lib/api/messages';
 import { SendMessageDto } from '@community/shared-types';
+import { useAuthStore } from '@/lib/stores/auth.store';
 
 export const messageKeys = {
   all: ['messages'] as const,
@@ -53,9 +54,11 @@ export function useDeleteMessage() {
 }
 
 export function useUnreadMessageCount() {
+  const { user } = useAuthStore();
   return useQuery({
     queryKey: messageKeys.unreadCount,
     queryFn: () => messagesApi.getUnreadCount(),
-    refetchInterval: 60000, // Every minute
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5, // 5분간 캐시 유지 (실시간 알림 이벤트 또는 액션 시 자동 invalidate)
   });
 }

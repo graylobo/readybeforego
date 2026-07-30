@@ -2,8 +2,8 @@ import { Controller, Get, Post, Delete, Param, UseGuards, Req, Sse, MessageEvent
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { Observable, interval, merge } from 'rxjs';
-import { map, filter } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -57,7 +57,7 @@ export class NotificationsController {
       missedEvents = await this.notificationsService.getMissedNotifications(userId, String(lastEventId));
     }
 
-    // 2. 실시간 SSE 라이브 스트림 연결
+    // 2. 실시간 SSE 라이브 스트림 연결 (실제 알림 이벤트가 발송될 때만 데이터 전송)
     const liveStream = this.notificationsService.subscribeUser(userId).pipe(
       map((notification) => ({
         data: notification,
@@ -65,19 +65,7 @@ export class NotificationsController {
       } as MessageEvent))
     );
 
-    // 3. Cloud Run / Load Balancer Idle Timeout 방지를 위한 10초 주기 Heartbeat 스트림 생성 💓
-    // Cloud Run / Nginx 등 역방향 프록시의 타임아웃(보통 13~15초) 전에 주기적 ping을 전송하여 커넥션 재연결 낭비를 방지합니다.
-    const heartbeatStream = interval(10000).pipe(
-      map(() => ({
-        type: 'ping',
-        data: 'keep-alive',
-      } as MessageEvent))
-    );
-
-    // 라이브 스트림과 하트비트 스트림 병합
-    const activeStream = merge(liveStream, heartbeatStream);
-
-    // 4. 누락된 이벤트가 존재할 시, 라이브 스트림 맨 앞에 순차 정렬하여 주입
+    // 3. 누락된 이벤트가 존재할 시, 라이브 스트림 맨 앞에 순차 정렬하여 주입
     if (missedEvents && missedEvents.length > 0) {
       const { of, concat } = require('rxjs');
       
@@ -88,9 +76,9 @@ export class NotificationsController {
         } as MessageEvent))
       );
 
-      return concat(missedObservable, activeStream);
+      return concat(missedObservable, liveStream);
     }
 
-    return activeStream;
+    return liveStream;
   }
 }

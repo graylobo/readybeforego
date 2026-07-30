@@ -71,6 +71,9 @@ jobs:
           flags: |
             --allow-unauthenticated
             --port=4000
+            --min-instances=0
+            --max-instances=3
+            --cpu-throttling
           env_vars: |
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             NODE_ENV=production
