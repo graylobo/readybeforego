@@ -39,7 +39,11 @@ export interface AvailableCountryGuide {
   countryCode: string;
   countryName: string;
   countryNameEn: string;
-  flagEmoji?: string;
+  emoji?: string;
+  plug?: string;
+  visa?: string;
+  currency?: string;
+  currencyCode?: string;
   count: number;
 }
 

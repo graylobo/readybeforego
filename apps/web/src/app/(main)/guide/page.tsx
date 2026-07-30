@@ -18,9 +18,7 @@ import {
 } from "@/hooks/queries/use-guide-queries";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import {
-  CheckCircle2,
   CheckSquare,
-  AlertTriangle,
   Globe,
   Info,
   Lightbulb,
@@ -31,15 +29,6 @@ import {
   Square
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-
-const POPULAR_COUNTRIES = [
-  { code: "JP", name: "일본", emoji: "🇯🇵", plug: "110V", visa: "무비자 90일", currency: "엔 (JPY)", currencyCode: "JPY" },
-  { code: "TH", name: "태국", emoji: "🇹🇭", plug: "220V / 220V 겸용", visa: "무비자 90일", currency: "바트 (THB)", currencyCode: "THB" },
-  { code: "VN", name: "베트남", emoji: "🇻🇳", plug: "220V", visa: "무비자 45일", currency: "동 (VND)", currencyCode: "VND" },
-  { code: "PH", name: "필리핀", emoji: "🇵🇭", plug: "220V / 110V", visa: "무비자 30일", currency: "페소 (PHP)", currencyCode: "PHP" },
-  { code: "US", name: "미국", emoji: "🇺🇸", plug: "110V", visa: "ESTA 전자비자", currency: "달러 (USD)", currencyCode: "USD" },
-  { code: "KR", name: "대한민국", emoji: "🇰🇷", plug: "220V", visa: "내국인", currency: "원 (KRW)", currencyCode: "KRW" },
-];
 
 export default function GuidePage() {
   const { user } = useAuthStore();
@@ -77,15 +66,19 @@ export default function GuidePage() {
     }
   };
 
-  const currentCountryInfo = POPULAR_COUNTRIES.find(c => c.code === selectedCountry) || {
-    code: selectedCountry,
-    name: selectedCountry,
-    emoji: "✈️",
-    plug: "220V / 변환 어댑터 확인",
-    visa: "무비자 여부 확인 필요",
-    currency: "현지 통화",
-    currencyCode: selectedCountry === "JP" ? "JPY" : selectedCountry === "TH" ? "THB" : selectedCountry === "VN" ? "VND" : selectedCountry === "US" ? "USD" : "USD",
-  };
+  const currentCountryInfo = useMemo(() => {
+    const dbMeta = availableCountries.find(c => c.countryCode === selectedCountry);
+
+    return {
+      code: selectedCountry,
+      name: dbMeta?.countryName || selectedCountry,
+      emoji: dbMeta?.emoji || "✈️",
+      plug: dbMeta?.plug || "220V / 변환 어댑터 확인",
+      visa: dbMeta?.visa || "무비자 여부 확인",
+      currency: dbMeta?.currency || `${selectedCountry} 통화`,
+      currencyCode: dbMeta?.currencyCode || selectedCountry,
+    };
+  }, [selectedCountry, availableCountries]);
 
   const guides = guideData?.guides || [];
 
@@ -162,21 +155,12 @@ export default function GuidePage() {
                   </div>
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
-                  {availableCountries.length > 0 ? (
-                    availableCountries.map((c) => (
-                      <SelectItem key={c.countryCode} value={c.countryCode} className="cursor-pointer hover:bg-slate-800 focus:bg-slate-800 font-semibold">
-                        <span className="mr-2">{POPULAR_COUNTRIES.find(p => p.code === c.countryCode)?.emoji || "✈️"}</span>
-                        {c.countryName} ({c.countryCode})
-                      </SelectItem>
-                    ))
-                  ) : (
-                    POPULAR_COUNTRIES.map((c) => (
-                      <SelectItem key={c.code} value={c.code} className="cursor-pointer hover:bg-slate-800 focus:bg-slate-800 font-semibold">
-                        <span className="mr-2">{c.emoji}</span>
-                        {c.name} ({c.code})
-                      </SelectItem>
-                    ))
-                  )}
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c.countryCode} value={c.countryCode} className="cursor-pointer hover:bg-slate-800 focus:bg-slate-800 font-semibold">
+                      <span className="mr-2">{c.emoji || "✈️"}</span>
+                      {c.countryName} ({c.countryCode})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

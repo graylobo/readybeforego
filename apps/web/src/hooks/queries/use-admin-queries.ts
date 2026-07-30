@@ -213,6 +213,17 @@ export function useAdminBulkImportScams() {
   });
 }
 
+export function useAdminRestoreScam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => scamsApi.restoreAdminScam(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scams'] });
+      queryClient.invalidateQueries({ queryKey: ['scams'] });
+    },
+  });
+}
+
 
 export const pointKeys = {
   all: ['points'] as const,

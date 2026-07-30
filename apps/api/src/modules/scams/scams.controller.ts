@@ -57,6 +57,13 @@ export class ScamsController {
     return this.scamsService.deleteAdminScam(id);
   }
 
+  @Patch('admin/:id/restore')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '어드민용 삭제된 사기 경고 정보 복구' })
+  async restoreAdminScam(@Param('id') id: string) {
+    return this.scamsService.restoreAdminScam(id);
+  }
+
   @Post('admin/bulk-delete')
   @UseGuards(JwtAuthGuard, UserStatusGuard)
   @ApiOperation({ summary: '어드민용 사기 경고 정보 다중 선택 일괄 삭제' })

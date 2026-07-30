@@ -637,8 +637,12 @@ export class ScamsService {
     countryCode?: string;
     cityId?: string;
     scamCategory?: string;
+    includeDeleted?: boolean;
   }) {
-    return this.scamsRepository.findAdminScams(params);
+    return this.scamsRepository.findAdminScams({
+      ...params,
+      includeDeleted: params.includeDeleted ?? true, // 관리자 목록에서는 soft-deleted 항목도 포함
+    });
   }
 
   async deleteAdminScam(id: string) {
@@ -651,6 +655,10 @@ export class ScamsService {
     await this.deleteScamImagesFromStorage(scam.imageUrls);
 
     return this.scamsRepository.deleteAdminScam(id);
+  }
+
+  async restoreAdminScam(id: string) {
+    return this.scamsRepository.update(id, { deletedAt: null });
   }
 
   async deleteAdminScamsBulk(ids: string[]) {

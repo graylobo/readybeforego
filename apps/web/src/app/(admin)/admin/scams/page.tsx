@@ -14,6 +14,7 @@ import {
   useAdminCreateScam,
   useAdminDeleteScam,
   useAdminDeleteScamsBulk,
+  useAdminRestoreScam,
   useAdminScams,
   useAdminUpdateScam
 } from '@/hooks/queries/use-admin-queries';
@@ -23,10 +24,10 @@ import { cn } from '@/lib/utils/cn';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { AlertTriangle, Edit, FileJson, Plus, Search, ThumbsDown, ThumbsUp, Trash2, UploadCloud } from 'lucide-react';
+import { AlertTriangle, Edit, FileJson, Plus, RotateCcw, Search, ThumbsDown, ThumbsUp, Trash2, UploadCloud } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 import {
   AllCommunityModule,
@@ -50,15 +51,15 @@ const ScopeRenderer = (params: any) => {
   const scope = params.data.scope;
   switch (scope) {
     case 'spot':
-      return <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs">📍 특정 위치</Badge>;
+      return <Badge variant="outline" className="border-0 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 text-xs font-medium">📍 특정 위치</Badge>;
     case 'region':
-      return <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-xs">🗺️ 구역 전체</Badge>;
+      return <Badge variant="outline" className="border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium">🗺️ 구역 전체</Badge>;
     case 'city':
-      return <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-500 text-xs">🏙️ 도시 전체</Badge>;
+      return <Badge variant="outline" className="border-0 bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2 py-0.5 text-xs font-medium">🏙️ 도시 전체</Badge>;
     case 'country':
-      return <Badge variant="outline" className="border-purple-500/30 bg-purple-500/10 text-purple-500 text-xs">🇹🇭 국가 전체</Badge>;
+      return <Badge variant="outline" className="border-0 bg-purple-500/15 text-purple-600 dark:text-purple-400 px-2 py-0.5 text-xs font-medium">🇹🇭 국가 전체</Badge>;
     default:
-      return <Badge variant="secondary">{scope}</Badge>;
+      return <Badge variant="secondary" className="border-0 px-2 py-0.5 text-xs">{scope}</Badge>;
   }
 };
 
@@ -75,9 +76,9 @@ const CategoryRenderer = (params: any) => {
 
   const categories = categoryStr.split(',').filter(Boolean);
   return (
-    <div className="flex flex-wrap gap-1 items-center h-full py-1">
+    <div className="flex flex-wrap gap-1 items-center h-full">
       {categories.map((cat: string) => (
-        <span key={cat} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border">
+        <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border-0">
           {categoryLabels[cat] || cat}
         </span>
       ))}
@@ -87,7 +88,25 @@ const CategoryRenderer = (params: any) => {
 
 // Action Buttons Renderer
 const ActionsRenderer = (params: any) => {
-  const { onEdit, onDelete } = params.context;
+  const { onEdit, onDelete, onRestore } = params.context;
+  const isDeleted = !!params.data?.deletedAt;
+
+  if (isDeleted) {
+    return (
+      <div className="flex items-center gap-1.5 h-full">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs border-emerald-500/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+          onClick={() => onRestore(params.data)}
+        >
+          <RotateCcw className="w-3.5 h-3.5 mr-1" />
+          복구
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-1.5 h-full">
       <Button
@@ -227,6 +246,18 @@ export default function AdminScamsPage() {
   const createScamMutation = useAdminCreateScam();
   const updateScamMutation = useAdminUpdateScam();
   const deleteScamMutation = useAdminDeleteScam();
+  const restoreScamMutation = useAdminRestoreScam();
+
+  const handleRestoreScam = async (scam: any) => {
+    if (confirm(`'${scam.title}' 제보 항목을 복구하시겠습니까?`)) {
+      try {
+        await restoreScamMutation.mutateAsync(scam.id);
+        toast.success(`'${scam.title}' 사기 제보가 성공적으로 복구되었습니다. 🟢`);
+      } catch (err: any) {
+        toast.error(err.message || '복구 중 오류가 발생했습니다.');
+      }
+    }
+  };
 
   const totalItems = data?.total ?? 0;
   const totalPages = useMemo(() => {
@@ -347,9 +378,26 @@ export default function AdminScamsPage() {
       filter: false,
     },
     {
+      headerName: '상태',
+      field: 'deletedAt',
+      width: 90,
+      cellRenderer: (params: any) => {
+        const isDeleted = !!params.value;
+        return isDeleted ? (
+          <Badge variant="outline" className="border-0 bg-rose-500/15 text-rose-600 dark:text-rose-400 px-2 py-0.5 text-xs font-medium">
+            삭제됨 🔴
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium">
+            정상 🟢
+          </Badge>
+        );
+      },
+    },
+    {
       headerName: '범위',
       field: 'scope',
-      width: 120,
+      width: 110,
       cellRenderer: ScopeRenderer,
     },
     {
@@ -540,8 +588,10 @@ export default function AdminScamsPage() {
             context={{
               onEdit: handleOpenEdit,
               onDelete: (scam: any) => setDeletingScam(scam),
+              onRestore: handleRestoreScam,
             }}
-            rowHeight={52}
+            rowHeight={40}
+            headerHeight={38}
             overlayNoRowsTemplate="<span class='text-muted-foreground text-sm'>조건에 일치하는 사기 제보 데이터가 없습니다.</span>"
           />
         )}

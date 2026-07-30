@@ -32,6 +32,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ScamsModule } from './modules/scams/scams.module';
 import { GuidesModule } from './modules/guides/guides.module';
+import { CountriesModule } from './modules/countries/countries.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { GuidesModule } from './modules/guides/guides.module';
     ReportsModule,
     ScamsModule,
     GuidesModule,
+    CountriesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -57,6 +57,13 @@
       "when": 1785348824450,
       "tag": "0007_daffy_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785429381930,
+      "tag": "0008_thin_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

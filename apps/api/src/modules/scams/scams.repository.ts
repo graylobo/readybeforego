@@ -3,7 +3,7 @@ import { SQL, and, asc, desc, eq, sql, inArray, or, isNull } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
-import { getKoreanCountryName } from '@community/shared-types';
+import { getKoreanCountryName, getCountryCode, getFlagEmoji } from '@community/shared-types';
 
 export type Transaction = any;
 
@@ -20,6 +20,27 @@ export class ScamsRepository {
 
   async create(data: typeof schema.scamInfos.$inferInsert, tx?: Transaction) {
     const db = tx ?? this.db;
+
+    if (data.countryCode) {
+      const code = getCountryCode(data.countryCode);
+      const computedEmoji = getFlagEmoji(code);
+      const nameKorean = getKoreanCountryName(code) || code;
+      
+      await db.insert(schema.countries).values({
+        code,
+        name: nameKorean,
+        nameEn: code,
+        emoji: computedEmoji,
+        plug: '220V / 변환 어댑터',
+        visa: '무비자 여부 확인',
+        currency: `${code} 통화`,
+        currencyCode: code,
+      }).onConflictDoNothing();
+
+      // data.countryCode를 표준 ISO 코드로 정규화
+      data.countryCode = code;
+    }
+
     const [result] = await db.insert(schema.scamInfos).values(data).returning();
     return result;
   }
@@ -533,11 +554,15 @@ export class ScamsRepository {
     countryCode?: string;
     cityId?: string;
     scamCategory?: string;
+    includeDeleted?: boolean;
   }) {
-    const { page, limit, search, scope, countryCode, cityId, scamCategory } = params;
+    const { page, limit, search, scope, countryCode, cityId, scamCategory, includeDeleted } = params;
     const offset = (page - 1) * limit;
 
-    const conditions: SQL[] = [sql`${schema.scamInfos.deletedAt} is null`];
+    const conditions: SQL[] = [];
+    if (!includeDeleted) {
+      conditions.push(sql`${schema.scamInfos.deletedAt} is null`);
+    }
 
     if (scope && scope !== 'all') {
       conditions.push(eq(schema.scamInfos.scope, scope as any));

@@ -9,16 +9,25 @@ export const USER_ROLES = {
   SUPER_ADMIN: 'super_admin' as const,
 } as const;
 
-export const ROLE_LEVELS: Record<UserRole, number> = {
+export const ROLE_LEVELS: Record<string, number> = {
   user: 0,
   moderator: 10,
   admin: 50,
   super_admin: 100,
 };
 
-export const hasRole = (userRole: UserRole | undefined, requiredRole: UserRole): boolean => {
+export const hasRole = (userRole: string | undefined, requiredRole: string): boolean => {
   if (!userRole) return false;
-  return ROLE_LEVELS[userRole] >= ROLE_LEVELS[requiredRole];
+  const normalizedUserRole = userRole.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const normalizedRequiredRole = requiredRole.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  
+  // super_admin은 모든 권한 통과 👑
+  if (normalizedUserRole === 'super_admin' || normalizedUserRole === 'superadmin') return true;
+
+  const userLevel = ROLE_LEVELS[normalizedUserRole] ?? (normalizedUserRole === 'admin' ? 50 : 0);
+  const requiredLevel = ROLE_LEVELS[normalizedRequiredRole] ?? (normalizedRequiredRole === 'admin' ? 50 : 0);
+
+  return userLevel >= requiredLevel;
 };
 
 export const isStaff = (role: UserRole | undefined): boolean => {

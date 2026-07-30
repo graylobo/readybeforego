@@ -35,7 +35,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { guidesApi, CountryGuideItem } from "@/lib/api/guides";
-import { toast } from "sonner";
+import { useAvailableGuideCountries } from "@/hooks/queries/use-guide-queries";
+import { toast } from "@/lib/toast";
 
 // AG Grid 커뮤니티 v35 및 스타일
 import { AgGridReact } from "ag-grid-react";
@@ -46,22 +47,17 @@ import "ag-grid-community/styles/ag-theme-quartz.css";
 // AG Grid v35 모듈 등록
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const COUNTRIES = [
+// 하드코딩 배제: DB 연동 국가 목록 기본 헤더 항목
+const DEFAULT_COUNTRY_OPTIONS = [
   { code: "ALL_TOTAL", name: "전체 국가 보기 🌍" },
   { code: "ALL", name: "전체 공통 🌐" },
-  { code: "JP", name: "일본 🇯🇵" },
-  { code: "TH", name: "태국 🇹🇭" },
-  { code: "VN", name: "베트남 🇻🇳" },
-  { code: "PH", name: "필리핀 🇵🇭" },
-  { code: "US", name: "미국 🇺🇸" },
-  { code: "KR", name: "대한민국 🇰🇷" },
 ];
 
 const CATEGORY_MAP: Record<string, { label: string; badgeClass: string }> = {
-  pre_travel: { label: "🛫 사전 준비", badgeClass: "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800" },
-  essentials: { label: "🎒 필수 준비물", badgeClass: "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800" },
-  baggage: { label: "✈️ 수하물 규정", badgeClass: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800" },
-  tips: { label: "💡 현지 팁", badgeClass: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800" },
+  pre_travel: { label: "🛫 사전 준비", badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-0 px-2 py-0.5 text-xs font-medium" },
+  essentials: { label: "🎒 필수 준비물", badgeClass: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-0 px-2 py-0.5 text-xs font-medium" },
+  baggage: { label: "✈️ 수하물 규정", badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-0 px-2 py-0.5 text-xs font-medium" },
+  tips: { label: "💡 현지 팁", badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0 px-2 py-0.5 text-xs font-medium" },
 };
 
 export default function AdminGuidesPage() {
@@ -77,6 +73,10 @@ export default function AdminGuidesPage() {
   // JSON 일괄 등록 모달 상태
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
+
+  // JSON 내보내기(추출) 모달 상태
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportJsonText, setExportJsonText] = useState('');
 
   // JSON 파싱 및 유효성 검사
   const parsedJsonItems = useMemo(() => {
@@ -112,6 +112,44 @@ export default function AdminGuidesPage() {
     bulkImportMutation.mutate(parsedJsonItems);
   };
 
+  // 📥 현재 데이터 JSON 내보내기 핸들러
+  const handleOpenExportModal = (targetItems: CountryGuideItem[]) => {
+    if (!targetItems || targetItems.length === 0) {
+      toast.warning('추출할 가이드 항목이 없습니다.');
+      return;
+    }
+
+    const formatted = targetItems.map(g => ({
+      countryCode: g.countryCode,
+      category: g.category,
+      title: g.title,
+      description: g.description,
+      icon: g.icon || "📌",
+      isRequired: !!g.isRequired,
+      isCheckable: g.isCheckable !== false,
+      sortOrder: g.sortOrder || 1,
+    }));
+
+    setExportJsonText(JSON.stringify(formatted, null, 2));
+    setIsExportModalOpen(true);
+  };
+
+  const handleCopyExportJson = () => {
+    navigator.clipboard.writeText(exportJsonText);
+    toast.success('배포 서버 등록용 JSON이 클립보드에 복사되었습니다! 📋');
+  };
+
+  const handleDownloadExportJson = () => {
+    const blob = new Blob([exportJsonText], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guides_export_${selectedCountry}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('JSON 파일이 성공적으로 다운로드되었습니다!');
+  };
+
   // 모달 상태 (신규/수정)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CountryGuideItem | null>(null);
@@ -137,6 +175,16 @@ export default function AdminGuidesPage() {
     sortOrder: 1,
   });
 
+  const { data: availableCountries = [] } = useAvailableGuideCountries();
+
+  const countryOptions = useMemo(() => {
+    const dbOptions = availableCountries.map(c => ({
+      code: c.countryCode,
+      name: `${c.countryName} ${c.emoji || '✈️'} (${c.count}개)`
+    }));
+    return [...DEFAULT_COUNTRY_OPTIONS, ...dbOptions];
+  }, [availableCountries]);
+
   // 해당 국가 가이드 항목 조회
   const { data: guideData, isLoading, refetch } = useQuery({
     queryKey: ['admin-guides', selectedCountry],
@@ -145,6 +193,20 @@ export default function AdminGuidesPage() {
   });
 
   const guides = guideData?.guides || [];
+
+  // 필터링 및 검색된 가이드 목록
+  const filteredGuides = useMemo(() => {
+    return guides.filter((g) => {
+      const matchCategory = selectedCategory === "all" || g.category === selectedCategory;
+      const matchSearch =
+        !searchTerm.trim() ||
+        g.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        g.description.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchCategory && matchSearch;
+    });
+  }, [guides, selectedCategory, searchTerm]);
+
+  const rowData = filteredGuides;
 
   // 생성 Mutation
   const createMutation = useMutation({
@@ -264,10 +326,7 @@ export default function AdminGuidesPage() {
     }
   };
 
-  // AG Grid 필터링 데이터
-  const rowData = useMemo(() => {
-    return guides.filter(g => selectedCategory === "all" || g.category === selectedCategory);
-  }, [guides, selectedCategory]);
+
 
   // AG Grid 컬럼 정의 (ColDef)
   const columnDefs: ColDef<CountryGuideItem>[] = useMemo(() => [
@@ -341,17 +400,17 @@ export default function AdminGuidesPage() {
     {
       headerName: "필수 여부",
       field: "isRequired",
-      width: 100,
+      width: 90,
       sortable: true,
       cellRenderer: (params: any) => (
         <div className="flex items-center h-full">
           {params.value ? (
-            <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-[10px] font-bold">
-              필수
+            <Badge variant="outline" className="border-0 bg-rose-500/15 text-rose-600 dark:text-rose-400 px-2 py-0.5 text-xs font-medium">
+              🚨 필수
             </Badge>
           ) : (
-            <Badge variant="outline" className="bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[10px]">
-              일반
+            <Badge variant="outline" className="border-0 bg-slate-500/10 text-slate-500 dark:text-slate-400 px-2 py-0.5 text-xs font-medium">
+              🔹 선택
             </Badge>
           )}
         </div>
@@ -360,17 +419,17 @@ export default function AdminGuidesPage() {
     {
       headerName: "체크 가능",
       field: "isCheckable",
-      width: 110,
+      width: 100,
       sortable: true,
       cellRenderer: (params: any) => (
         <div className="flex items-center h-full">
           {params.value ? (
-            <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800 text-[10px]">
-              체크가능
+            <Badge variant="outline" className="border-0 bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2 py-0.5 text-xs font-medium">
+              ☑️ 가능
             </Badge>
           ) : (
-            <Badge variant="outline" className="bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 text-[10px]">
-              안내전용
+            <Badge variant="outline" className="border-0 bg-slate-500/10 text-slate-400 dark:text-slate-500 px-2 py-0.5 text-xs font-medium">
+              ℹ️ 안내
             </Badge>
           )}
         </div>
@@ -425,7 +484,16 @@ export default function AdminGuidesPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => handleOpenExportModal(filteredGuides)}
+            className="font-bold text-xs sm:text-sm gap-1.5 rounded-xl cursor-pointer shadow-sm border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+          >
+            <UploadCloud className="w-4 h-4 text-blue-500" />
+            <span>JSON 추출하기</span>
+          </Button>
+
           <Button
             variant="outline"
             onClick={() => setIsBulkImportModalOpen(true)}
@@ -456,7 +524,7 @@ export default function AdminGuidesPage() {
                 <SelectValue placeholder="국가 선택" />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border">
-                {COUNTRIES.map(c => (
+                {countryOptions.map(c => (
                   <SelectItem key={c.code} value={c.code} className="cursor-pointer font-semibold text-xs">
                     {c.name}
                   </SelectItem>
@@ -538,8 +606,8 @@ export default function AdminGuidesPage() {
               pagination={true}
               paginationPageSize={15}
               paginationPageSizeSelector={[10, 15, 25, 50]}
-              rowHeight={52}
-              headerHeight={44}
+              rowHeight={40}
+              headerHeight={38}
               overlayLoadingTemplate={'<span class="ag-overlay-loading-center">데이터를 불러오는 중입니다...</span>'}
               overlayNoRowsTemplate={'<span class="ag-overlay-loading-center">등록된 가이드 항목이 없습니다.</span>'}
             />
@@ -570,7 +638,7 @@ export default function AdminGuidesPage() {
                     <SelectValue placeholder="국가 선택" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 text-white border-slate-800">
-                    {COUNTRIES.map(c => (
+                    {countryOptions.filter(c => c.code !== 'ALL_TOTAL').map(c => (
                       <SelectItem key={c.code} value={c.code} className="cursor-pointer hover:bg-slate-800">
                         {c.name}
                       </SelectItem>
@@ -748,6 +816,51 @@ export default function AdminGuidesPage() {
               <UploadCloud className="w-4 h-4" />
               {bulkImportMutation.isPending ? '일괄 등록 중...' : `일괄 등록 시작 (${parsedJsonItems?.length ?? 0}개)`}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 📥 JSON 내보내기 (Export) 모달 */}
+      <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
+        <DialogContent className="sm:max-w-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
+              <UploadCloud className="w-5 h-5" />
+              <span>배포 서버 등록용 JSON 내보내기 📥</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              현재 등록된 가이드 항목을 배포 서버의 <strong>[JSON 일괄 등록]</strong> 모달에 그대로 붙여넣어 일괄 적재할 수 있는 정형화된 JSON 포맷입니다.
+            </p>
+
+            <Textarea
+              readOnly
+              value={exportJsonText}
+              className="font-mono text-xs h-72 leading-relaxed resize-none rounded-xl bg-slate-900 text-slate-100 dark:bg-slate-950"
+            />
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 justify-between">
+            <Button variant="outline" onClick={() => setIsExportModalOpen(false)} className="rounded-xl text-xs font-bold sm:mr-auto">
+              닫기
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleDownloadExportJson}
+                className="rounded-xl text-xs font-bold gap-1.5 border-slate-300 dark:border-slate-700"
+              >
+                <span>파일 다운로드 (.json)</span>
+              </Button>
+              <Button
+                onClick={handleCopyExportJson}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>클립보드로 JSON 복사 📋</span>
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

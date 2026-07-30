@@ -178,6 +178,10 @@ export const scamsApi = {
     await apiClient.delete(`/scams/admin/${id}`);
   },
 
+  restoreAdminScam: async (id: string): Promise<void> => {
+    await apiClient.patch(`/scams/admin/${id}/restore`);
+  },
+
   deleteAdminScamsBulk: async (ids: string[]): Promise<void> => {
     await apiClient.post('/scams/admin/bulk-delete', { ids });
   },

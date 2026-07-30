@@ -12,7 +12,7 @@ import { ko } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import React, { useMemo } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 import {
   AllCommunityModule,

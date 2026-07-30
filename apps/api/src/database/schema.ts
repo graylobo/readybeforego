@@ -509,6 +509,11 @@ export const countries = pgTable('countries', {
   code: text('code').primaryKey(), // ISO 2-letter country code, e.g., 'TH', 'KR'
   name: text('name').notNull(),    // '태국', '대한민국'
   nameEn: text('name_en').notNull(), // 'Thailand', 'South Korea'
+  emoji: text('emoji'),            // '🇹🇭', '🇰🇷'
+  plug: text('plug'),              // '220V'
+  visa: text('visa'),              // '무비자 90일'
+  currency: text('currency'),      // '바트 (THB)'
+  currencyCode: text('currency_code'), // 'THB'
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
