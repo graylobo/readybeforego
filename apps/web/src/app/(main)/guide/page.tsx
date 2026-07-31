@@ -44,13 +44,24 @@ export default function GuidePage() {
   
   const { data: availableCountries = [] } = useAvailableGuideCountries();
 
-  // 특정 국가의 도시 목록 조회
-  const { data: availableCities = [] } = useQuery<City[]>({
-    queryKey: ['cities', selectedCountry],
-    queryFn: () => scamsApi.getCities(selectedCountry),
-    enabled: !!selectedCountry,
-  });
+  // 선택된 국가의 '전체' 가이드 목록 조회 (도시 목록 스마트 필터링용)
+  const { data: allGuideData } = useCountryGuides(selectedCountry, undefined);
 
+  // 실제로 가이드북 항목이 1개 이상 존재하는 활성 도시 목록만 맵핑
+  const availableCities = useMemo(() => {
+    if (!allGuideData?.guides) return [];
+    const cityMap = new Map<string, any>();
+
+    allGuideData.guides.forEach((g) => {
+      if (g.city && g.city.id) {
+        cityMap.set(g.city.id, g.city);
+      }
+    });
+
+    return Array.from(cityMap.values());
+  }, [allGuideData]);
+
+  // 선택된 도시 필터가 적용된 실제 가이드 목록
   const { data: guideData, isPending } = useCountryGuides(selectedCountry, selectedCity !== 'all' ? selectedCity : undefined);
 
   // 국가 변경 시 도시 선택 초기화
