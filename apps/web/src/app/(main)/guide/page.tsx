@@ -30,16 +30,34 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { scamsApi, City } from "@/lib/api/scams";
+import { useQuery } from "@tanstack/react-query";
+
 export default function GuidePage() {
   const { user } = useAuthStore();
   const [selectedCountry, setSelectedCountry] = useState<string>("JP");
+  const [selectedCity, setSelectedCity] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"all" | "pre_travel" | "essentials" | "baggage" | "tips">("all");
   
   // 체크리스트 로컬스토리지 저장 상태
   const [checkedIds, setCheckedIds] = useState<Record<string, boolean>>({});
   
   const { data: availableCountries = [] } = useAvailableGuideCountries();
-  const { data: guideData, isPending } = useCountryGuides(selectedCountry);
+
+  // 특정 국가의 도시 목록 조회
+  const { data: availableCities = [] } = useQuery<City[]>({
+    queryKey: ['cities', selectedCountry],
+    queryFn: () => scamsApi.getCities(selectedCountry),
+    enabled: !!selectedCountry,
+  });
+
+  const { data: guideData, isPending } = useCountryGuides(selectedCountry, selectedCity !== 'all' ? selectedCity : undefined);
+
+  // 국가 변경 시 도시 선택 초기화
+  const handleCountryChange = (countryCode: string) => {
+    setSelectedCountry(countryCode);
+    setSelectedCity('all');
+  };
 
   // LocalStorage 체크리스트 불러오기
   useEffect(() => {
@@ -144,14 +162,14 @@ export default function GuidePage() {
             여행 전 체크리스트로 꼼꼼하게 짐을 싸고 안전하게 떠나세요.
           </p>
 
-          {/* 🌏 국가 선택 드롭다운 & 인기 칩 UI */}
+          {/* 🌏 국가 및 도시 선택 드롭다운 UI */}
           <div className="pt-4 max-w-xl mx-auto space-y-3">
-            <div className="flex items-center justify-center gap-2">
-              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                <SelectTrigger className="w-[280px] bg-white/10 text-white border-white/20 backdrop-blur-md h-11 text-sm font-bold rounded-2xl cursor-pointer hover:bg-white/20 transition-all">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-blue-400" />
-                    <SelectValue placeholder="여행할 국가를 선택하세요" />
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <Select value={selectedCountry} onValueChange={handleCountryChange}>
+                <SelectTrigger className="w-[200px] sm:w-[240px] bg-white/10 text-white border-white/20 backdrop-blur-md h-11 text-sm font-bold rounded-2xl cursor-pointer hover:bg-white/20 transition-all">
+                  <div className="flex items-center gap-2 truncate">
+                    <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+                    <SelectValue placeholder="여행 국가 선택" />
                   </div>
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
@@ -163,6 +181,27 @@ export default function GuidePage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {availableCities.length > 0 && (
+                <Select value={selectedCity} onValueChange={setSelectedCity}>
+                  <SelectTrigger className="w-[160px] sm:w-[190px] bg-white/10 text-white border-white/20 backdrop-blur-md h-11 text-sm font-bold rounded-2xl cursor-pointer hover:bg-white/20 transition-all">
+                    <div className="flex items-center gap-2 truncate">
+                      🌆 
+                      <SelectValue placeholder="전체 도시 (선택)" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
+                    <SelectItem value="all" className="cursor-pointer hover:bg-slate-800 font-semibold">
+                      도시 전체
+                    </SelectItem>
+                    {availableCities.map((city) => (
+                      <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800 font-semibold">
+                        📍 {city.name} ({city.nameEn})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
         </div>
@@ -328,6 +367,11 @@ export default function GuidePage() {
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {item.icon && <span className="text-sm leading-none">{item.icon}</span>}
+                          {item.city && (
+                            <Badge variant="outline" className="border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-semibold">
+                              📍 {item.city.name}
+                            </Badge>
+                          )}
                           <h3 className={`text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight ${isChecked ? "line-through text-slate-500 dark:text-slate-500" : ""}`}>
                             {item.title}
                           </h3>

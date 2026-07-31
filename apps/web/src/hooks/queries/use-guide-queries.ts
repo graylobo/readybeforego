@@ -8,10 +8,10 @@ export const useAvailableGuideCountries = () => {
   });
 };
 
-export const useCountryGuides = (countryCode: string) => {
+export const useCountryGuides = (countryCode: string, cityId?: string) => {
   return useQuery<CountryGuideData>({
-    queryKey: ['guides', 'country', countryCode],
-    queryFn: () => guidesApi.getGuidesByCountry(countryCode),
+    queryKey: ['guides', 'country', countryCode, cityId],
+    queryFn: () => guidesApi.getGuidesByCountry(countryCode, true, cityId),
     enabled: !!countryCode,
     staleTime: 1000 * 60 * 5,
   });

@@ -120,7 +120,7 @@ export const SITE_CONFIG = {
   - `point_policies` / `point_history` / `user_points` — 포인트 기능 사용 안 할 경우
 
 ### `docker-compose.yml`
-- `POSTGRES_DB: community_db` → 새 프로젝트 DB 이름으로 변경
+- `POSTGRES_DB: readybeforego_db` → 새 프로젝트 DB 이름으로 변경
 
 ### 마이그레이션 초기화
 ```bash

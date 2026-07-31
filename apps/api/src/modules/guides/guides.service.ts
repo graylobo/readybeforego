@@ -6,12 +6,12 @@ import { CreateGuideZodDto, UpdateGuideZodDto } from './dto/guides.dto';
 export class GuidesService {
   constructor(private readonly guidesRepository: GuidesRepository) {}
 
-  async getGuidesByCountry(countryCode: string, includeCommon: boolean = true) {
+  async getGuidesByCountry(countryCode: string, includeCommon: boolean = true, cityId?: string) {
     const code = countryCode.toUpperCase();
     if (code === 'ALL_TOTAL' || code === 'ALL_COUNTRIES') {
       return this.guidesRepository.findAll();
     }
-    return this.guidesRepository.findByCountry(code, includeCommon);
+    return this.guidesRepository.findByCountry(code, includeCommon, cityId);
   }
 
   async getAvailableCountries() {
@@ -52,6 +52,11 @@ export class GuidesService {
       isRequired: Boolean(item.isRequired),
       isCheckable: item.isCheckable !== false,
       sortOrder: typeof item.sortOrder === 'number' ? item.sortOrder : idx + 1,
+      // 도시 정보를 repository까지 전달 (자동 생성/매칭 용도)
+      cityId: item.cityId || null,
+      cityNameEn: item.cityNameEn || null,
+      cityNameKo: item.cityNameKo || null,
+      cityName: item.cityName || null,
     }));
 
     return this.guidesRepository.createGuidesBulk(formatted);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 export const createGuideSchema = z.object({
   countryCode: z.string().min(2).max(5),
+  cityId: z.string().nullable().optional(),
   category: z.enum(['pre_travel', 'essentials', 'baggage', 'tips']),
   title: z.string().min(1).max(200),
   description: z.string().min(1),

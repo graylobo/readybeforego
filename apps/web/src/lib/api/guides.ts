@@ -3,6 +3,12 @@ import { apiClient } from '../api-client';
 export interface CountryGuideItem {
   id: string;
   countryCode: string;
+  cityId?: string | null;
+  city?: {
+    id: string;
+    name: string;
+    nameEn: string;
+  } | null;
   category: 'pre_travel' | 'essentials' | 'baggage' | 'tips';
   title: string;
   description: string;
@@ -53,9 +59,9 @@ export const guidesApi = {
     return response.data;
   },
 
-  getGuidesByCountry: async (countryCode: string, includeCommon: boolean = true): Promise<CountryGuideData> => {
+  getGuidesByCountry: async (countryCode: string, includeCommon: boolean = true, cityId?: string): Promise<CountryGuideData> => {
     const response = await apiClient.get(`/guides/country/${countryCode}`, {
-      params: { includeCommon },
+      params: { includeCommon, cityId },
     });
     return response.data;
   },

@@ -655,6 +655,8 @@ export const countryGuides = pgTable('country_guides', {
   countryCode: text('country_code')
     .notNull()
     .references(() => countries.code, { onDelete: 'cascade' }),
+  cityId: uuid('city_id')
+    .references(() => cities.id, { onDelete: 'cascade' }),
   category: text('category').notNull(), // 'pre_travel' | 'essentials' | 'baggage' | 'tips'
   title: text('title').notNull(),
   description: text('description').notNull(),
@@ -666,6 +668,7 @@ export const countryGuides = pgTable('country_guides', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   countryIdx: index('country_guides_country_idx').on(table.countryCode),
+  cityIdx: index('country_guides_city_idx').on(table.cityId),
   categoryIdx: index('country_guides_category_idx').on(table.category),
 }));
 
@@ -673,6 +676,10 @@ export const countryGuidesRelations = relations(countryGuides, ({ one }) => ({
   country: one(countries, {
     fields: [countryGuides.countryCode],
     references: [countries.code],
+  }),
+  city: one(cities, {
+    fields: [countryGuides.cityId],
+    references: [cities.id],
   }),
 }));
 

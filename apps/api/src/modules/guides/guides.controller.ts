@@ -17,13 +17,14 @@ export class GuidesController {
   }
 
   @Get('country/:countryCode')
-  @ApiOperation({ summary: '특정 국가의 가이드 항목 목록 조회' })
+  @ApiOperation({ summary: '특정 국가 및 도시의 가이드 항목 목록 조회' })
   async getGuidesByCountry(
     @Param('countryCode') countryCode: string,
     @Query('includeCommon') includeCommon?: string,
+    @Query('cityId') cityId?: string,
   ) {
     const isIncludeCommon = includeCommon !== 'false';
-    return this.guidesService.getGuidesByCountry(countryCode, isIncludeCommon);
+    return this.guidesService.getGuidesByCountry(countryCode, isIncludeCommon, cityId);
   }
 
   // --- Admin Endpoints ---
@@ -55,8 +56,11 @@ export class GuidesController {
   @Post('admin/bulk-import')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '[어드민] JSON 기반 가이드/준비물 항목 일괄 등록' })
-  async bulkImportAdminGuides(@Body('items') items: any[]) {
-    return this.guidesService.bulkImportAdminGuides(items || []);
+  async bulkImportAdminGuides(@Body('items') items: any[], @Body() body: any) {
+    const targetItems = items || (Array.isArray(body) ? body : []);
+    console.log('[BulkImport] Received items count:', targetItems.length);
+    console.log('[BulkImport] Sample item:', targetItems[0]);
+    return this.guidesService.bulkImportAdminGuides(targetItems);
   }
 
   @Delete('admin/:id')

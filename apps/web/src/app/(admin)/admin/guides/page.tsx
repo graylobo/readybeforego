@@ -35,6 +35,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { guidesApi, CountryGuideItem } from "@/lib/api/guides";
+import { scamsApi } from "@/lib/api/scams";
 import { useAvailableGuideCountries } from "@/hooks/queries/use-guide-queries";
 import { toast } from "@/lib/toast";
 
@@ -157,6 +158,7 @@ export default function AdminGuidesPage() {
   // 폼 상태
   const [formData, setFormData] = useState<{
     countryCode: string;
+    cityId?: string;
     category: 'pre_travel' | 'essentials' | 'baggage' | 'tips';
     title: string;
     description: string;
@@ -166,6 +168,7 @@ export default function AdminGuidesPage() {
     sortOrder: number;
   }>({
     countryCode: "JP",
+    cityId: "all",
     category: "pre_travel",
     title: "",
     description: "",
@@ -173,6 +176,13 @@ export default function AdminGuidesPage() {
     isRequired: false,
     isCheckable: true,
     sortOrder: 1,
+  });
+
+  // 모달용 국가별 도시 목록 조회
+  const { data: modalCities = [] } = useQuery({
+    queryKey: ['cities', formData?.countryCode],
+    queryFn: () => scamsApi.getCities(formData?.countryCode),
+    enabled: !!formData?.countryCode,
   });
 
   const { data: availableCountries = [] } = useAvailableGuideCountries();
@@ -319,10 +329,15 @@ export default function AdminGuidesPage() {
       return;
     }
 
+    const payload = {
+      ...formData,
+      cityId: formData.cityId && formData.cityId !== 'all' ? formData.cityId : null,
+    };
+
     if (editingItem) {
-      updateMutation.mutate({ id: editingItem.id, dto: formData });
+      updateMutation.mutate({ id: editingItem.id, dto: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -349,12 +364,30 @@ export default function AdminGuidesPage() {
     {
       headerName: "아이콘",
       field: "icon",
-      width: 80,
+      width: 75,
       cellRenderer: (params: any) => (
         <span className="text-lg flex justify-center items-center h-full">
           {params.value || "📌"}
         </span>
       ),
+    },
+    {
+      headerName: "도시 (구분)",
+      field: "city.name",
+      width: 110,
+      sortable: true,
+      cellRenderer: (params: any) => {
+        const city = params.data.city;
+        return city ? (
+          <Badge variant="outline" className="border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium">
+            📍 {city.name}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-0 bg-slate-500/10 text-slate-500 dark:text-slate-400 px-2 py-0.5 text-xs font-medium">
+            🌐 국가공통
+          </Badge>
+        );
+      },
     },
     {
       headerName: "카테고리",
@@ -625,14 +658,14 @@ export default function AdminGuidesPage() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 block">
                   국가 선택
                 </label>
                 <Select 
                   value={formData.countryCode} 
-                  onValueChange={(val) => setFormData({ ...formData, countryCode: val })}
+                  onValueChange={(val) => setFormData({ ...formData, countryCode: val, cityId: "all" })}
                 >
                   <SelectTrigger className="text-xs font-bold rounded-xl">
                     <SelectValue placeholder="국가 선택" />
@@ -641,6 +674,28 @@ export default function AdminGuidesPage() {
                     {countryOptions.filter(c => c.code !== 'ALL_TOTAL').map(c => (
                       <SelectItem key={c.code} value={c.code} className="cursor-pointer hover:bg-slate-800">
                         {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 block">
+                  도시 선택 (옵션)
+                </label>
+                <Select 
+                  value={formData.cityId || "all"} 
+                  onValueChange={(val) => setFormData({ ...formData, cityId: val })}
+                >
+                  <SelectTrigger className="text-xs font-bold rounded-xl">
+                    <SelectValue placeholder="전체 (국가공통)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 text-white border-slate-800">
+                    <SelectItem value="all" className="cursor-pointer hover:bg-slate-800">🌐 국가 전체 공통</SelectItem>
+                    {modalCities.map(city => (
+                      <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800">
+                        📍 {city.name} ({city.nameEn})
                       </SelectItem>
                     ))}
                   </SelectContent>
