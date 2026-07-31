@@ -55,8 +55,8 @@ const DEFAULT_COUNTRY_OPTIONS = [
 ];
 
 const CATEGORY_MAP: Record<string, { label: string; badgeClass: string }> = {
-  pre_travel: { label: "🛫 사전 준비", badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-0 px-2 py-0.5 text-xs font-medium" },
-  essentials: { label: "🎒 필수 준비물", badgeClass: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-0 px-2 py-0.5 text-xs font-medium" },
+  pre_travel: { label: "🎒 사전 준비 & 준비물", badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-0 px-2 py-0.5 text-xs font-medium" },
+  essentials: { label: "🎒 사전 준비 & 준비물", badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-0 px-2 py-0.5 text-xs font-medium" },
   baggage: { label: "✈️ 수하물 규정", badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-0 px-2 py-0.5 text-xs font-medium" },
   tips: { label: "💡 현지 팁", badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0 px-2 py-0.5 text-xs font-medium" },
 };
@@ -122,6 +122,8 @@ export default function AdminGuidesPage() {
 
     const formatted = targetItems.map(g => ({
       countryCode: g.countryCode,
+      cityNameEn: g.city ? g.city.nameEn : null,
+      cityNameKo: g.city ? g.city.name : null,
       category: g.category,
       title: g.title,
       description: g.description,
@@ -574,7 +576,7 @@ export default function AdminGuidesPage() {
             <SelectContent className="bg-popover border-border text-xs">
               <SelectItem value="all" className="cursor-pointer">전체 카테고리</SelectItem>
               <SelectItem value="pre_travel" className="cursor-pointer">🛫 사전 준비</SelectItem>
-              <SelectItem value="essentials" className="cursor-pointer">🎒 필수 준비물</SelectItem>
+              <SelectItem value="essentials" className="cursor-pointer">🎒 준비물</SelectItem>
               <SelectItem value="baggage" className="cursor-pointer">✈️ 수하물 규정</SelectItem>
               <SelectItem value="tips" className="cursor-pointer">💡 현지 팁</SelectItem>
             </SelectContent>
@@ -693,11 +695,16 @@ export default function AdminGuidesPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 text-white border-slate-800">
                     <SelectItem value="all" className="cursor-pointer hover:bg-slate-800">🌐 국가 전체 공통</SelectItem>
-                    {modalCities.map(city => (
-                      <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800">
-                        📍 {city.name} ({city.nameEn})
-                      </SelectItem>
-                    ))}
+                    {modalCities.map((city) => {
+                      const displayName = city.name === city.nameEn || !city.nameEn
+                        ? city.name
+                        : `${city.name} (${city.nameEn})`;
+                      return (
+                        <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800">
+                          📍 {displayName}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -715,7 +722,7 @@ export default function AdminGuidesPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 text-white border-slate-800">
                     <SelectItem value="pre_travel" className="cursor-pointer hover:bg-slate-800">🛫 사전 준비</SelectItem>
-                    <SelectItem value="essentials" className="cursor-pointer hover:bg-slate-800">🎒 필수 준비물</SelectItem>
+                    <SelectItem value="essentials" className="cursor-pointer hover:bg-slate-800">🎒 준비물</SelectItem>
                     <SelectItem value="baggage" className="cursor-pointer hover:bg-slate-800">✈️ 수하물 규정</SelectItem>
                     <SelectItem value="tips" className="cursor-pointer hover:bg-slate-800">💡 현지 팁</SelectItem>
                   </SelectContent>

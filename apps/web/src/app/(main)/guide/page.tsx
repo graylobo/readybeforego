@@ -102,13 +102,18 @@ export default function GuidePage() {
 
   // 전체보기 상황: 1. 클릭이 안 되는 요소(isCheckable === false) 제외 2. 필수(isRequired) 항목 우선 배치 정렬
   const filteredGuides = useMemo(() => {
-    const list = guides.filter(g => {
-      const categoryMatch = activeTab === "all" || g.category === activeTab;
-      if (activeTab === "all") {
-        return categoryMatch && g.isCheckable !== false;
-      }
-      return categoryMatch;
-    });
+    if (!guides) return [];
+
+    let list = guides;
+    
+    // 탭 필터링 및 "all"인 경우 isCheckable 제외 로직
+    if (activeTab === "all") {
+      list = list.filter(g => g.isCheckable !== false);
+    } else if (activeTab === "pre_travel" || activeTab === "essentials") {
+      list = list.filter(g => g.category === "pre_travel" || g.category === "essentials");
+    } else {
+      list = list.filter(g => g.category === activeTab);
+    }
 
     if (activeTab === "all") {
       return [...list].sort((a, b) => {
@@ -156,10 +161,10 @@ export default function GuidePage() {
         
         <div className="max-w-5xl mx-auto text-center space-y-4 relative z-10">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-300">
-            여행 전 필수 가이드북 🎒
+            여행 가이드북 🎒
           </h1>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            여행 전 체크리스트로 꼼꼼하게 짐을 싸고 안전하게 떠나세요.
+            여행 전 체크리스트를 꼼꼼하게 확인하고 떠나세요.
           </p>
 
           {/* 🌏 국가 및 도시 선택 드롭다운 UI */}
@@ -192,13 +197,18 @@ export default function GuidePage() {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
                     <SelectItem value="all" className="cursor-pointer hover:bg-slate-800 font-semibold">
-                      도시 전체
+                      도시 전체(옵션)
                     </SelectItem>
-                    {availableCities.map((city) => (
-                      <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800 font-semibold">
-                        📍 {city.name} ({city.nameEn})
-                      </SelectItem>
-                    ))}
+                    {availableCities.map((city) => {
+                      const displayName = city.name === city.nameEn || !city.nameEn 
+                        ? city.name 
+                        : `${city.name} (${city.nameEn})`;
+                      return (
+                        <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800 font-semibold">
+                          📍 {displayName}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               )}
@@ -273,8 +283,7 @@ export default function GuidePage() {
 
             {[
               { id: "all", label: "전체 보기", icon: Sparkles },
-              { id: "pre_travel", label: "🛫 사전 준비", icon: Plane },
-              { id: "essentials", label: "🎒 필수 준비물", icon: Luggage },
+              { id: "pre_travel", label: "🎒 사전 준비 & 준비물", icon: Luggage },
               { id: "baggage", label: "✈️ 수하물 규정", icon: ShieldCheck },
               { id: "tips", label: "💡 현지 팁", icon: Lightbulb },
             ].map((tab) => {
