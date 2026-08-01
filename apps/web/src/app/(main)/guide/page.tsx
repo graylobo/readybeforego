@@ -111,11 +111,16 @@ export default function GuidePage() {
 
   const guides = guideData?.guides || [];
 
-  // 전체보기 상황: 1. 클릭이 안 되는 요소(isCheckable === false) 제외 2. 필수(isRequired) 항목 우선 배치 정렬
+  // 탭 필터링 및 도시 선택 전(selectedCity === 'all')에는 국가 레벨 가이드 항목만 표시
   const filteredGuides = useMemo(() => {
     if (!guides) return [];
 
     let list = guides;
+
+    // 도시를 아직 선택하기 전(all) 상태에서는 도시 전용 항목을 숨기고 국가 공통 항목만 노출
+    if (selectedCity === 'all') {
+      list = list.filter(g => !g.cityId && !g.city);
+    }
     
     // 탭 필터링 및 "all"인 경우 isCheckable 제외 로직
     if (activeTab === "all") {
@@ -203,12 +208,12 @@ export default function GuidePage() {
                   <SelectTrigger className="w-[160px] sm:w-[190px] bg-white/10 text-white border-white/20 backdrop-blur-md h-11 text-sm font-bold rounded-2xl cursor-pointer hover:bg-white/20 transition-all">
                     <div className="flex items-center gap-2 truncate">
                       🌆 
-                      <SelectValue placeholder="전체 도시 (선택)" />
+                      <SelectValue placeholder="도시 선택 (옵션)" />
                     </div>
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
                     <SelectItem value="all" className="cursor-pointer hover:bg-slate-800 font-semibold">
-                      도시 전체(옵션)
+                      도시 선택 (옵션)
                     </SelectItem>
                     {availableCities.map((city) => {
                       const displayName = city.name === city.nameEn || !city.nameEn 
