@@ -6,6 +6,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { Region, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
+import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -376,8 +377,8 @@ export default function ReadyBeforeGoMap() {
     if (zoom === 14) return 0.003;
     if (zoom === 15) return 0.0015;
     if (zoom === 16) return 0.0006;
-    if (zoom === 17) return 0.00025;
-    return 0; // zoom >= 18 (최대 줌 레벨에서는 클러스터링을 하지 않고 개별 지점을 보여줌)
+    if (zoom === 17) return NEARBY_LOCATION_THRESHOLD;
+    return NEARBY_LOCATION_THRESHOLD; // 줌 18 이상에서도 동일한 근접 장소 임계값(0.00025) 적용 🎯
   };
 
   // 모든 줌 레벨 통합 동적 클러스터러

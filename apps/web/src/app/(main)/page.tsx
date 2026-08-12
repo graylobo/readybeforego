@@ -11,6 +11,7 @@ import { scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
 import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
+import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -275,13 +276,18 @@ export default function Home() {
     queryFn: () => scamsApi.getAllRegions(),
   });
 
-  // 동일 좌표를 갖는 모든 지역 필터링 (좌표 단위 통합 피드 구현)
+  // 동일/근접 좌표를 갖는 모든 지역 필터링 (클러스터 단위 통합 피드 구현 🎯)
   const sharingRegions = selectedRegionId && selectedRegion
     ? allRegions.filter(
-        (r) => r.latitude === selectedRegion.latitude && r.longitude === selectedRegion.longitude
+        (r) =>
+          (r.latitude === selectedRegion.latitude && r.longitude === selectedRegion.longitude) ||
+          (Math.abs(r.latitude - selectedRegion.latitude) < NEARBY_LOCATION_THRESHOLD &&
+           Math.abs(r.longitude - selectedRegion.longitude) < NEARBY_LOCATION_THRESHOLD)
       )
     : [];
-  const selectedRegionIds = sharingRegions.map((r) => r.id);
+  const selectedRegionIds = sharingRegions.length > 0 
+    ? Array.from(new Set(sharingRegions.map((r) => r.id))) 
+    : (selectedRegionId ? [selectedRegionId] : []);
 
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
   const { data: scams = EMPTY_ARRAY, isPending: isScamsPending, isFetching: isScamsFetching } = useQuery<ScamInfo[]>({
