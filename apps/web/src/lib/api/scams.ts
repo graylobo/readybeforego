@@ -46,6 +46,7 @@ export interface ScamInfo {
   title: string;
   description: string;
   avoidanceTip?: string | null;
+  subLocation?: string | null;
   scamCategory: string;
   sourceUrl?: string | null;
   viewCount: number;
@@ -115,6 +116,7 @@ export const scamsApi = {
     title: string;
     description: string;
     avoidanceTip?: string;
+    subLocation?: string;
     scamCategory: string;
     sourceUrl?: string;
     imageUrls?: string[];
@@ -137,6 +139,7 @@ export const scamsApi = {
       title: string;
       description: string;
       avoidanceTip?: string;
+      subLocation?: string;
       scamCategory: string;
       sourceUrl?: string;
       imageUrls?: string[];

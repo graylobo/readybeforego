@@ -15,6 +15,7 @@ export const CreateScamInfoBaseSchema = z.object({
   title: z.string().min(2, '제보 제목은 최소 2자 이상이어야 합니다.').max(100, '제목은 최대 100자까지 작성 가능합니다.'),
   description: z.string().min(10, '상세 피해 내용은 최소 10자 이상 자세히 작성해 주세요.'),
   avoidanceTip: z.string().max(1000, '대처법은 최대 1000자까지 입력 가능합니다.').nullable().optional(),
+  subLocation: z.string().max(200, '세부 위치는 최대 200자까지 입력 가능합니다.').nullable().optional(),
   scamCategory: z.string().min(1, '사기 피해 카테고리를 최소 1개 이상 선택해 주세요.'),
   sourceUrl: z.string().url('유효한 URL 형식이 아닙니다.').or(z.literal('')).nullable().optional(),
   imageUrls: z.array(z.string().url()).nullable().optional(),

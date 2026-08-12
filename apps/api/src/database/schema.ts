@@ -567,6 +567,7 @@ export const scamInfos = pgTable('scam_infos', {
   title: text('title').notNull(),
   description: text('description').notNull(),
   avoidanceTip: text('avoidance_tip'),
+  subLocation: text('sub_location'),
   scamCategory: text('scam_category').notNull(),
   sourceUrl: text('source_url'),
   imageUrls: json('image_urls'),

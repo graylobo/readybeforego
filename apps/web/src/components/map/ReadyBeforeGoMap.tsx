@@ -813,7 +813,7 @@ export default function ReadyBeforeGoMap() {
       )}
 
       {/* 모바일/PC 공통 지도 상단 제보 위치 안내 가이드 플로팅 배너 📍 */}
-      {isReportMode && !isReportConfirmModalOpen && !isReportModalOpen && !isGeocodeConfirmModalOpen && (
+      {isReportMode && !isReportConfirmModalOpen && !isReportModalOpen && !isGeocodeConfirmModalOpen && !isItemReportTypeModalOpen && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-[420px] bg-slate-900/95 dark:bg-slate-950/95 border border-slate-800 text-slate-100 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 text-blue-400 shrink-0">
@@ -860,29 +860,37 @@ export default function ReadyBeforeGoMap() {
         {/* 동적 맵 스타일 프로바이더 연동 (Google, Mapbox, OSM) 🎨 */}
         {(() => {
           const provider = process.env.NEXT_PUBLIC_MAP_PROVIDER || "GOOGLE";
-          let tileUrl = `https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}`;
+          const isGoogle = provider.toUpperCase() === "GOOGLE";
+          const isMapbox = provider.toUpperCase() === "MAPBOX";
+
+          // 고해상도 레티나(High-DPI / Retina 2x) 대응 타일 URL 설정 🌟
+          let tileUrl = `https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}&scale=2`;
           let attribution = '&copy; <a href="https://maps.google.com">Google Maps</a>';
 
-          if (provider.toUpperCase() === "MAPBOX") {
+          if (isMapbox) {
             const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
-            // 산 굴곡 음영을 뺀 깔끔한 평면 라이트 스타일(mapbox/light-v11) 기본 적용 🎯
-            const style = process.env.NEXT_PUBLIC_MAPBOX_STYLE || "mapbox/light-v11";
-            tileUrl = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}?access_token=${token}`;
+            // 프로필/i18n 언어(lang) 설정에 따른 Mapbox 다국어 스타일 자동 스위칭 연동 🎯
+            const defaultStyle = process.env.NEXT_PUBLIC_MAPBOX_STYLE || "mapbox/streets-v12";
+            const koStyle = process.env.NEXT_PUBLIC_MAPBOX_STYLE_KO || defaultStyle;
+            const enStyle = process.env.NEXT_PUBLIC_MAPBOX_STYLE_EN || defaultStyle;
+            const style = lang === "ko" ? koStyle : enStyle;
+
+            tileUrl = `https://api.mapbox.com/styles/v1/${style}/tiles/512/{z}/{x}/{y}@2x?access_token=${token}`;
             attribution = '&copy; <a href="https://www.mapbox.com/">Mapbox</a>';
           } else if (provider.toUpperCase() === "OSM") {
             tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
             attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
           }
 
-          const isMapbox = provider.toUpperCase() === "MAPBOX";
-
           return (
             <TileLayer
+              key={`${provider}-${lang}`}
               attribution={attribution}
               url={tileUrl}
               noWrap={true}
               tileSize={isMapbox ? 512 : 256}
               zoomOffset={isMapbox ? -1 : 0}
+              detectRetina={true}
             />
           );
         })()}

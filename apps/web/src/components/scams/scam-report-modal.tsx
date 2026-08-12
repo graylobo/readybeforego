@@ -94,6 +94,7 @@ export function ScamReportModal() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [avoidanceTip, setAvoidanceTip] = useState("");
+  const [subLocation, setSubLocation] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [scope, setScope] = useState<'spot' | 'region' | 'city' | 'country'>('spot');
 
@@ -155,6 +156,7 @@ export function ScamReportModal() {
       setTitle("");
       setDescription("");
       setAvoidanceTip("");
+      setSubLocation("");
       setSourceUrl("");
       setImageFiles([]);
       setImagePreviews([]);
@@ -483,6 +485,7 @@ export function ScamReportModal() {
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
+          subLocation: subLocation.trim() || undefined,
           sourceUrl: sourceUrl.trim() ? formatExternalUrl(sourceUrl.trim()) : undefined,
           imageUrls: urls,
         });
@@ -497,6 +500,7 @@ export function ScamReportModal() {
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
+          subLocation: subLocation.trim() || undefined,
           sourceUrl: sourceUrl.trim() ? formatExternalUrl(sourceUrl.trim()) : undefined,
           imageUrls: urls,
         });
@@ -582,10 +586,10 @@ export function ScamReportModal() {
             <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl gap-1">
               {(["spot", "region", "city", "country"] as const).map((sc) => {
                 const label = 
-                  sc === "spot" ? "📍 특정 위치" :
-                  sc === "region" ? "🗺️ 구역/거리 전체" :
-                  sc === "city" ? "🏙️ 도시 전체" :
-                  "🇹🇭 국가 전체";
+                  sc === "spot" ? "특정 위치" :
+                  sc === "region" ? "구역 전체" :
+                  sc === "city" ? "도시 전체" :
+                  "국가 전체";
                 
                 const isActive = scope === sc;
                 return (
@@ -606,10 +610,10 @@ export function ScamReportModal() {
             </div>
             {/* 가이드라인 표시 */}
             <p className="text-[10px] text-muted-foreground leading-normal mt-1 pl-1">
-              {scope === "spot" && "📍 특정 맛집, 마사지숍, 옷가게 등 개별 업소 하나에 해당하는 정보입니다."}
-              {scope === "region" && "🗺️ 카오산로드, 명동거리, 야시장 구역 전반에서 행해지는 호객 사기 등입니다."}
-              {scope === "city" && "🏙️ 그랩/볼트 사기 등 특정 구역을 넘어 도시 전체에 공통된 유형입니다."}
-              {scope === "country" && "🇹🇭 특정 지역에 상관없이 국가 전체에 공통으로 적용되는 안전/법률 경고입니다."}
+              {scope === "spot" && "특정 위치 범위에 대한 정보입니다."}
+              {scope === "region" && "특정 구역 범위에 대한 정보입니다."}
+              {scope === "city" && "특정 도시 범위에 대한 정보입니다."}
+              {scope === "country" && "국가 범위에 대한 정보입니다."}
             </p>
           </div>
 
@@ -758,23 +762,38 @@ export function ScamReportModal() {
                 )}
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 opacity-85">
                 <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  제보 대상 장소 <span className="text-red-500 font-bold">*</span>
+                  제보 대상 장소
                 </Label>
-                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 flex items-center justify-between">
+                <div className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-100/60 dark:bg-slate-900/40 flex items-center justify-between cursor-not-allowed select-none grayscale">
                   <div className="flex items-center gap-2 min-w-0">
-                    <MapPin className="w-4 h-4 text-red-500 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                    <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 truncate">
                       {selectedRegion?.name || cityRegions.find((r) => r.id === regionId)?.name || "선택된 장소"}
                     </span>
                   </div>
-                  <Badge variant="outline" className="text-[10px] bg-slate-200/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 shrink-0">
-                    기존 장소 고정
-                  </Badge>
                 </div>
               </div>
             )
+          )}
+
+          {/* 세부 점포명 / 층수 (선택) 🏬 */}
+          {(scope === "spot" || scope === "region") && (
+            <div className="space-y-1.5">
+              <Label htmlFor="subLocation" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>세부 장소 (선택)</span>
+                <span className="text-[10px] text-muted-foreground font-normal">건물/상가 내 장소 구분용</span>
+              </Label>
+              <Input
+                id="subLocation"
+                placeholder="예: 3층 201호 옷가게"
+                value={subLocation}
+                onChange={(e) => setSubLocation(e.target.value)}
+                className="text-xs"
+                disabled={uploading}
+              />
+            </div>
           )}
 
           <div className="space-y-2">

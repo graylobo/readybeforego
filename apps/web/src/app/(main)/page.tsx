@@ -633,10 +633,10 @@ export default function Home() {
   const renderFeedContent = () => {
     const chips = [
       { value: "all", label: "전체" },
-      { value: "spot", label: "📍 특정 위치" },
-      { value: "region", label: "🗺️ 구역 전체" },
-      { value: "city", label: "🏙️ 도시 전체" },
-      { value: "country", label: "🇹🇭 국가 전체" },
+      { value: "spot", label: "특정 위치" },
+      { value: "region", label: "구역 전체" },
+      { value: "city", label: "도시 전체" },
+      { value: "country", label: "국가 전체" },
     ] as const;
 
     // 피드 목록 렌더링 시 특정 위치/구역(spot/region) 제보글이 최상단에 1순위로 노출되도록 정렬 🎯
@@ -771,7 +771,7 @@ export default function Home() {
                           </Badge>
                         )}
 
-                        {/* 위치 정보(Breadcrumb) 형식의 보조 뱃지 항상 표시 🗺️ */}
+                        {/* 위치 정보(Breadcrumb) 및 세부 점포(subLocation) 뱃지 🗺️ */}
                         {(() => {
                           const currentScamRegion = allRegions.find((r) => r.id === scam.regionId);
                           if (currentScamRegion) {
@@ -783,6 +783,12 @@ export default function Home() {
                           }
                           return null;
                         })()}
+
+                        {scam.subLocation && (
+                          <Badge variant="outline" className="bg-amber-50/80 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 shrink-0">
+                            🏬 {scam.subLocation}
+                          </Badge>
+                        )}
                         {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
                           const cat = getCategoryInfo(catKey, t);
                           return (

@@ -406,6 +406,7 @@ export class ScamsService {
         title: createDto.title,
         description: createDto.description,
         avoidanceTip: createDto.avoidanceTip ?? null,
+        subLocation: createDto.subLocation ?? null,
         scamCategory: createDto.scamCategory,
         sourceUrl: formatExternalUrl(createDto.sourceUrl),
         imageUrls: createDto.imageUrls ?? [],
