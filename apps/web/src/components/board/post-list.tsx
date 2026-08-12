@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Comments } from '@/components/comments/comments';
 import { useRef } from 'react';
 import { FeedPostEditModal } from '@/components/board/feed-post-edit-modal';
+import { MediaDetailModal } from '@/components/common/media-detail-modal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface PostListProps {
@@ -750,79 +751,20 @@ function InstagramCommentModal({ isOpen, onOpenChange, post, slug }: InstagramCo
   const authorAvatar = (post.user as any)?.image || post.user?.picture || (post.user as any)?.profileImage || '';
   const allImages = extractAllImages(post.content);
   const cleanBody = stripHtml(post.content);
-  const hasImages = allImages.length > 0;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className={cn(
-          "p-0 overflow-hidden bg-background border border-border rounded-2xl flex flex-col transition-all duration-300",
-          hasImages 
-            ? "max-w-5xl h-[85vh] md:h-[75vh] md:flex-row gap-0" 
-            : "max-w-2xl max-h-[85vh] h-auto"
-        )}
-      >
-        <DialogTitle className="sr-only">{authorName}님의 게시물</DialogTitle>
-        
-        {/* Left Side: Images (Only when images exist) */}
-        {hasImages && (
-          <div className="w-full md:w-[55%] h-[40vh] md:h-full bg-zinc-950 flex items-center justify-center relative overflow-hidden border-b md:border-b-0 md:border-r border-border shrink-0">
-            <InstagramImageSlider images={allImages} className="aspect-auto h-full rounded-none border-0" />
-          </div>
-        )}
-
-        {/* Content and Comments Container */}
-        <div className={cn(
-          "flex flex-col min-w-0 bg-background overflow-hidden",
-          hasImages ? "w-full md:w-[45%] h-[50vh] md:h-full" : "w-full max-h-[85vh]"
-        )}>
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0 bg-muted/20">
-            <div className="font-bold text-sm text-foreground">
-              {authorName}님의 게시물
-            </div>
-          </div>
-
-          {/* Scrollable Body & Comments */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Post Author Info & Content Body */}
-            <div className="space-y-3 pb-3 border-b border-border/50">
-              <div className="flex items-center gap-2.5">
-                <Avatar className="w-9 h-9 border border-border/40 shrink-0">
-                  <AvatarImage src={authorAvatar} alt={authorName} />
-                  <AvatarFallback className="bg-sky-500/10 text-sky-600 font-bold text-xs">
-                    {authorName.slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col text-xs leading-tight">
-                  <span className="font-bold text-sm text-foreground">{authorName}</span>
-                  <span className="text-[11px] text-muted-foreground mt-0.5">{getRelativeTimeStr(post.createdAt)}</span>
-                </div>
-              </div>
-
-              {/* Title (If distinct from body) */}
-              {post.title && post.title !== cleanBody.slice(0, 30) && (
-                <h3 className="font-bold text-base text-foreground leading-snug">{post.title}</h3>
-              )}
-
-              {/* Body Text */}
-              <div className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed break-words">
-                {cleanBody}
-              </div>
-            </div>
-
-            {/* Comments Component */}
-            <div className="pt-1">
-              <Comments 
-                targetType="post" 
-                targetId={post.id} 
-                allowAnonymous={true} 
-              />
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <MediaDetailModal
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      images={allImages}
+      authorName={authorName}
+      authorAvatar={authorAvatar}
+      createdAt={post.createdAt}
+      title={post.title && post.title !== cleanBody.slice(0, 30) ? post.title : undefined}
+      description={cleanBody}
+      targetType="post"
+      targetId={post.id}
+    />
   );
 }
 

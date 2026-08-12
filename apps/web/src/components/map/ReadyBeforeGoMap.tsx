@@ -854,6 +854,7 @@ export default function ReadyBeforeGoMap() {
         className="h-full w-full z-0"
         zoomControl={true}
         minZoom={3}
+        maxZoom={18}
         maxBounds={[[-85, -180], [85, 180]]}
         maxBoundsViscosity={1.0}
       >
@@ -862,6 +863,7 @@ export default function ReadyBeforeGoMap() {
           const provider = process.env.NEXT_PUBLIC_MAP_PROVIDER || "GOOGLE";
           const isGoogle = provider.toUpperCase() === "GOOGLE";
           const isMapbox = provider.toUpperCase() === "MAPBOX";
+          const isHighRes = isGoogle || isMapbox;
 
           // 고해상도 레티나(High-DPI / Retina 2x) 대응 타일 URL 설정 🌟
           let tileUrl = `https://mt1.google.com/vt/lyrs=m&hl=${lang}&x={x}&y={y}&z={z}&scale=2`;
@@ -890,7 +892,8 @@ export default function ReadyBeforeGoMap() {
               noWrap={true}
               tileSize={isMapbox ? 512 : 256}
               zoomOffset={isMapbox ? -1 : 0}
-              detectRetina={true}
+              maxZoom={18}
+              maxNativeZoom={18}
             />
           );
         })()}

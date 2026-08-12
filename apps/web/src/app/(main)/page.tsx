@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Comments } from "@/components/comments/comments";
 import { ReportDialog } from "@/components/common/report-dialog";
+import { MediaDetailModal } from "@/components/common/media-detail-modal";
 import { ScamReportModal } from "@/components/scams/scam-report-modal";
 import GeocodeConfirmModal from "@/components/scams/scam-geocode-confirm-modal";
 import AddressSearchModal from "@/components/scams/scam-address-search-modal";
@@ -146,6 +147,8 @@ export default function Home() {
 
   const [activeReportScamId, setActiveReportScamId] = useState<string | null>(null);
   const [activeCommentScamId, setActiveCommentScamId] = useState<string | null>(null);
+  const [activeMediaScam, setActiveMediaScam] = useState<ScamInfo | null>(null);
+  const [activeMediaIndex, setActiveMediaIndex] = useState<number>(0);
 
   const [editingScam, setEditingScam] = useState<ScamInfo | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -871,20 +874,22 @@ export default function Home() {
                             : 'grid-cols-3'
                       }`}>
                         {scam.imageUrls.map((url, idx) => (
-                          <a 
+                          <button 
                             key={idx} 
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity"
-                            onClick={(e) => e.stopPropagation()}
+                            type="button"
+                            className="block relative aspect-[4/3] overflow-hidden border border-slate-100 dark:border-slate-800 hover:opacity-90 transition-opacity cursor-pointer text-left"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMediaScam(scam);
+                              setActiveMediaIndex(idx);
+                            }}
                           >
                             <img 
                               src={url} 
                               alt={`scam-attachment-${idx}`} 
                               className="w-full h-full object-cover" 
                             />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -1704,6 +1709,66 @@ export default function Home() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 이미지를 클릭했을 때 열리는 라운지 피드형 이미지 + 댓글 통합 상세 모달 🖼️ */}
+      {activeMediaScam && (
+        <MediaDetailModal
+          isOpen={!!activeMediaScam}
+          onOpenChange={(open) => {
+            if (!open) setActiveMediaScam(null);
+          }}
+          images={activeMediaScam.imageUrls || EMPTY_ARRAY}
+          initialImageIndex={activeMediaIndex}
+          authorName={activeMediaScam.user?.name || activeMediaScam.guestName || "제보자"}
+          authorAvatar={(activeMediaScam.user as any)?.image || activeMediaScam.user?.picture || ""}
+          createdAt={activeMediaScam.createdAt}
+          title={activeMediaScam.title}
+          description={activeMediaScam.description}
+          targetType="scam_info"
+          targetId={activeMediaScam.id}
+          avoidanceTip={activeMediaScam.avoidanceTip}
+          reportType={activeMediaScam.reportType}
+          badges={
+            <>
+              {activeMediaScam.reportType === "TIP" ? (
+                <Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400 text-[10px] font-bold py-0.5 px-2 shrink-0">
+                  💡 사전 꿀팁
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900/50 dark:text-rose-400 text-[10px] font-bold py-0.5 px-2 shrink-0">
+                  ⚠️ 주의 / 위험
+                </Badge>
+              )}
+              {activeMediaScam.scope === "region" && (
+                <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
+                  🗺️ 구역 전체
+                </Badge>
+              )}
+              {activeMediaScam.scope === "spot" && (
+                <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
+                  📍 특정 위치
+                </Badge>
+              )}
+              {(() => {
+                const currentScamRegion = allRegions.find((r) => r.id === activeMediaScam.regionId);
+                if (currentScamRegion) {
+                  return (
+                    <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold py-0.5 px-2 max-w-full truncate">
+                      📍 {currentScamRegion.cityName} · {currentScamRegion.name}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
+              {activeMediaScam.subLocation && (
+                <Badge variant="outline" className="bg-amber-50/80 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 shrink-0">
+                  🏬 {activeMediaScam.subLocation}
+                </Badge>
+              )}
+            </>
+          }
+        />
+      )}
 
     </div>
   );

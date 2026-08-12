@@ -59,6 +59,14 @@ export interface ScamInfo {
   imageUrls?: string[] | null;
   commentCount?: number;
   userId?: string | null;
+  guestName?: string | null;
+  user?: {
+    id?: string;
+    name?: string;
+    picture?: string;
+    image?: string;
+    profileImage?: string;
+  } | null;
 }
 
 export const scamsApi = {
