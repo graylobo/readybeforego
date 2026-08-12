@@ -1,9 +1,8 @@
 'use client';
 
-import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState } from 'react';
 import { toast } from '@/lib/toast';
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState } from 'react';
 
 // QueryMeta 타입을 확장하여 타입 안정성을 확보합니다.
 declare module '@tanstack/react-query' {
@@ -44,7 +43,6 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }

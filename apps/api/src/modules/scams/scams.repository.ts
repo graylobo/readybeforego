@@ -437,6 +437,8 @@ export class ScamsRepository {
       cityName: schema.cities.name,
       countryCode: schema.cities.countryCode,
       scamCount: sql<number>`count(${schema.scamInfos.id})::int`,
+      cautionCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'CAUTION' then 1 end)::int`,
+      tipCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'TIP' then 1 end)::int`,
       hasRegionScope: sql<boolean>`coalesce(bool_or(${schema.scamInfos.scope} = 'region'), false)`,
     })
     .from(schema.regions)

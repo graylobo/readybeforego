@@ -29,6 +29,8 @@ export interface Region {
   cityName?: string | null;
   countryCode?: string | null;
   scamCount?: number;
+  cautionCount?: number;
+  tipCount?: number;
   hasRegionScope?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +42,7 @@ export interface ScamInfo {
   cityId?: string | null;
   countryCode?: string | null;
   scope: 'spot' | 'region' | 'city' | 'country';
+  reportType?: 'CAUTION' | 'TIP' | 'INFO';
   title: string;
   description: string;
   avoidanceTip?: string | null;
@@ -108,6 +111,7 @@ export const scamsApi = {
     latitude?: number;
     longitude?: number;
     scope?: 'spot' | 'region' | 'city' | 'country';
+    reportType?: 'CAUTION' | 'TIP' | 'INFO';
     title: string;
     description: string;
     avoidanceTip?: string;

@@ -17,7 +17,10 @@ interface ScamMapStore {
   
   // UGC Select Type Modal and Type states
   isSelectTypeModalOpen: boolean;
+  isItemReportTypeModalOpen: boolean;
   reportType: "new" | "existing";
+  itemReportType: "CAUTION" | "TIP" | "INFO";
+  filterReportType: "ALL" | "CAUTION" | "TIP";
 
   // Geocoding Fallback Modal States
   isGeocodeConfirmModalOpen: boolean;
@@ -42,7 +45,10 @@ interface ScamMapStore {
   setAddressSearchModalOpen: (val: boolean) => void;
   setReportConfirmModalOpen: (val: boolean) => void;
   setSelectTypeModalOpen: (val: boolean) => void;
+  setItemReportTypeModalOpen: (val: boolean) => void;
   setReportType: (type: "new" | "existing") => void;
+  setItemReportType: (type: "CAUTION" | "TIP" | "INFO") => void;
+  setFilterReportType: (filter: "ALL" | "CAUTION" | "TIP") => void;
   setIsMobileFeedOpen: (val: boolean) => void;
   setIsFilterModalOpen: (val: boolean) => void;
   resetSelections: () => void;
@@ -61,7 +67,10 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   isReportModalOpen: false,
   geoData: null,
   isSelectTypeModalOpen: false,
+  isItemReportTypeModalOpen: false,
   reportType: "new",
+  itemReportType: "CAUTION",
+  filterReportType: "ALL",
   isGeocodeConfirmModalOpen: false,
   isAddressSearchModalOpen: false,
   isReportConfirmModalOpen: false,
@@ -81,7 +90,10 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setAddressSearchModalOpen: (val) => set({ isAddressSearchModalOpen: val }),
   setReportConfirmModalOpen: (val) => set({ isReportConfirmModalOpen: val }),
   setSelectTypeModalOpen: (val) => set({ isSelectTypeModalOpen: val }),
+  setItemReportTypeModalOpen: (val) => set({ isItemReportTypeModalOpen: val }),
   setReportType: (type) => set({ reportType: type }),
+  setItemReportType: (type) => set({ itemReportType: type }),
+  setFilterReportType: (filter) => set({ filterReportType: filter }),
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
   setIsFilterModalOpen: (val) => set({ isFilterModalOpen: val }),
   resetSelections: () => set({
@@ -94,6 +106,7 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isReportModalOpen: false,
     geoData: null,
     isSelectTypeModalOpen: false,
+    isItemReportTypeModalOpen: false,
     reportType: "new",
     isGeocodeConfirmModalOpen: false,
     isAddressSearchModalOpen: false,

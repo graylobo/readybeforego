@@ -401,6 +401,7 @@ export class ScamsService {
         cityId: finalCityId,
         countryCode: finalCountryCode,
         scope: scope,
+        reportType: (createDto.reportType as any) ?? 'CAUTION',
         userId: userId ?? null,
         title: createDto.title,
         description: createDto.description,

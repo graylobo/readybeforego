@@ -53,57 +53,68 @@ L.Icon.Default.mergeOptions({
 
 // "직방" 스타일의 수량 비례형 원형 뱃지 마커 및 위치 이름 라벨 오버레이 생성
 const createClusterIcon = (
-  count: number,
   name: string,
+  cautionCount: number = 0,
+  tipCount: number = 0,
   isSelected: boolean = false,
-  scope?: "spot" | "region" | "city" | "country"
+  filterReportType: "ALL" | "CAUTION" | "TIP" = "ALL"
 ) => {
-  let sizeClass = "w-9 h-9 text-xs";
-  let colorClass = "from-sky-400 to-indigo-650"; // 기본값 (spot: 지점)
-  let pulseClass = "";
-  let shapeClass = "rounded-full"; // 기본 원형
-
-  // 범위(Scope)별 테마 그라데이션 지정 🎨
-  if (scope === "country") {
-    colorClass = "from-red-500 to-rose-700";
-  } else if (scope === "city") {
-    colorClass = "from-amber-400 to-orange-600";
-  } else if (scope === "region") {
-    colorClass = "from-violet-500 to-fuchsia-700";
-    shapeClass = "rounded-xl"; // 구역전체는 둥근 사각형으로 차별화 🗺️
-  } else {
-    // spot
-    colorClass = "from-sky-400 to-indigo-600";
-  }
-
-  if (count >= 6) {
-    sizeClass = "w-13 h-13 text-sm";
-  } else if (count >= 3) {
-    sizeClass = "w-11 h-11 text-xs";
-  }
-
-  // 선택 상태 유무에 따른 보더 두께, 보더 컬러, 스케일 및 그림자 설정 (빨간색 강조)
-  const borderStyle = isSelected 
-    ? "border-4 border-red-600 shadow-[0_0_15px_rgba(239,68,68,0.9)] scale-110 z-50" 
-    : "border-2 border-white shadow-md group-hover:scale-110 group-hover:shadow-lg";
+  const isSelectedStyle = isSelected 
+    ? "ring-4 ring-red-500 shadow-[0_0_18px_rgba(239,68,68,0.9)] scale-110 z-50" 
+    : "shadow-md group-hover:scale-110 group-hover:shadow-lg";
 
   const labelStyle = "bg-slate-900/90 dark:bg-slate-950/90 border-white/10 text-white font-bold";
-  const displayName = name;
+
+  // 필터 상태 고려하여 노출할 수량 계산
+  const showCaution = (filterReportType === "ALL" || filterReportType === "CAUTION") && cautionCount > 0;
+  const showTip = (filterReportType === "ALL" || filterReportType === "TIP") && tipCount > 0;
+
+  let badgeHtml = "";
+
+  if (showCaution && showTip) {
+    // 1. 혼합 클러스터 (Dual Badge Pill): [ ⚠️ N | 💡 M ]
+    badgeHtml = `
+      <div class="flex items-center rounded-full border-2 border-white overflow-hidden transition-all duration-200 ${isSelectedStyle} z-10 bg-slate-900">
+        <div class="bg-gradient-to-r from-red-500 to-rose-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5 border-r border-white/30">
+          <span class="text-[10px]">⚠️</span><span>${cautionCount}</span>
+        </div>
+        <div class="bg-gradient-to-r from-emerald-500 to-teal-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5">
+          <span class="text-[10px]">💡</span><span>${tipCount}</span>
+        </div>
+      </div>
+    `;
+  } else if (showTip) {
+    // 2. TIP 전용 마커 (Green Circle)
+    const count = filterReportType === "ALL" ? tipCount : tipCount;
+    let sizeClass = count >= 6 ? "w-12 h-12 text-sm" : count >= 3 ? "w-10 h-10 text-xs" : "w-9 h-9 text-xs";
+    badgeHtml = `
+      <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br from-emerald-500 to-teal-700 transition-all duration-200 ${sizeClass} border-2 border-white ${isSelectedStyle} z-10">
+        <span class="mr-0.5 text-[10px]">💡</span>${count}
+      </div>
+    `;
+  } else {
+    // 3. CAUTION 전용 마커 (Red Circle)
+    const count = filterReportType === "ALL" ? cautionCount : cautionCount;
+    let sizeClass = count >= 6 ? "w-12 h-12 text-sm" : count >= 3 ? "w-10 h-10 text-xs" : "w-9 h-9 text-xs";
+    badgeHtml = `
+      <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br from-red-500 to-rose-700 transition-all duration-200 ${sizeClass} border-2 border-white ${isSelectedStyle} z-10">
+        <span class="mr-0.5 text-[10px]">⚠️</span>${count}
+      </div>
+    `;
+  }
 
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center w-[60px] h-[60px] select-none group cursor-pointer">
-        <div class="flex items-center justify-center ${shapeClass} text-white font-black bg-gradient-to-br transition-all duration-200 ${colorClass} ${sizeClass} ${pulseClass} ${borderStyle} z-10">
-          ${count}
-        </div>
-        <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[110px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
-          ${displayName}
+      <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer">
+        ${badgeHtml}
+        <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[120px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
+          ${name}
         </div>
       </div>
     `,
     className: "custom-cluster-icon",
-    iconSize: [60, 60],
-    iconAnchor: [30, 30],
+    iconSize: [74, 60],
+    iconAnchor: [37, 30],
   });
 };
 
@@ -249,6 +260,11 @@ export default function ReadyBeforeGoMap() {
     setGeocodeConfirmModalOpen,
     isReportConfirmModalOpen,
     setReportConfirmModalOpen,
+    filterReportType,
+    setFilterReportType,
+    isItemReportTypeModalOpen,
+    setItemReportTypeModalOpen,
+    setItemReportType,
   } = useScamMapStore();
 
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
@@ -379,6 +395,8 @@ export default function ReadyBeforeGoMap() {
 
       return Object.entries(countryGroups).map(([code, group]) => {
         const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
+        const totalCautionCount = group.reduce((sum, r) => sum + (r.cautionCount || 0), 0);
+        const totalTipCount = group.reduce((sum, r) => sum + (r.tipCount || 0), 0);
         const name = getCountryName(code, lang) || code;
         
         let lat = group.reduce((sum, r) => sum + r.latitude, 0) / group.length;
@@ -393,8 +411,10 @@ export default function ReadyBeforeGoMap() {
           latitude: lat,
           longitude: lng,
           scamCount: totalScamCount,
+          cautionCount: totalCautionCount,
+          tipCount: totalTipCount,
           isCluster: true,
-          scope: "country",
+          scope: "country" as const,
           countryCode: code,
           regions: group,
         };
@@ -413,6 +433,8 @@ export default function ReadyBeforeGoMap() {
 
       return Object.entries(cityGroups).map(([cid, group]) => {
         const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
+        const totalCautionCount = group.reduce((sum, r) => sum + (r.cautionCount || 0), 0);
+        const totalTipCount = group.reduce((sum, r) => sum + (r.tipCount || 0), 0);
         const representative = group[0];
         const cityName = representative.cityName || "기타 도시";
 
@@ -429,8 +451,10 @@ export default function ReadyBeforeGoMap() {
           latitude: lat,
           longitude: lng,
           scamCount: totalScamCount,
+          cautionCount: totalCautionCount,
+          tipCount: totalTipCount,
           isCluster: true,
-          scope: "city",
+          scope: "city" as const,
           cityId: cid,
           regions: group,
         };
@@ -475,6 +499,8 @@ export default function ReadyBeforeGoMap() {
           latitude: r1.latitude,
           longitude: r1.longitude,
           scamCount: r1.scamCount || 0,
+          cautionCount: r1.cautionCount || 0,
+          tipCount: r1.tipCount || 0,
           isCluster: false,
           scope: r1.hasRegionScope ? "region" : "spot",
           regions: group,
@@ -483,6 +509,8 @@ export default function ReadyBeforeGoMap() {
         const sumLat = group.reduce((sum, r) => sum + r.latitude, 0);
         const sumLng = group.reduce((sum, r) => sum + r.longitude, 0);
         const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
+        const totalCautionCount = group.reduce((sum, r) => sum + (r.cautionCount || 0), 0);
+        const totalTipCount = group.reduce((sum, r) => sum + (r.tipCount || 0), 0);
         
         const sortedGroup = [...group].sort((a, b) => (b.scamCount || 0) - (a.scamCount || 0));
         const representative = sortedGroup[0];
@@ -504,6 +532,8 @@ export default function ReadyBeforeGoMap() {
           latitude: sumLat / group.length,
           longitude: sumLng / group.length,
           scamCount: totalScamCount,
+          cautionCount: totalCautionCount,
+          tipCount: totalTipCount,
           isCluster: true,
           scope: hasRegionWarning ? "region" : "spot",
           hasMultipleLocations,
@@ -543,7 +573,7 @@ export default function ReadyBeforeGoMap() {
             setReportCoords([region.latitude, region.longitude]);
             setSelectedRegionId(region.id);
             setSelectedRegion(region);
-            setReportModalOpen(true);
+            setItemReportTypeModalOpen(true);
           }
         }
       } else {
@@ -554,7 +584,7 @@ export default function ReadyBeforeGoMap() {
           setReportCoords([region.latitude, region.longitude]);
           setSelectedRegionId(region.id);
           setSelectedRegion(region);
-          setReportModalOpen(true);
+          setItemReportTypeModalOpen(true);
         }
       }
     } else {
@@ -800,7 +830,7 @@ export default function ReadyBeforeGoMap() {
               <p className="text-xs font-semibold text-slate-200">
                 {currentZoom < 18 
                   ? "정확한 위치를 선택하기 위해 지도를 더 확대하세요"
-                  : "제보할 정확한 지점을 지도에서 터치하세요."}
+                  : "제보할 정확한 지점을 지도에서 선택하세요."}
               </p>
             </div>
           </div>
@@ -887,7 +917,7 @@ export default function ReadyBeforeGoMap() {
                       🧭 제보 위치 확인
                     </p>
                     <p className="text-[10.5px] font-bold leading-relaxed text-slate-200">
-                      지도 위 선택하신 이 위치에 피해 사례를 제보하시겠습니까?
+                      지도 위 선택하신 이 위치에 제보하시겠습니까?
                     </p>
                     {geoData && (() => {
                       const getDisplayName = () => {
@@ -930,7 +960,7 @@ export default function ReadyBeforeGoMap() {
                         e.stopPropagation();
                         L.DomEvent.stopPropagation(e.nativeEvent);
                         setReportConfirmModalOpen(false);
-                        setReportModalOpen(true);
+                        setItemReportTypeModalOpen(true);
                       }}
                       className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold cursor-pointer text-center transition-colors"
                       type="button"
@@ -970,20 +1000,47 @@ export default function ReadyBeforeGoMap() {
         )}
 
         {/* 동적 통합 클러스터 렌더링 (제보 마커를 내 위치보다 최상위 zIndex로 레이어링) */}
-        {getDynamicClusters().map((cluster) => {
-          const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
-          return (
-            <Marker
-              key={cluster.id}
-              position={[cluster.latitude, cluster.longitude]}
-              icon={createClusterIcon(cluster.scamCount, cluster.name, isSelected, cluster.scope)}
-              zIndexOffset={isSelected ? 2000 : 1000}
-              eventHandlers={{
-                click: () => handleDynamicClusterClick(cluster),
-              }}
-            />
-          );
-        })}
+        {getDynamicClusters()
+          .filter((cluster) => {
+            if (filterReportType === "ALL") return true;
+            if (filterReportType === "CAUTION") return (cluster.cautionCount || 0) > 0;
+            if (filterReportType === "TIP") return (cluster.tipCount || 0) > 0;
+            return true;
+          })
+          .map((cluster) => {
+            const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
+
+            // 필터 활성화 시 해당 타입의 count만 표시, 전체일 때는 총 scamCount
+            let displayCount = cluster.scamCount;
+            if (filterReportType === "CAUTION") displayCount = cluster.cautionCount || 0;
+            else if (filterReportType === "TIP") displayCount = cluster.tipCount || 0;
+
+            // 마커 아이콘 색상: 필터 활성화 시 해당 타입, 전체일 때는 다수 타입 기준
+            let dominantType: "CAUTION" | "TIP" | "INFO" = "CAUTION";
+            if (filterReportType === "TIP") {
+              dominantType = "TIP";
+            } else if (filterReportType === "ALL") {
+              dominantType = (cluster.tipCount || 0) > (cluster.cautionCount || 0) ? "TIP" : "CAUTION";
+            }
+
+            return (
+              <Marker
+                key={cluster.id}
+                position={[cluster.latitude, cluster.longitude]}
+                icon={createClusterIcon(
+                  cluster.name,
+                  cluster.cautionCount || 0,
+                  cluster.tipCount || 0,
+                  isSelected,
+                  filterReportType
+                )}
+                zIndexOffset={isSelected ? 2000 : 1000}
+                eventHandlers={{
+                  click: () => handleDynamicClusterClick(cluster),
+                }}
+              />
+            );
+          })}
       </MapContainer>
 
       {/* 현재 위치 이동 플로팅 버튼 */}
@@ -994,6 +1051,47 @@ export default function ReadyBeforeGoMap() {
       >
         <Locate className="w-4.5 h-4.5" />
       </button>
+
+      {/* 지도 상단 퀵 필터 토글 칩 오버레이 🧭 */}
+      <div className="absolute top-[10px] left-[52px] z-[1000] flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg text-xs">
+        <button
+          type="button"
+          onClick={() => setFilterReportType("ALL")}
+          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+            filterReportType === "ALL"
+              ? "bg-white text-slate-900 shadow"
+              : "text-slate-300 hover:text-white hover:bg-white/10"
+          }`}
+        >
+          🌐 전체
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilterReportType("CAUTION")}
+          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+            filterReportType === "CAUTION"
+              ? "bg-red-600 text-white shadow ring-2 ring-red-400/40"
+              : "text-red-300 hover:bg-red-950/40"
+          }`}
+        >
+          <span>⚠️</span>
+          <span>주의/위험만</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilterReportType("TIP")}
+          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+            filterReportType === "TIP"
+              ? "bg-amber-500 text-white shadow ring-2 ring-amber-400/40"
+              : "text-amber-300 hover:bg-amber-950/40"
+          }`}
+        >
+          <span>💡</span>
+          <span>사전 꿀팁만</span>
+        </button>
+      </div>
 
       {/* ESC 키 제보 위치 선택 취소 확인 모달 🛑 */}
       <Dialog open={isEscConfirmOpen} onOpenChange={setIsEscConfirmOpen}>
@@ -1029,13 +1127,71 @@ export default function ReadyBeforeGoMap() {
         </DialogContent>
       </Dialog>
 
+      {/* 제보 성격(유형) 선택 모달 🎯 */}
+      <Dialog open={isItemReportTypeModalOpen} onOpenChange={setItemReportTypeModalOpen}>
+        <DialogContent className="w-[90%] max-w-[380px] p-6 rounded-2xl bg-card border border-border shadow-2xl z-[99999]">
+          <DialogHeader className="space-y-1.5 text-center">
+            <DialogTitle className="text-lg font-black tracking-tight text-foreground flex items-center justify-center gap-1.5">
+              제보 유형 선택
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground text-center">
+              등록하실 제보의 정보 성격을 선택해 주세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3 pt-2">
+            {/* ⚠️ 주의 / 위험 제보 선택 카드 */}
+            <button
+              type="button"
+              onClick={() => {
+                setItemReportType("CAUTION");
+                setItemReportTypeModalOpen(false);
+                setReportModalOpen(true);
+              }}
+              className="flex items-start gap-3.5 p-4 rounded-xl border-2 border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-100/60 dark:hover:bg-red-950/40 text-left transition-all cursor-pointer group shadow-sm hover:shadow"
+            >
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition-transform">
+                ⚠️
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h4 className="text-sm font-bold text-red-700 dark:text-red-300">⚠️ 주의 / 위험 제보</h4>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                  해당 지역 방문 시 유의할 위험/주의 정보 (소매치기, 바가지 요금, 사기 등)를 제보합니다.
+                </p>
+              </div>
+            </button>
+
+            {/* 💡 사전 꿀팁 공유 선택 카드 */}
+            <button
+              type="button"
+              onClick={() => {
+                setItemReportType("TIP");
+                setItemReportTypeModalOpen(false);
+                setReportModalOpen(true);
+              }}
+              className="flex items-start gap-3.5 p-4 rounded-xl border-2 border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/60 dark:hover:bg-emerald-950/40 text-left transition-all cursor-pointer group shadow-sm hover:shadow"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition-transform">
+                💡
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-300">💡 사전 꿀팁 공유</h4>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                  해당 지역 방문 시 도움이 될 사전 정보 (예약/패스 팁, 촬영 포인트, 로컬 맛집 등)를 공유합니다.
+                </p>
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* 범례 플로팅 카드 (Map Legend) 🗺️ */}
       <div className="absolute bottom-20 right-3 sm:bottom-4 sm:right-4 z-[1000] select-none">
         {isLegendOpen ? (
-          <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3.5 shadow-2xl flex flex-col gap-2.5 w-[160px] animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-[165px] animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs">
             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                경고 범위 범례
+                마커 범례
               </span>
               <button
                 onClick={() => setIsLegendOpen(false)}
@@ -1045,22 +1201,15 @@ export default function ReadyBeforeGoMap() {
                 ✕
               </button>
             </div>
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-red-500 to-rose-700 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">국가</span>
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-red-500 to-rose-700 border border-white/20 shrink-0 flex items-center justify-center text-[9px]">⚠️</div>
+                <span className="font-semibold text-slate-200">주의/위험</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">도시</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded bg-gradient-to-br from-violet-500 to-fuchsia-700 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">구역</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-sky-400 to-indigo-600 border border-white/20 shrink-0" />
-                <span className="text-xs font-semibold text-slate-200">특정 위치</span>
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 border border-white/20 shrink-0 flex items-center justify-center text-[9px]">💡</div>
+                <span className="font-semibold text-slate-200">사전 꿀팁</span>
               </div>
             </div>
           </div>

@@ -38,7 +38,8 @@ import {
   ImageIcon,
   X,
   Loader2,
-  Share2
+  Share2,
+  Lightbulb
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -60,6 +61,14 @@ const CATEGORY_MAP: Record<string, { label: string; color: string; icon: string 
   LIES_TOURISM: { label: "🗣️ 가짜 관광정보", color: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300", icon: "🗣️" },
   FAKE_TAXI: { label: "🚕 가짜 택시/바가지", color: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/30 dark:text-sky-300", icon: "🚕" },
   OVERCHARGING: { label: "💸 바가지 요금", color: "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300", icon: "💸" },
+  // TIP 카테고리
+  ADVANCE_BOOKING: { label: "🎒 사전 예약/패스", color: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300", icon: "🎒" },
+  PHOTO_SPOT: { label: "📸 촬영 포인트", color: "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300", icon: "📸" },
+  HIDDEN_GEM: { label: "🗺️ 숨은 명소", color: "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300", icon: "🗺️" },
+  FOOD_RECOMMENDATION: { label: "🍜 맛집 추천", color: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300", icon: "🍜" },
+  MONEY_TIP: { label: "💰 환전/결제 팁", color: "bg-lime-100 text-lime-800 border-lime-200 dark:bg-lime-900/30 dark:text-lime-300", icon: "💰" },
+  TRANSPORT_TIP: { label: "🚆 교통/이동 팁", color: "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300", icon: "🚆" },
+  FACILITY_INFO: { label: "📦 짐보관/편의시설", color: "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300", icon: "📦" },
 };
 
 const CATEGORY_ITEMS = [
@@ -72,9 +81,16 @@ const CATEGORY_ITEMS = [
 
 function getCategoryInfo(cat: string, t: any) {
   const info = CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
+  // categories 또는 tip_categories 네임스페이스에서 번역 시도
+  const cautionTranslated = t(`categories.${cat}`);
+  const tipTranslated = t(`tip_categories.${cat}`);
+  // t()는 못 찾으면 path 문자열 그대로 반환하므로, 원래 path와 같으면 못 찾은 것
+  const translated = cautionTranslated !== `categories.${cat}` ? cautionTranslated
+    : tipTranslated !== `tip_categories.${cat}` ? tipTranslated
+    : info.label;
   return {
     ...info,
-    label: t(`categories.${cat}`, { defaultValue: info.label })
+    label: translated
   };
 }
 
@@ -116,6 +132,7 @@ export default function Home() {
     setSelectTypeModalOpen,
     isReportModalOpen,
     setReportModalOpen,
+    setItemReportTypeModalOpen,
     isAddressSearchModalOpen,
     setAddressSearchModalOpen,
     isGeocodeConfirmModalOpen,
@@ -867,10 +884,22 @@ export default function Home() {
                     )}
 
                     {scam.avoidanceTip && (
-                      <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300">
+                      <div className={scam.reportType === "TIP"
+                        ? "bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-800 space-y-1 dark:bg-emerald-950/10 dark:border-emerald-950/20 dark:text-emerald-300"
+                        : "bg-rose-50/50 border border-rose-100 rounded-lg p-3 text-xs text-rose-800 space-y-1 dark:bg-rose-950/10 dark:border-rose-950/20 dark:text-rose-300"
+                      }>
                         <h4 className="font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
-                          {t("common.avoidance_title")}
+                          {scam.reportType === "TIP" ? (
+                            <>
+                              <Lightbulb className="w-3.5 h-3.5 text-emerald-600" /> 
+                              <span>추가 팁 & 유의사항</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> 
+                              <span>{t("common.avoidance_title")}</span>
+                            </>
+                          )}
                         </h4>
                         <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
                       </div>
@@ -1084,7 +1113,7 @@ export default function Home() {
                   setIsReportMode(true);
                   setReportType("existing");
                   setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
-                  setReportModalOpen(true);
+                  setItemReportTypeModalOpen(true);
                 }}
               >
                 <span>➕</span>
@@ -1153,7 +1182,7 @@ export default function Home() {
                     setIsReportMode(true);
                     setReportType("existing");
                     setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
-                    setReportModalOpen(true);
+                    setItemReportTypeModalOpen(true);
                     setIsMobileFeedOpen(false);
                   }}
                 >
@@ -1284,9 +1313,9 @@ export default function Home() {
         <DialogContent className="w-[90%] max-w-[420px] p-6 rounded-2xl bg-card border border-border shadow-2xl">
           <DialogHeader className="space-y-1.5 text-center">
             <DialogTitle className="text-lg font-black tracking-tight flex items-center justify-center gap-1.5 text-foreground">
-              🧭 피해 제보 위치 지정
+              제보 위치 지정
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <DialogDescription className="text-xs text-muted-foreground text-center">
               제보 등록을 위한 위치 지정 방식을 선택해 주세요.
             </DialogDescription>
           </DialogHeader>
@@ -1405,7 +1434,7 @@ export default function Home() {
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">현재 내 위치에서 제보</h4>
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  GPS 센서를 이용하여 현재 내 물리적 위치를 자동으로 추적해 간편하게 제보합니다.
+                  현재 내 위치에서 제보합니다.
                 </p>
               </div>
             </button>
@@ -1425,7 +1454,7 @@ export default function Home() {
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">지도에서 직접 핀 찍기</h4>
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  지도의 특정 지점을 콕 찝어 새로운 피해 상권이나 랜드마크 이름을 작명하여 제보합니다.
+                  지도의 특정 위치에 제보합니다.
                 </p>
               </div>
             </button>
@@ -1445,7 +1474,7 @@ export default function Home() {
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">주소 검색을 통해 등록</h4>
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  건물명이나 도로명 주소 검색을 통해 제보할 장소를 간편하고 정확하게 찾습니다.
+                  주소 검색을 통해 제보할 지역을 찾습니다.
                 </p>
               </div>
             </button>
@@ -1532,7 +1561,7 @@ export default function Home() {
 
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-                증거 사진 첨부 (영수증, 간판, 현장 등 - 최대 5장)
+                사진 첨부 (최대 5장)
               </label>
               <div className="flex flex-wrap gap-2 items-center pt-1">
                 {editExistingImageUrls.length + editImageFiles.length < 5 && (

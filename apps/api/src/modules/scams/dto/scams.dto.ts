@@ -11,6 +11,7 @@ export const CreateScamInfoBaseSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   scope: z.enum(['spot', 'region', 'city', 'country']).optional().default('spot'),
+  reportType: z.enum(['CAUTION', 'TIP', 'INFO']).optional().default('CAUTION'),
   title: z.string().min(2, '제보 제목은 최소 2자 이상이어야 합니다.').max(100, '제목은 최대 100자까지 작성 가능합니다.'),
   description: z.string().min(10, '상세 피해 내용은 최소 10자 이상 자세히 작성해 주세요.'),
   avoidanceTip: z.string().max(1000, '대처법은 최대 1000자까지 입력 가능합니다.').nullable().optional(),

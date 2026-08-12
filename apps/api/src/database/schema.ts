@@ -9,6 +9,8 @@ export const reactionTypeEnum = pgEnum('reaction_type', ['like', 'dislike']);
 export const emoticonStatusEnum = pgEnum('emoticon_status', ['pending', 'approved', 'rejected']);
 export const reportStatusEnum = pgEnum('report_status', ['pending', 'resolved', 'rejected']);
 export const scamScopeEnum = pgEnum('scam_scope', ['spot', 'region', 'city', 'country']);
+export const reportTypeEnum = pgEnum('report_type', ['CAUTION', 'TIP', 'INFO']);
+
 
 // Users table
 export const users = pgTable('users', {
@@ -560,6 +562,7 @@ export const scamInfos = pgTable('scam_infos', {
   countryCode: text('country_code')
     .references(() => countries.code, { onDelete: 'cascade' }),
   scope: scamScopeEnum('scope').default('spot').notNull(),
+  reportType: reportTypeEnum('report_type').default('CAUTION').notNull(), // 'CAUTION' (주의/위험) | 'TIP' (사전 꿀팁) | 'INFO' (일반)
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
@@ -577,6 +580,7 @@ export const scamInfos = pgTable('scam_infos', {
   regionIdx: index('scam_infos_region_idx').on(table.regionId),
   cityIdx: index('scam_infos_city_idx').on(table.cityId),
   countryIdx: index('scam_infos_country_idx').on(table.countryCode),
+  typeIdx: index('scam_infos_report_type_idx').on(table.reportType),
   upvoteIdx: index('scam_infos_upvote_idx').on(table.upvoteCount),
   userScaleIdx: index('scam_infos_user_idx').on(table.userId),
 }));

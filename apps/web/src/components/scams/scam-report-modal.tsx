@@ -12,17 +12,28 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Image as ImageIcon, X, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { PlusCircle, Image as ImageIcon, X, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 
-const CATEGORY_ITEMS = [
+const CAUTION_CATEGORY_ITEMS = [
   { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
   { value: "DRUG_HAZARD", tKey: "categories.DRUG_HAZARD" },
   { value: "LIES_TOURISM", tKey: "categories.LIES_TOURISM" },
   { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
   { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
+];
+
+const TIP_CATEGORY_ITEMS = [
+  { value: "ADVANCE_BOOKING", tKey: "tip_categories.ADVANCE_BOOKING" },
+  { value: "PHOTO_SPOT", tKey: "tip_categories.PHOTO_SPOT" },
+  { value: "HIDDEN_GEM", tKey: "tip_categories.HIDDEN_GEM" },
+  { value: "FOOD_RECOMMENDATION", tKey: "tip_categories.FOOD_RECOMMENDATION" },
+  { value: "MONEY_TIP", tKey: "tip_categories.MONEY_TIP" },
+  { value: "TRANSPORT_TIP", tKey: "tip_categories.TRANSPORT_TIP" },
+  { value: "FACILITY_INFO", tKey: "tip_categories.FACILITY_INFO" },
 ];
 
 interface ImagePreviewItemProps {
@@ -67,6 +78,8 @@ export function ScamReportModal() {
     setMapZoom,
     reportType,
     setReportType,
+    itemReportType,
+    setItemReportType,
     selectedRegionId,
     selectedRegion,
     geoData,
@@ -111,13 +124,13 @@ export function ScamReportModal() {
     enabled: isReportModalOpen,
   });
 
-  const { data: cities = [], isPending: isCitiesPending } = useQuery<City[]>({
+  const { data: cities = [], isFetching: isCitiesFetching } = useQuery<City[]>({
     queryKey: ["cities", countryCode],
     queryFn: () => scamsApi.getCities(countryCode),
     enabled: isReportModalOpen && !!countryCode,
   });
 
-  const { data: cityRegions = [], isPending: isRegionsPending } = useQuery<Region[]>({
+  const { data: cityRegions = [], isFetching: isRegionsFetching } = useQuery<Region[]>({
     queryKey: ["city-regions", cityId],
     queryFn: () => scamsApi.getRegions(cityId),
     enabled: isReportModalOpen && !!cityId && cityId !== "NEW_CITY",
@@ -392,7 +405,7 @@ export function ScamReportModal() {
     }
 
     if (!scamCategory) {
-      newErrors.scamCategory = "사기 피해 카테고리를 선택해 주세요.";
+      newErrors.scamCategory = itemReportType === "TIP" ? "꿀팁 카테고리를 선택해 주세요." : "사기 피해 카테고리를 선택해 주세요.";
     }
     
     if (!title.trim()) {
@@ -458,6 +471,7 @@ export function ScamReportModal() {
 
         createMutation.mutate({
           scope,
+          reportType: itemReportType as any,
           cityId: scope === "country" ? undefined : (isExistingCity ? cityId : undefined),
           countryCode: isExistingCountry ? countryCode : (detectedCountryCode || "ETC"),
           countryName: !isExistingCountry ? (detectedCountryName || "기타 국가") : undefined,
@@ -475,6 +489,7 @@ export function ScamReportModal() {
       } else {
         createMutation.mutate({
           scope,
+          reportType: itemReportType as any,
           regionId: (scope === "spot" || scope === "region") ? regionId : undefined,
           cityId: scope === "city" ? cityId : undefined,
           countryCode: scope === "country" ? countryCode : undefined,
@@ -506,57 +521,58 @@ export function ScamReportModal() {
       <DialogContent className="sm:max-w-[550px] p-6 rounded-2xl bg-card max-h-[95vh] overflow-y-auto scrollbar-thin">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
-            <PlusCircle className="w-5 h-5 text-red-600" />
-            {t("report_modal.title")}
+            <PlusCircle className={`w-5 h-5 ${itemReportType === "TIP" ? "text-emerald-600" : "text-red-600"}`} />
+            {itemReportType === "TIP" ? t("report_modal.title_tip") : t("report_modal.title")}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground pt-1">
-            {t("report_modal.desc", {
-              lat: reportCoords?.[0].toFixed(5) || 0,
-              lng: reportCoords?.[1].toFixed(5) || 0,
-            })}
+            {itemReportType === "TIP"
+              ? t("report_modal.desc_tip", {
+                  lat: reportCoords?.[0].toFixed(5) || 0,
+                  lng: reportCoords?.[1].toFixed(5) || 0,
+                })
+              : t("report_modal.desc", {
+                  lat: reportCoords?.[0].toFixed(5) || 0,
+                  lng: reportCoords?.[1].toFixed(5) || 0,
+                })
+            }
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           
-          {/* 제보 방식 선택 토글 🔀 */}
-          {reportCoords && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                제보 방식 선택
-              </Label>
-              <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReportType("existing");
-                    if (selectedRegionId) setRegionId(selectedRegionId);
-                  }}
-                  className={`flex-1 text-center py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${
-                    reportType === "existing"
-                      ? "bg-white dark:bg-slate-800 shadow text-slate-850 dark:text-slate-100 font-bold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
-                  }`}
-                >
-                  기존 등록 장소에 추가 제보
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReportType("new");
-                    setRegionId("");
-                  }}
-                  className={`flex-1 text-center py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${
-                    reportType === "new"
-                      ? "bg-white dark:bg-slate-800 shadow text-slate-850 dark:text-slate-100 font-bold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
-                  }`}
-                >
-                  이 위치에 새로운 장소 등록
-                </button>
+
+
+          {/* 선택된 정보 성격 안내 배너 🎯 */}
+          <div
+            className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${
+              itemReportType === "CAUTION"
+                ? "bg-red-50/70 border-red-200 text-red-800 dark:bg-red-950/40 dark:border-red-900/40 dark:text-red-300"
+                : "bg-emerald-50/70 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900/40 dark:text-emerald-300"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-base font-bold shrink-0 ${
+                  itemReportType === "CAUTION"
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                }`}
+              >
+                {itemReportType === "CAUTION" ? "⚠️" : "💡"}
+              </div>
+              <div className="text-xs leading-tight min-w-0">
+                <p className="font-bold">
+                  {itemReportType === "CAUTION" ? "주의 / 위험 제보" : "사전 꿀팁 제보"}
+                </p>
+                <p className="text-[11px] opacity-80 mt-0.5 truncate">
+                  {itemReportType === "CAUTION"
+                    ? "해당 지역 방문 시 유의할 위험/주의 정보를 알려주세요."
+                    : "해당 지역 방문 시 도움이 될 사전 정보를 알려주세요."}
+                </p>
               </div>
             </div>
-          )}
+          
+          </div>
 
           {/* 제보 적용 범위 선택 🎯 */}
           <div className="space-y-1.5">
@@ -566,7 +582,7 @@ export function ScamReportModal() {
             <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl gap-1">
               {(["spot", "region", "city", "country"] as const).map((sc) => {
                 const label = 
-                  sc === "spot" ? "📍 특정 상점" :
+                  sc === "spot" ? "📍 특정 위치" :
                   sc === "region" ? "🗺️ 구역/거리 전체" :
                   sc === "city" ? "🏙️ 도시 전체" :
                   "🇹🇭 국가 전체";
@@ -620,7 +636,7 @@ export function ScamReportModal() {
               <div className={scope === "country" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    {t("report_modal.country")}
+                    {t("report_modal.country")} <span className="text-red-500 font-bold">*</span>
                   </Label>
                   <Select 
                     value={countryCode} 
@@ -669,7 +685,7 @@ export function ScamReportModal() {
                 {scope !== "country" && (
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      {t("report_modal.city")}
+                      {t("report_modal.city")} <span className="text-red-500 font-bold">*</span>
                     </Label>
                     <Select 
                       value={cityId} 
@@ -677,7 +693,7 @@ export function ScamReportModal() {
                         setCityId(val);
                         if (errors.cityId) setErrors(prev => ({ ...prev, cityId: "" }));
                       }}
-                      disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesPending || uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && isGeoSuccess)}
+                      disabled={(!countryCode && cityId !== "NEW_CITY") || isCitiesFetching || uploading || isLoadingGeo || reportType === "existing" || (reportType === "new" && isGeoSuccess)}
                     >
                       <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.cityId ? "border-red-500 focus:ring-red-400" : ""}`}>
                         {isLoadingGeo ? (
@@ -719,7 +735,7 @@ export function ScamReportModal() {
             reportType === "new" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="regionName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {scope === "region" ? "구역/거리 이름 (예: 카오산로드 전체, 야시장 구역)" : `${t("report_modal.place_name")} (새로 등록할 세부 장소명)`}
+                  {scope === "region" ? "구역/거리 이름 (예: 카오산로드 전체, 야시장 구역)" : `${t("report_modal.place_name")} (새로 등록할 세부 장소명)`} <span className="text-red-500 font-bold">*</span>
                 </Label>
                 <Input
                   id="regionName"
@@ -744,40 +760,19 @@ export function ScamReportModal() {
             ) : (
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {scope === "region" ? "기존 등록 구역 선택" : "기존 등록 장소 선택"}
+                  제보 대상 장소 <span className="text-red-500 font-bold">*</span>
                 </Label>
-                <Select 
-                  value={regionId} 
-                  onValueChange={(val) => {
-                    setRegionId(val);
-                    if (errors.regionId) setErrors(prev => ({ ...prev, regionId: "" }));
-                  }} 
-                  disabled={isRegionsPending || uploading || reportType === "existing"}
-                >
-                  <SelectTrigger className={`w-full text-xs cursor-pointer ${errors.regionId ? "border-red-500 focus:ring-red-400" : ""}`}>
-                    {isRegionsPending ? (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        지역 목록 불러오는 중...
-                      </span>
-                    ) : (
-                      <SelectValue placeholder="등록된 기존 장소를 선택해 주세요" />
-                    )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cityRegions.map((r) => (
-                      <SelectItem key={r.id} value={r.id} className="cursor-pointer">
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                    {cityRegions.length === 0 && !isRegionsPending && (
-                      <SelectItem value="NO_REGIONS" disabled className="text-muted-foreground text-xs text-center py-2">
-                        등록된 기존 장소가 없습니다.
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {errors.regionId && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.regionId}</p>}
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MapPin className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                      {selectedRegion?.name || cityRegions.find((r) => r.id === regionId)?.name || "선택된 장소"}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-slate-200/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 shrink-0">
+                    기존 장소 고정
+                  </Badge>
+                </div>
               </div>
             )
           )}
@@ -785,7 +780,7 @@ export function ScamReportModal() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                카테고리 (최소 1개, 최대 3개)
+                카테고리(최소 1개, 최대 3개) <span className="text-red-500 font-bold">*</span>
               </Label>
               <span className="text-[10px] text-muted-foreground font-semibold">
                 선택됨: {selectedCats.length}/3
@@ -793,7 +788,7 @@ export function ScamReportModal() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
-              {CATEGORY_ITEMS.map((item) => {
+              {(itemReportType === "TIP" ? TIP_CATEGORY_ITEMS : CAUTION_CATEGORY_ITEMS).map((item) => {
                 const isChecked = selectedCats.includes(item.value);
                 return (
                   <button
@@ -911,10 +906,12 @@ export function ScamReportModal() {
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="title" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.title_label")}</Label>
+              <Label htmlFor="title" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {t("report_modal.title_label")} <span className="text-red-500 font-bold">*</span>
+              </Label>
               <Input
                 id="title"
-                placeholder={t("report_modal.title_placeholder")}
+                placeholder={itemReportType === "TIP" ? t("report_modal.title_placeholder_tip") : t("report_modal.title_placeholder")}
                 value={title}
                 onChange={(e) => {
                   setTitle(e.target.value);
@@ -928,10 +925,12 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="description" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.desc_label")}</Label>
+              <Label htmlFor="description" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {itemReportType === "TIP" ? t("report_modal.desc_label_tip") : t("report_modal.desc_label")} <span className="text-red-500 font-bold">*</span>
+              </Label>
               <Textarea
                 id="description"
-                placeholder={t("report_modal.desc_placeholder")}
+                placeholder={itemReportType === "TIP" ? t("report_modal.desc_placeholder_tip") : t("report_modal.desc_placeholder")}
                 value={description}
                 onChange={(e) => {
                   setDescription(e.target.value);
@@ -945,10 +944,12 @@ export function ScamReportModal() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="avoidanceTip" className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.avoidance_label")}</Label>
+              <Label htmlFor="avoidanceTip" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {itemReportType === "TIP" ? t("report_modal.avoidance_label_tip") : t("report_modal.avoidance_label")}
+              </Label>
               <Textarea
                 id="avoidanceTip"
-                placeholder={t("report_modal.avoidance_placeholder")}
+                placeholder={itemReportType === "TIP" ? t("report_modal.avoidance_placeholder_tip") : t("report_modal.avoidance_placeholder")}
                 value={avoidanceTip}
                 onChange={(e) => setAvoidanceTip(e.target.value)}
                 className="text-xs min-h-[70px] resize-none"
