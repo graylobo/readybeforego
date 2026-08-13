@@ -12,6 +12,15 @@ import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
+import {
+  CAUTION_CATEGORY_ITEMS,
+  TIP_CATEGORY_ITEMS,
+  OTHER_NOTE_MIN_LENGTH,
+  getCategoryInfo,
+  hasOtherCategory,
+  parseCategories,
+} from "@/lib/constants/scam-categories";
+import { ScamCategoryPicker } from "@/components/scams/scam-category-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -55,46 +64,6 @@ const ReadyBeforeGoMap = dynamic(() => import("@/components/map/ReadyBeforeGoMap
     </div>
   ),
 });
-
-// Category helper maps
-const CATEGORY_MAP: Record<string, { label: string; color: string; icon: string }> = {
-  FORCED_SHOPPING: { label: "🛍️ 호객/강매", color: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300", icon: "🛍️" },
-  DRUG_HAZARD: { label: "💊 약물 위험", color: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300", icon: "💊" },
-  LIES_TOURISM: { label: "🗣️ 가짜 관광정보", color: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300", icon: "🗣️" },
-  FAKE_TAXI: { label: "🚕 가짜 택시/바가지", color: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/30 dark:text-sky-300", icon: "🚕" },
-  OVERCHARGING: { label: "💸 바가지 요금", color: "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300", icon: "💸" },
-  // TIP 카테고리
-  ADVANCE_BOOKING: { label: "🎒 사전 예약/패스", color: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300", icon: "🎒" },
-  PHOTO_SPOT: { label: "📸 촬영 포인트", color: "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300", icon: "📸" },
-  HIDDEN_GEM: { label: "🗺️ 숨은 명소", color: "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300", icon: "🗺️" },
-  FOOD_RECOMMENDATION: { label: "🍜 맛집 추천", color: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300", icon: "🍜" },
-  MONEY_TIP: { label: "💰 환전/결제 팁", color: "bg-lime-100 text-lime-800 border-lime-200 dark:bg-lime-900/30 dark:text-lime-300", icon: "💰" },
-  TRANSPORT_TIP: { label: "🚆 교통/이동 팁", color: "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300", icon: "🚆" },
-  FACILITY_INFO: { label: "📦 짐보관/편의시설", color: "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300", icon: "📦" },
-};
-
-const CATEGORY_ITEMS = [
-  { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
-  { value: "DRUG_HAZARD", tKey: "categories.DRUG_HAZARD" },
-  { value: "LIES_TOURISM", tKey: "categories.LIES_TOURISM" },
-  { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
-  { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
-];
-
-function getCategoryInfo(cat: string, t: any) {
-  const info = CATEGORY_MAP[cat] || { label: cat, color: "bg-slate-100 text-slate-800", icon: "⚠️" };
-  // categories 또는 tip_categories 네임스페이스에서 번역 시도
-  const cautionTranslated = t(`categories.${cat}`);
-  const tipTranslated = t(`tip_categories.${cat}`);
-  // t()는 못 찾으면 path 문자열 그대로 반환하므로, 원래 path와 같으면 못 찾은 것
-  const translated = cautionTranslated !== `categories.${cat}` ? cautionTranslated
-    : tipTranslated !== `tip_categories.${cat}` ? tipTranslated
-    : info.label;
-  return {
-    ...info,
-    label: translated
-  };
-}
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -158,6 +127,7 @@ export default function Home() {
   const [editAvoidanceTip, setEditAvoidanceTip] = useState("");
   const [editSourceUrl, setEditSourceUrl] = useState("");
   const [editScamCategory, setEditScamCategory] = useState("");
+  const [editOtherCategoryNote, setEditOtherCategoryNote] = useState("");
   const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
   const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
@@ -520,6 +490,10 @@ export default function Home() {
       toast.error("사기 피해 카테고리를 최소 1개 이상 선택해 주세요.");
       return;
     }
+    if (hasOtherCategory(editScamCategory) && editOtherCategoryNote.trim().length < OTHER_NOTE_MIN_LENGTH) {
+      toast.error("기타를 고르면 한 줄로 알려 주세요.");
+      return;
+    }
 
     setIsUploading(true);
     try {
@@ -543,6 +517,7 @@ export default function Home() {
           avoidanceTip: editAvoidanceTip || null,
           sourceUrl: editSourceUrl || null,
           scamCategory: editScamCategory,
+          otherCategoryNote: hasOtherCategory(editScamCategory) ? editOtherCategoryNote.trim() : null,
           imageUrls: finalImageUrls.length > 0 ? finalImageUrls : null,
         }
       });
@@ -799,7 +774,7 @@ export default function Home() {
                           </Badge>
                         )}
                         {scam.scamCategory.split(",").filter(Boolean).map((catKey) => {
-                          const cat = getCategoryInfo(catKey, t);
+                          const cat = getCategoryInfo(catKey, t, scam.otherCategoryNote);
                           return (
                             <Badge key={catKey} variant="outline" className={`${cat.color} border text-[10px] font-semibold py-0.5 px-2 shrink-0`}>
                               {cat.label}
@@ -837,6 +812,7 @@ export default function Home() {
                                 setEditAvoidanceTip(scam.avoidanceTip || "");
                                 setEditSourceUrl(scam.sourceUrl || "");
                                 setEditScamCategory(scam.scamCategory);
+                                setEditOtherCategoryNote(scam.otherCategoryNote || "");
                                 setEditExistingImageUrls(scam.imageUrls || []);
                                 setEditImageFiles([]);
                                 setEditImagePreviews([]);
@@ -1521,60 +1497,15 @@ export default function Home() {
           </DialogHeader>
 
           <form onSubmit={handleEditSubmit} className="space-y-4 pt-2">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  사기 유형 카테고리 (최소 1개, 최대 3개)
-                </label>
-                <span className="text-[10px] text-muted-foreground font-semibold">
-                  선택됨: {editScamCategory ? editScamCategory.split(",").filter(Boolean).length : 0}/3
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
-                {CATEGORY_ITEMS.map((item) => {
-                  const selectedCats = editScamCategory ? editScamCategory.split(",").filter(Boolean) : [];
-                  const isChecked = selectedCats.includes(item.value);
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => {
-                        let next;
-                        if (isChecked) {
-                          next = selectedCats.filter((c) => c !== item.value);
-                        } else {
-                          if (selectedCats.length >= 3) {
-                            toast.error("카테고리는 최대 3개까지 선택할 수 있습니다.", { id: "max-categories-warning" });
-                            return;
-                          }
-                          next = [...selectedCats, item.value];
-                        }
-                        setEditScamCategory(next.join(","));
-                      }}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-xs transition-all cursor-pointer ${
-                        isChecked
-                          ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 font-bold font-semibold"
-                          : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0 ${
-                        isChecked
-                          ? "bg-blue-600 border-blue-600 text-white"
-                          : "border-slate-300 dark:border-slate-700 bg-transparent"
-                      }`}>
-                        {isChecked && (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="w-3 h-3">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className="truncate">{t(item.tKey)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <ScamCategoryPicker
+              items={editingScam?.reportType === "TIP" ? TIP_CATEGORY_ITEMS : CAUTION_CATEGORY_ITEMS}
+              selectedCats={parseCategories(editScamCategory)}
+              onChange={(next) => setEditScamCategory(next.join(","))}
+              otherNote={editOtherCategoryNote}
+              onOtherNoteChange={setEditOtherCategoryNote}
+              disabled={isUploading || editMutation.isPending}
+              reportType={editingScam?.reportType === "TIP" ? "TIP" : "CAUTION"}
+            />
 
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">

@@ -569,6 +569,7 @@ export const scamInfos = pgTable('scam_infos', {
   avoidanceTip: text('avoidance_tip'),
   subLocation: text('sub_location'),
   scamCategory: text('scam_category').notNull(),
+  otherCategoryNote: text('other_category_note'), // OTHER 선택 시 한 줄 성격 설명 (운영 승격용)
   sourceUrl: text('source_url'),
   imageUrls: json('image_urls'),
   viewCount: integer('view_count').default(0).notNull(),

@@ -576,14 +576,17 @@ export class ScamsRepository {
       conditions.push(eq(schema.scamInfos.cityId, cityId));
     }
     if (scamCategory && scamCategory !== 'all') {
-      conditions.push(eq(schema.scamInfos.scamCategory, scamCategory));
+      conditions.push(
+        sql`(',' || ${schema.scamInfos.scamCategory} || ',') LIKE ${'%,' + scamCategory + ',%'}`
+      );
     }
     if (search && search.trim()) {
       const queryStr = `%${search.trim()}%`;
       conditions.push(
         or(
           sql`${schema.scamInfos.title} ILIKE ${queryStr}`,
-          sql`${schema.scamInfos.description} ILIKE ${queryStr}`
+          sql`${schema.scamInfos.description} ILIKE ${queryStr}`,
+          sql`${schema.scamInfos.otherCategoryNote} ILIKE ${queryStr}`
         )!
       );
     }

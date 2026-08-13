@@ -24,7 +24,8 @@
     "DRUG_HAZARD": "💊 마약 및 유해물질 위험",
     "LIES_TOURISM": "🗣️ 가짜 정보/사칭 사기",
     "FAKE_TAXI": "🚕 가짜 택시/바가지 요금",
-    "OVERCHARGING": "💸 바가지 및 과다 청구"
+    "OVERCHARGING": "💸 바가지 및 과다 청구",
+    "OTHER": "📝 기타"
   },
   "tip_categories": {
     "ADVANCE_BOOKING": "🎒 사전 예약/패스 준비",
@@ -33,7 +34,8 @@
     "FOOD_RECOMMENDATION": "🍜 맛집/먹거리 추천",
     "MONEY_TIP": "💰 환전/결제 팁",
     "TRANSPORT_TIP": "🚆 교통/이동 팁",
-    "FACILITY_INFO": "📦 짐보관/편의시설 정보"
+    "FACILITY_INFO": "📦 짐보관/편의시설 정보",
+    "OTHER": "📝 기타"
   },
   "report_modal": {
     "guide_toast": "지도에서 피해 발생 위치를 클릭해 주세요! 📍 핀이 생성되며 제보 입력창이 열립니다.",
@@ -50,6 +52,11 @@
     "place_name_desc": "지도에 핀 마커의 이름으로 등록되며 다른 제보들과 공유됩니다.",
     "category": "사기 유형 카테고리",
     "category_select": "카테고리 선택",
+    "category_hint": "가장 가까운 유형을 골라 주세요. 없으면 기타",
+    "other_note_label": "어떤 내용인가요?",
+    "other_note_placeholder": "예: 소매치기, 심야 골목 위험",
+    "other_note_placeholder_tip": "예: 유심 구매, 혼잡 시간 피하기",
+    "other_note_required": "기타를 고르면 한 줄로 알려 주세요.",
     "title_label": "제보 제목",
     "title_placeholder": "예: 툭툭 10바트 투어 사기",
     "title_placeholder_tip": "예: 오사카 유니버셜 스튜디오 USJ 익스프레스 패스 구매 팁",

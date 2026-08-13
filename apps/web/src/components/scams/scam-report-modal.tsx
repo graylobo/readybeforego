@@ -17,24 +17,15 @@ import { PlusCircle, Image as ImageIcon, X, Loader2, MapPin } from "lucide-react
 import { toast } from "sonner";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
-
-const CAUTION_CATEGORY_ITEMS = [
-  { value: "FORCED_SHOPPING", tKey: "categories.FORCED_SHOPPING" },
-  { value: "DRUG_HAZARD", tKey: "categories.DRUG_HAZARD" },
-  { value: "LIES_TOURISM", tKey: "categories.LIES_TOURISM" },
-  { value: "FAKE_TAXI", tKey: "categories.FAKE_TAXI" },
-  { value: "OVERCHARGING", tKey: "categories.OVERCHARGING" },
-];
-
-const TIP_CATEGORY_ITEMS = [
-  { value: "ADVANCE_BOOKING", tKey: "tip_categories.ADVANCE_BOOKING" },
-  { value: "PHOTO_SPOT", tKey: "tip_categories.PHOTO_SPOT" },
-  { value: "HIDDEN_GEM", tKey: "tip_categories.HIDDEN_GEM" },
-  { value: "FOOD_RECOMMENDATION", tKey: "tip_categories.FOOD_RECOMMENDATION" },
-  { value: "MONEY_TIP", tKey: "tip_categories.MONEY_TIP" },
-  { value: "TRANSPORT_TIP", tKey: "tip_categories.TRANSPORT_TIP" },
-  { value: "FACILITY_INFO", tKey: "tip_categories.FACILITY_INFO" },
-];
+import { ScamCategoryPicker } from "@/components/scams/scam-category-picker";
+import {
+  CAUTION_CATEGORY_ITEMS,
+  TIP_CATEGORY_ITEMS,
+  OTHER_CATEGORY,
+  OTHER_NOTE_MIN_LENGTH,
+  getCategoryInfo,
+  hasOtherCategory,
+} from "@/lib/constants/scam-categories";
 
 interface ImagePreviewItemProps {
   url: string;
@@ -91,6 +82,7 @@ export function ScamReportModal() {
   const [regionName, setRegionName] = useState("");
   const [scamCategory, setScamCategory] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [otherCategoryNote, setOtherCategoryNote] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [avoidanceTip, setAvoidanceTip] = useState("");
@@ -145,7 +137,9 @@ export function ScamReportModal() {
 
   const overlappingScams = regionScams.filter((existingScam) => {
     const existingCategories = existingScam.scamCategory ? existingScam.scamCategory.split(",") : [];
-    return selectedCats.some((cat) => existingCategories.includes(cat));
+    return selectedCats
+      .filter((cat) => cat !== OTHER_CATEGORY)
+      .some((cat) => existingCategories.includes(cat));
   });
 
   useEffect(() => {
@@ -153,6 +147,7 @@ export function ScamReportModal() {
       setRegionName("");
       setScamCategory("");
       setSelectedCats([]);
+      setOtherCategoryNote("");
       setTitle("");
       setDescription("");
       setAvoidanceTip("");
@@ -408,6 +403,8 @@ export function ScamReportModal() {
 
     if (!scamCategory) {
       newErrors.scamCategory = itemReportType === "TIP" ? "꿀팁 카테고리를 선택해 주세요." : "사기 피해 카테고리를 선택해 주세요.";
+    } else if (hasOtherCategory(selectedCats) && otherCategoryNote.trim().length < OTHER_NOTE_MIN_LENGTH) {
+      newErrors.otherCategoryNote = t("report_modal.other_note_required");
     }
     
     if (!title.trim()) {
@@ -482,6 +479,7 @@ export function ScamReportModal() {
           latitude: reportCoords[0],
           longitude: reportCoords[1],
           scamCategory,
+          otherCategoryNote: hasOtherCategory(selectedCats) ? otherCategoryNote.trim() : undefined,
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
@@ -497,6 +495,7 @@ export function ScamReportModal() {
           cityId: scope === "city" ? cityId : undefined,
           countryCode: scope === "country" ? countryCode : undefined,
           scamCategory,
+          otherCategoryNote: hasOtherCategory(selectedCats) ? otherCategoryNote.trim() : undefined,
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
@@ -796,63 +795,26 @@ export function ScamReportModal() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                카테고리(최소 1개, 최대 3개) <span className="text-red-500 font-bold">*</span>
-              </Label>
-              <span className="text-[10px] text-muted-foreground font-semibold">
-                선택됨: {selectedCats.length}/3
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
-              {(itemReportType === "TIP" ? TIP_CATEGORY_ITEMS : CAUTION_CATEGORY_ITEMS).map((item) => {
-                const isChecked = selectedCats.includes(item.value);
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => {
-                      let next;
-                      if (isChecked) {
-                        next = selectedCats.filter((c) => c !== item.value);
-                      } else {
-                        if (selectedCats.length >= 3) {
-                          toast.warning("카테고리는 최대 3개까지 선택할 수 있습니다.", { id: "max-categories-warning" });
-                          return;
-                        }
-                        next = [...selectedCats, item.value];
-                      }
-                      setSelectedCats(next);
-                      setScamCategory(next.join(","));
-                      if (errors.scamCategory) setErrors(prev => ({ ...prev, scamCategory: "" }));
-                    }}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-xs transition-all cursor-pointer ${
-                      isChecked
-                        ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 font-bold font-semibold"
-                        : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0 ${
-                      isChecked
-                        ? "bg-blue-600 border-blue-600 text-white"
-                        : "border-slate-300 dark:border-slate-700 bg-transparent"
-                    }`}>
-                      {isChecked && (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="w-3 h-3">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="truncate">{t(item.tKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {errors.scamCategory && <p className="text-[10px] text-red-500 font-semibold mt-1">⚠️ {errors.scamCategory}</p>}
-          </div>
+          <ScamCategoryPicker
+            items={itemReportType === "TIP" ? TIP_CATEGORY_ITEMS : CAUTION_CATEGORY_ITEMS}
+            selectedCats={selectedCats}
+            onChange={(next) => {
+              setSelectedCats(next);
+              setScamCategory(next.join(","));
+              if (errors.scamCategory || errors.otherCategoryNote) {
+                setErrors((prev) => ({ ...prev, scamCategory: "", otherCategoryNote: "" }));
+              }
+            }}
+            otherNote={otherCategoryNote}
+            onOtherNoteChange={(note) => {
+              setOtherCategoryNote(note);
+              if (errors.otherCategoryNote) setErrors((prev) => ({ ...prev, otherCategoryNote: "" }));
+            }}
+            disabled={uploading}
+            error={errors.scamCategory}
+            otherNoteError={errors.otherCategoryNote}
+            reportType={itemReportType}
+          />
 
           {/* 동일 지역 내 유사 카테고리 제보 감지 경고 안내창 ⚠️ */}
           {overlappingScams.length > 0 && (
@@ -876,7 +838,7 @@ export function ScamReportModal() {
                         {scam.title}
                       </span>
                       <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
-                        {scam.scamCategory.split(",").map(cat => t(`categories.${cat}`)).join(", ")}
+                        {scam.scamCategory.split(",").map((cat) => getCategoryInfo(cat, t, scam.otherCategoryNote).label).join(", ")}
                       </span>
                     </div>
                   </button>
@@ -1062,7 +1024,7 @@ export function ScamReportModal() {
             <DialogHeader className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded">
-                  {t(`categories.${selectedScamDetail.scamCategory.split(",")[0]}`)}
+                  {getCategoryInfo(selectedScamDetail.scamCategory.split(",")[0], t, selectedScamDetail.otherCategoryNote).label}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   {new Date(selectedScamDetail.createdAt).toLocaleDateString()}

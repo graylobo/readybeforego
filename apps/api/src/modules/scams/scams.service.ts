@@ -27,6 +27,10 @@ export interface GeocodingProvider {
   searchAddress(query: string): Promise<GeocodeResponse[]>;
 }
 
+function hasOtherCategory(scamCategory?: string | null) {
+  return (scamCategory || '').split(',').map((c) => c.trim()).includes('OTHER');
+}
+
 function formatExternalUrl(url?: string | null): string | null {
   if (!url || typeof url !== 'string') return null;
   let trimmed = url.trim();
@@ -408,6 +412,9 @@ export class ScamsService {
         avoidanceTip: createDto.avoidanceTip ?? null,
         subLocation: createDto.subLocation ?? null,
         scamCategory: createDto.scamCategory,
+        otherCategoryNote: hasOtherCategory(createDto.scamCategory)
+          ? (createDto.otherCategoryNote?.trim() || null)
+          : null,
         sourceUrl: formatExternalUrl(createDto.sourceUrl),
         imageUrls: createDto.imageUrls ?? [],
       }, tx);
@@ -429,6 +436,25 @@ export class ScamsService {
     const payload = { ...updateDto };
     if (payload.sourceUrl !== undefined) {
       payload.sourceUrl = formatExternalUrl(payload.sourceUrl);
+    }
+
+    const nextCategory = payload.scamCategory ?? scam.scamCategory;
+    const nextCats = (nextCategory || '').split(',').map((c) => c.trim()).filter(Boolean);
+    if (nextCats.includes('OTHER') && nextCats.length > 1) {
+      throw new BadRequestException('기타는 다른 카테고리와 함께 선택할 수 없습니다.');
+    }
+    if (!hasOtherCategory(nextCategory)) {
+      payload.otherCategoryNote = null;
+    } else {
+      const nextNote = (payload.otherCategoryNote !== undefined
+        ? payload.otherCategoryNote
+        : scam.otherCategoryNote)?.trim() || '';
+      if (nextNote.length < 2) {
+        throw new BadRequestException('기타를 고르면 어떤 내용인지 한 줄로 알려 주세요.');
+      }
+      if (payload.otherCategoryNote !== undefined) {
+        payload.otherCategoryNote = nextNote;
+      }
     }
 
     const updateResult = await this.scamsRepository.update(id, payload);

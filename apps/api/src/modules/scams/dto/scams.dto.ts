@@ -17,9 +17,13 @@ export const CreateScamInfoBaseSchema = z.object({
   avoidanceTip: z.string().max(1000, '대처법은 최대 1000자까지 입력 가능합니다.').nullable().optional(),
   subLocation: z.string().max(200, '세부 위치는 최대 200자까지 입력 가능합니다.').nullable().optional(),
   scamCategory: z.string().min(1, '사기 피해 카테고리를 최소 1개 이상 선택해 주세요.'),
+  otherCategoryNote: z.string().max(40, '기타 설명은 최대 40자까지 입력할 수 있습니다.').nullable().optional(),
   sourceUrl: z.string().url('유효한 URL 형식이 아닙니다.').or(z.literal('')).nullable().optional(),
   imageUrls: z.array(z.string().url()).nullable().optional(),
 });
+
+const hasOtherCategory = (scamCategory?: string) =>
+  (scamCategory || '').split(',').map((c) => c.trim()).includes('OTHER');
 
 export const CreateScamInfoSchema = CreateScamInfoBaseSchema.refine(
   data => {
@@ -51,6 +55,24 @@ export const CreateScamInfoSchema = CreateScamInfoBaseSchema.refine(
   {
     message: '제보 적용 범위에 따른 국가/도시/세부 장소명이 올바르게 선택되지 않았습니다.',
     path: ['cityId'],
+  }
+).refine(
+  data => {
+    const cats = data.scamCategory.split(',').map((c) => c.trim()).filter(Boolean);
+    return !cats.includes('OTHER') || cats.length === 1;
+  },
+  {
+    message: '기타는 다른 카테고리와 함께 선택할 수 없습니다.',
+    path: ['scamCategory'],
+  }
+).refine(
+  data => {
+    if (!hasOtherCategory(data.scamCategory)) return true;
+    return !!(data.otherCategoryNote && data.otherCategoryNote.trim().length >= 2);
+  },
+  {
+    message: '기타를 고르면 어떤 내용인지 한 줄로 알려 주세요.',
+    path: ['otherCategoryNote'],
   }
 );
 

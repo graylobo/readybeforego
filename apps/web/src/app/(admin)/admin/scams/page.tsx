@@ -21,6 +21,14 @@ import {
 import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { scamsApi } from '@/lib/api/scams';
 import { cn } from '@/lib/utils/cn';
+import {
+  CATEGORY_MAP,
+  OTHER_CATEGORY,
+  OTHER_NOTE_MIN_LENGTH,
+  hasOtherCategory,
+  parseCategories,
+  toggleCategorySelection,
+} from '@/lib/constants/scam-categories';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -66,22 +74,20 @@ const ScopeRenderer = (params: any) => {
 // Category Badge Renderer
 const CategoryRenderer = (params: any) => {
   const categoryStr = params.data.scamCategory || '';
-  const categoryLabels: Record<string, string> = {
-    FORCED_SHOPPING: '🛍️ 호객/강매',
-    OVERCHARGING: '💸 바가지 요금',
-    FAKE_TAXI: '🚕 가짜 택시',
-    DRUG_HAZARD: '💊 약물 위험',
-    LIES_TOURISM: '🗣️ 가짜 정보',
-  };
-
+  const note = params.data.otherCategoryNote || '';
   const categories = categoryStr.split(',').filter(Boolean);
   return (
     <div className="flex flex-wrap gap-1 items-center h-full">
-      {categories.map((cat: string) => (
-        <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border-0">
-          {categoryLabels[cat] || cat}
-        </span>
-      ))}
+      {categories.map((cat: string) => {
+        const label = cat === OTHER_CATEGORY && note
+          ? `${CATEGORY_MAP[cat]?.label || '📝 기타'} · ${note}`
+          : (CATEGORY_MAP[cat]?.label || cat);
+        return (
+          <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border-0">
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 };
@@ -141,6 +147,14 @@ export default function AdminScamsPage() {
     { value: 'FAKE_TAXI', label: '🚕 가짜 택시' },
     { value: 'DRUG_HAZARD', label: '💊 약물 위험' },
     { value: 'LIES_TOURISM', label: '🗣️ 가짜 정보' },
+    { value: 'ADVANCE_BOOKING', label: '🎒 사전 예약/패스' },
+    { value: 'PHOTO_SPOT', label: '📸 촬영 포인트' },
+    { value: 'HIDDEN_GEM', label: '🗺️ 숨은 명소' },
+    { value: 'FOOD_RECOMMENDATION', label: '🍜 맛집 추천' },
+    { value: 'MONEY_TIP', label: '💰 환전/결제 팁' },
+    { value: 'TRANSPORT_TIP', label: '🚆 교통/이동 팁' },
+    { value: 'FACILITY_INFO', label: '📦 짐보관/편의시설' },
+    { value: OTHER_CATEGORY, label: '📝 기타' },
   ], []);
 
   const [page, setPage] = usePaginationLimit('admin-scams-page', 1);
@@ -217,6 +231,7 @@ export default function AdminScamsPage() {
     description: '',
     avoidanceTip: '',
     scamCategory: 'OVERCHARGING',
+    otherCategoryNote: '',
     scope: 'spot',
     countryCode: 'TH',
     cityId: '',
@@ -265,14 +280,13 @@ export default function AdminScamsPage() {
   }, [totalItems, limit]);
 
   const toggleCategory = (value: string) => {
-    const current = formData.scamCategory ? formData.scamCategory.split(',').filter(Boolean) : [];
-    let updated: string[];
-    if (current.includes(value)) {
-      updated = current.filter(v => v !== value);
-    } else {
-      updated = [...current, value];
-    }
-    setFormData({ ...formData, scamCategory: updated.join(',') });
+    const current = parseCategories(formData.scamCategory);
+    const { next } = toggleCategorySelection(current, value);
+    setFormData({
+      ...formData,
+      scamCategory: next.join(','),
+      otherCategoryNote: next.includes(OTHER_CATEGORY) ? formData.otherCategoryNote : '',
+    });
   };
 
   const handleOpenEdit = (scam: any) => {
@@ -282,6 +296,7 @@ export default function AdminScamsPage() {
       description: scam.description || '',
       avoidanceTip: scam.avoidanceTip || '',
       scamCategory: scam.scamCategory || 'OVERCHARGING',
+      otherCategoryNote: scam.otherCategoryNote || '',
       scope: scam.scope || 'spot',
       countryCode: scam.countryCode || 'TH',
       cityId: scam.cityId || '',
@@ -297,6 +312,7 @@ export default function AdminScamsPage() {
       description: '',
       avoidanceTip: '',
       scamCategory: 'OVERCHARGING',
+      otherCategoryNote: '',
       scope: 'spot',
       countryCode: 'TH',
       cityId: '',
@@ -319,6 +335,12 @@ export default function AdminScamsPage() {
       toast.error('사기 카테고리를 최소 1개 이상 선택해 주세요.');
       return;
     }
+    if (hasOtherCategory(formData.scamCategory) && formData.otherCategoryNote.trim().length < OTHER_NOTE_MIN_LENGTH) {
+      toast.error('기타를 고르면 어떤 내용인지 한 줄로 알려 주세요.');
+      return;
+    }
+
+    const otherNote = hasOtherCategory(formData.scamCategory) ? formData.otherCategoryNote.trim() : null;
 
     try {
       if (editingScam) {
@@ -329,6 +351,7 @@ export default function AdminScamsPage() {
             description: formData.description,
             avoidanceTip: formData.avoidanceTip,
             scamCategory: formData.scamCategory,
+            otherCategoryNote: otherNote,
             scope: formData.scope,
             sourceUrl: formData.sourceUrl,
           },
@@ -341,6 +364,7 @@ export default function AdminScamsPage() {
           description: formData.description,
           avoidanceTip: formData.avoidanceTip,
           scamCategory: formData.scamCategory,
+          otherCategoryNote: otherNote,
           scope: formData.scope,
           countryCode: formData.countryCode,
           cityId: formData.cityId || undefined,
@@ -563,6 +587,7 @@ export default function AdminScamsPage() {
               <SelectItem value="FAKE_TAXI">🚕 가짜 택시</SelectItem>
               <SelectItem value="DRUG_HAZARD">💊 약물 위험</SelectItem>
               <SelectItem value="LIES_TOURISM">🗣️ 가짜 정보</SelectItem>
+              <SelectItem value="OTHER">📝 기타</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -693,6 +718,15 @@ export default function AdminScamsPage() {
                   );
                 })}
               </div>
+              {hasOtherCategory(formData.scamCategory) && (
+                <Input
+                  className="mt-2 text-xs"
+                  maxLength={40}
+                  placeholder="기타 성격 한 줄 (예: 소매치기)"
+                  value={formData.otherCategoryNote}
+                  onChange={(e) => setFormData({ ...formData, otherCategoryNote: e.target.value })}
+                />
+              )}
             </div>
 
             <div className="space-y-1.5">

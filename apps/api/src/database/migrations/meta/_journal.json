@@ -85,6 +85,13 @@
       "when": 1786530403210,
       "tag": "0011_fuzzy_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786650000000,
+      "tag": "0012_other_category_note",
+      "breakpoints": true
     }
   ]
 }

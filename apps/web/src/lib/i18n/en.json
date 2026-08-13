@@ -24,7 +24,8 @@
     "DRUG_HAZARD": "💊 Drugs & Harmful Substances",
     "LIES_TOURISM": "🗣️ Fake Info & Pretending",
     "FAKE_TAXI": "🚕 Fake Taxi / Overcharging",
-    "OVERCHARGING": "💸 Overcharging / Scams"
+    "OVERCHARGING": "💸 Overcharging / Scams",
+    "OTHER": "📝 Other"
   },
   "tip_categories": {
     "ADVANCE_BOOKING": "🎒 Advance Booking / Pass",
@@ -33,7 +34,8 @@
     "FOOD_RECOMMENDATION": "🍜 Food Recommendation",
     "MONEY_TIP": "💰 Exchange / Payment Tip",
     "TRANSPORT_TIP": "🚆 Transport / Getting Around",
-    "FACILITY_INFO": "📦 Luggage Storage / Facilities"
+    "FACILITY_INFO": "📦 Luggage Storage / Facilities",
+    "OTHER": "📝 Other"
   },
   "report_modal": {
     "guide_toast": "Please click the location on the map! 📍 A pin will be placed and the report input modal will open.",
@@ -50,6 +52,11 @@
     "place_name_desc": "This registers the name of the map pin and is shared with other reports.",
     "category": "Scam Category",
     "category_select": "Select Category",
+    "category_hint": "Pick the closest match. Use Other if none apply.",
+    "other_note_label": "What is it about?",
+    "other_note_placeholder": "e.g. pickpocketing, unsafe alley at night",
+    "other_note_placeholder_tip": "e.g. SIM card, avoiding peak hours",
+    "other_note_required": "Please describe it in one short line.",
     "title_label": "Report Title",
     "title_placeholder": "e.g., Tuk-Tuk 10 Baht City Tour Scam",
     "title_placeholder_tip": "e.g., Osaka Universal Studios USJ Express Pass Tip",
