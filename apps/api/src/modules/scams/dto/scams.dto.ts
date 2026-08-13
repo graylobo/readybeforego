@@ -18,6 +18,19 @@ export const CreateScamInfoBaseSchema = z.object({
   subLocation: z.string().max(200, '세부 위치는 최대 200자까지 입력 가능합니다.').nullable().optional(),
   scamCategory: z.string().min(1, '사기 피해 카테고리를 최소 1개 이상 선택해 주세요.'),
   otherCategoryNote: z.string().max(40, '기타 설명은 최대 40자까지 입력할 수 있습니다.').nullable().optional(),
+  audienceNationalities: z
+    .string()
+    .max(20)
+    .nullable()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val || !val.trim()) return true;
+        const codes = val.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+        return codes.length <= 3 && codes.every((c) => /^[A-Z]{2}$/.test(c));
+      },
+      { message: '대상 국적은 ISO 코드 최대 3개까지 선택할 수 있습니다.' }
+    ),
   sourceUrl: z.string().url('유효한 URL 형식이 아닙니다.').or(z.literal('')).nullable().optional(),
   imageUrls: z.array(z.string().url()).nullable().optional(),
 });

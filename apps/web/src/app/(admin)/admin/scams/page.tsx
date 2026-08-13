@@ -29,6 +29,11 @@ import {
   parseCategories,
   toggleCategorySelection,
 } from '@/lib/constants/scam-categories';
+import {
+  AudienceNationalityPicker,
+  parseAudienceNationalities,
+  serializeAudienceNationalities,
+} from '@/components/scams/audience-nationality-picker';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -232,6 +237,7 @@ export default function AdminScamsPage() {
     avoidanceTip: '',
     scamCategory: 'OVERCHARGING',
     otherCategoryNote: '',
+    audienceNationalities: '',
     scope: 'spot',
     countryCode: 'TH',
     cityId: '',
@@ -297,6 +303,7 @@ export default function AdminScamsPage() {
       avoidanceTip: scam.avoidanceTip || '',
       scamCategory: scam.scamCategory || 'OVERCHARGING',
       otherCategoryNote: scam.otherCategoryNote || '',
+      audienceNationalities: scam.audienceNationalities || '',
       scope: scam.scope || 'spot',
       countryCode: scam.countryCode || 'TH',
       cityId: scam.cityId || '',
@@ -313,6 +320,7 @@ export default function AdminScamsPage() {
       avoidanceTip: '',
       scamCategory: 'OVERCHARGING',
       otherCategoryNote: '',
+      audienceNationalities: '',
       scope: 'spot',
       countryCode: 'TH',
       cityId: '',
@@ -341,6 +349,7 @@ export default function AdminScamsPage() {
     }
 
     const otherNote = hasOtherCategory(formData.scamCategory) ? formData.otherCategoryNote.trim() : null;
+    const audience = serializeAudienceNationalities(parseAudienceNationalities(formData.audienceNationalities));
 
     try {
       if (editingScam) {
@@ -352,6 +361,7 @@ export default function AdminScamsPage() {
             avoidanceTip: formData.avoidanceTip,
             scamCategory: formData.scamCategory,
             otherCategoryNote: otherNote,
+            audienceNationalities: audience,
             scope: formData.scope,
             sourceUrl: formData.sourceUrl,
           },
@@ -365,6 +375,7 @@ export default function AdminScamsPage() {
           avoidanceTip: formData.avoidanceTip,
           scamCategory: formData.scamCategory,
           otherCategoryNote: otherNote,
+          audienceNationalities: audience,
           scope: formData.scope,
           countryCode: formData.countryCode,
           cityId: formData.cityId || undefined,
@@ -728,6 +739,12 @@ export default function AdminScamsPage() {
                 />
               )}
             </div>
+
+            <AudienceNationalityPicker
+              key={editingScam?.id || 'create'}
+              value={parseAudienceNationalities(formData.audienceNationalities)}
+              onChange={(codes) => setFormData({ ...formData, audienceNationalities: serializeAudienceNationalities(codes) || '' })}
+            />
 
             <div className="space-y-1.5">
               <Label>제보 제목</Label>

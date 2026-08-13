@@ -21,6 +21,12 @@ import {
   parseCategories,
 } from "@/lib/constants/scam-categories";
 import { ScamCategoryPicker } from "@/components/scams/scam-category-picker";
+import {
+  AudienceNationalityBadges,
+  AudienceNationalityPicker,
+  parseAudienceNationalities,
+  serializeAudienceNationalities,
+} from "@/components/scams/audience-nationality-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -129,6 +135,7 @@ export default function Home() {
   const [editSourceUrl, setEditSourceUrl] = useState("");
   const [editScamCategory, setEditScamCategory] = useState("");
   const [editOtherCategoryNote, setEditOtherCategoryNote] = useState("");
+  const [editAudienceNationalities, setEditAudienceNationalities] = useState<string[]>([]);
   const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
   const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
   const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
@@ -519,6 +526,7 @@ export default function Home() {
           sourceUrl: editSourceUrl || null,
           scamCategory: editScamCategory,
           otherCategoryNote: hasOtherCategory(editScamCategory) ? editOtherCategoryNote.trim() : null,
+          audienceNationalities: serializeAudienceNationalities(editAudienceNationalities),
           imageUrls: finalImageUrls.length > 0 ? finalImageUrls : null,
         }
       });
@@ -782,6 +790,7 @@ export default function Home() {
                             </Badge>
                           );
                         })}
+                        <AudienceNationalityBadges value={scam.audienceNationalities} />
                         <span className="text-[10px] text-muted-foreground select-none shrink-0">
                           {formatDate(scam.createdAt)}
                           {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
@@ -814,6 +823,7 @@ export default function Home() {
                                 setEditSourceUrl(scam.sourceUrl || "");
                                 setEditScamCategory(scam.scamCategory);
                                 setEditOtherCategoryNote(scam.otherCategoryNote || "");
+                                setEditAudienceNationalities(parseAudienceNationalities(scam.audienceNationalities));
                                 setEditExistingImageUrls(scam.imageUrls || []);
                                 setEditImageFiles([]);
                                 setEditImagePreviews([]);
@@ -1510,6 +1520,13 @@ export default function Home() {
               reportType={editingScam?.reportType === "TIP" ? "TIP" : "CAUTION"}
             />
 
+            <AudienceNationalityPicker
+              key={editingScam?.id || "edit"}
+              value={editAudienceNationalities}
+              onChange={setEditAudienceNationalities}
+              disabled={isUploading || editMutation.isPending}
+            />
+
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
                 사진 첨부 (최대 5장)
@@ -1705,6 +1722,7 @@ export default function Home() {
                   🏬 {activeMediaScam.subLocation}
                 </Badge>
               )}
+              <AudienceNationalityBadges value={activeMediaScam.audienceNationalities} />
             </>
           }
         />

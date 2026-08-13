@@ -570,6 +570,7 @@ export const scamInfos = pgTable('scam_infos', {
   subLocation: text('sub_location'),
   scamCategory: text('scam_category').notNull(),
   otherCategoryNote: text('other_category_note'), // OTHER 선택 시 한 줄 성격 설명 (운영 승격용)
+  audienceNationalities: text('audience_nationalities'), // 특정 국적 한정 시 ISO 코드 CSV (비어있으면 모든 여행자)
   sourceUrl: text('source_url'),
   imageUrls: json('image_urls'),
   viewCount: integer('view_count').default(0).notNull(),

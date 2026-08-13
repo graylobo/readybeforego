@@ -49,6 +49,7 @@ export interface ScamInfo {
   subLocation?: string | null;
   scamCategory: string;
   otherCategoryNote?: string | null;
+  audienceNationalities?: string | null;
   sourceUrl?: string | null;
   viewCount: number;
   upvoteCount: number;
@@ -128,6 +129,7 @@ export const scamsApi = {
     subLocation?: string;
     scamCategory: string;
     otherCategoryNote?: string | null;
+    audienceNationalities?: string | null;
     sourceUrl?: string;
     imageUrls?: string[];
   }): Promise<ScamInfo> => {
@@ -152,6 +154,7 @@ export const scamsApi = {
       subLocation?: string;
       scamCategory: string;
       otherCategoryNote?: string | null;
+      audienceNationalities?: string | null;
       sourceUrl?: string;
       imageUrls?: string[];
     }>

@@ -31,6 +31,14 @@ function hasOtherCategory(scamCategory?: string | null) {
   return (scamCategory || '').split(',').map((c) => c.trim()).includes('OTHER');
 }
 
+function normalizeAudienceNationalities(value?: string | null): string | null {
+  if (!value) return null;
+  const codes = [...new Set(
+    value.split(',').map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c))
+  )].slice(0, 3);
+  return codes.length > 0 ? codes.join(',') : null;
+}
+
 function formatExternalUrl(url?: string | null): string | null {
   if (!url || typeof url !== 'string') return null;
   let trimmed = url.trim();
@@ -415,6 +423,7 @@ export class ScamsService {
         otherCategoryNote: hasOtherCategory(createDto.scamCategory)
           ? (createDto.otherCategoryNote?.trim() || null)
           : null,
+        audienceNationalities: normalizeAudienceNationalities(createDto.audienceNationalities),
         sourceUrl: formatExternalUrl(createDto.sourceUrl),
         imageUrls: createDto.imageUrls ?? [],
       }, tx);
@@ -436,6 +445,9 @@ export class ScamsService {
     const payload = { ...updateDto };
     if (payload.sourceUrl !== undefined) {
       payload.sourceUrl = formatExternalUrl(payload.sourceUrl);
+    }
+    if (payload.audienceNationalities !== undefined) {
+      payload.audienceNationalities = normalizeAudienceNationalities(payload.audienceNationalities);
     }
 
     const nextCategory = payload.scamCategory ?? scam.scamCategory;

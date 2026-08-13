@@ -19,6 +19,10 @@ import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 import { ScamCategoryPicker } from "@/components/scams/scam-category-picker";
 import {
+  AudienceNationalityPicker,
+  serializeAudienceNationalities,
+} from "@/components/scams/audience-nationality-picker";
+import {
   CAUTION_CATEGORY_ITEMS,
   TIP_CATEGORY_ITEMS,
   OTHER_CATEGORY,
@@ -83,6 +87,7 @@ export function ScamReportModal() {
   const [scamCategory, setScamCategory] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [otherCategoryNote, setOtherCategoryNote] = useState("");
+  const [audienceNationalities, setAudienceNationalities] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [avoidanceTip, setAvoidanceTip] = useState("");
@@ -148,6 +153,7 @@ export function ScamReportModal() {
       setScamCategory("");
       setSelectedCats([]);
       setOtherCategoryNote("");
+      setAudienceNationalities([]);
       setTitle("");
       setDescription("");
       setAvoidanceTip("");
@@ -480,6 +486,7 @@ export function ScamReportModal() {
           longitude: reportCoords[1],
           scamCategory,
           otherCategoryNote: hasOtherCategory(selectedCats) ? otherCategoryNote.trim() : undefined,
+          audienceNationalities: serializeAudienceNationalities(audienceNationalities),
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
@@ -496,6 +503,7 @@ export function ScamReportModal() {
           countryCode: scope === "country" ? countryCode : undefined,
           scamCategory,
           otherCategoryNote: hasOtherCategory(selectedCats) ? otherCategoryNote.trim() : undefined,
+          audienceNationalities: serializeAudienceNationalities(audienceNationalities),
           title: title.trim(),
           description: description.trim(),
           avoidanceTip: avoidanceTip.trim() || undefined,
@@ -814,6 +822,13 @@ export function ScamReportModal() {
             error={errors.scamCategory}
             otherNoteError={errors.otherCategoryNote}
             reportType={itemReportType}
+          />
+
+          <AudienceNationalityPicker
+            key={isReportModalOpen ? "open" : "closed"}
+            value={audienceNationalities}
+            onChange={setAudienceNationalities}
+            disabled={uploading}
           />
 
           {/* 동일 지역 내 유사 카테고리 제보 감지 경고 안내창 ⚠️ */}
