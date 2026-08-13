@@ -23,6 +23,7 @@ import {
 import { ScamCategoryPicker } from "@/components/scams/scam-category-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -1219,46 +1220,40 @@ export default function Home() {
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
                   {t("report_modal.country")}
                 </label>
-                <Select value={selectedCountryCode || ""} onValueChange={handleCountryChange}>
-                  <SelectTrigger className="w-full text-xs cursor-pointer">
-                    <SelectValue placeholder={t("report_modal.country_select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {countries
-                      .map((c) => ({
-                        ...c,
-                        displayName: getCountryName(c.code || c.name, lang) || c.name || c.code
-                      }))
-                      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ko'))
-                      .map((c) => (
-                        <SelectItem key={c.code} value={c.code} className="cursor-pointer">
-                          {c.displayName}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={selectedCountryCode || ""}
+                  onValueChange={handleCountryChange}
+                  placeholder={t("report_modal.country_select")}
+                  searchPlaceholder="국가명 검색"
+                  options={countries
+                    .map((c) => {
+                      const displayName = getCountryName(c.code || c.name, lang) || c.name || c.code;
+                      return {
+                        value: c.code,
+                        label: displayName,
+                        keywords: `${c.name} ${c.nameEn} ${c.code}`,
+                      };
+                    })
+                    .sort((a, b) => a.label.localeCompare(b.label, "ko"))}
+                />
               </div>
 
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
                   {t("report_modal.city")}
                 </label>
-                <Select 
-                  value={selectedCityId || ""} 
+                <SearchableSelect
+                  value={selectedCityId || ""}
                   onValueChange={handleCityChange}
                   disabled={!selectedCountryCode || isCitiesPending}
-                >
-                  <SelectTrigger className="w-full text-xs cursor-pointer">
-                    <SelectValue placeholder={t("report_modal.city_select")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((city) => (
-                      <SelectItem key={city.id} value={city.id} className="cursor-pointer">
-                        {city.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder={t("report_modal.city_select")}
+                  searchPlaceholder="도시명 검색"
+                  options={cities.map((city) => ({
+                    value: city.id,
+                    label: city.name,
+                    keywords: `${city.name} ${city.nameEn}`,
+                  }))}
+                />
               </div>
 
               <div>
@@ -1268,10 +1263,18 @@ export default function Home() {
                 <Select 
                   value={selectedRegionId || ""} 
                   onValueChange={handleRegionChange}
-                  disabled={!selectedCityId || isRegionsPending}
+                  disabled={!selectedCityId || isRegionsPending || regions.length === 0}
                 >
                   <SelectTrigger className="w-full text-xs cursor-pointer">
-                    <SelectValue placeholder="선택" />
+                    <SelectValue placeholder={
+                      !selectedCityId
+                        ? "도시를 먼저 선택해 주세요"
+                        : isRegionsPending
+                          ? "불러오는 중..."
+                          : regions.length === 0
+                            ? "등록된 장소가 없습니다"
+                            : "선택"
+                    } />
                   </SelectTrigger>
                   <SelectContent>
                     {regions.map((r) => (

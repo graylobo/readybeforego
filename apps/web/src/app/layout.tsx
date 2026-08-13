@@ -56,11 +56,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico?v=2" },
-      { url: "/icon.png?v=2", type: "image/png" },
+      { url: "/icon.png?v=5", type: "image/png", sizes: "any" },
+      { url: "/brand/icon.png?v=5", type: "image/png" },
     ],
-    shortcut: "/favicon.ico?v=2",
-    apple: "/apple-icon.png?v=2",
+    shortcut: "/icon.png?v=5",
+    apple: "/apple-icon.png?v=5",
   },
   verification: {
     google: SITE_CONFIG.googleConsoleId,
