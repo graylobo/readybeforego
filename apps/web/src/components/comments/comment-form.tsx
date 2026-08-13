@@ -84,6 +84,11 @@ export function CommentForm({
   const content = watch('content');
   const guestName = watch('guestName');
 
+  useEffect(() => {
+    setValue('targetId', targetId);
+    setValue('targetType', targetType);
+  }, [targetId, targetType, setValue]);
+
   // 이미지 선택 시: 로컬 미리보기 생성 및 파일 보관 (업로드는 제출 시 수행)
   const handleImageSelect = (file: File) => {
     if (imagePreview) {
@@ -129,6 +134,9 @@ export function CommentForm({
 
       const finalData: CreateCommentDto = {
         ...data,
+        targetId,
+        targetType,
+        parentId,
         emoticonUrl: selectedEmoticon ?? undefined,
         imageUrl: uploadedUrl ?? undefined,
       };
@@ -137,7 +145,9 @@ export function CommentForm({
 
       if (!parentId) {
         reset({
-          ...data,
+          targetId,
+          targetType,
+          parentId,
           content: '',
           guestName: !user && allowAnonymous ? generateRandomGuestName() : undefined,
           guestPassword: !user && allowAnonymous ? '' : undefined,

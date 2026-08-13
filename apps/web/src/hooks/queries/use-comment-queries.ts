@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentsApi, CommentTargetType, CreateCommentDto, UpdateCommentDto, CommentTree } from '@/lib/api/comments';
 import { Post } from '@/lib/api/board';
 import { boardKeys } from './use-board-queries';
@@ -15,7 +15,10 @@ export function useComments(targetType: CommentTargetType, targetId: string, pag
     queryKey: commentKeys.list(targetType, targetId, page, limit),
     queryFn: () => commentsApi.getComments(targetType, targetId, page, limit),
     enabled: !!targetId,
-    placeholderData: keepPreviousData, // 이전 데이터를 유지하여 깜빡임 방지
+    placeholderData: (previousData, previousQuery) => {
+      const prevTargetId = previousQuery?.queryKey?.[2];
+      return prevTargetId === targetId ? previousData : undefined;
+    },
   });
 }
 

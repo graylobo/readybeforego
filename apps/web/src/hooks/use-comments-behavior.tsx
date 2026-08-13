@@ -47,6 +47,12 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
   const [editingId, setEditingId] = useState<string | null>(null);
   const [repliesVisible, setRepliesVisible] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    setPage(1);
+    setReplyingTo(null);
+    setEditingId(null);
+  }, [targetType, targetId]);
+
   const commentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const highlightedRef = useRef<string | null>(null);
   const lastAutoScrolledIdRef = useRef<string | null>(null);

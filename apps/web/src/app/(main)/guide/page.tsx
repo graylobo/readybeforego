@@ -432,6 +432,7 @@ export default function GuidePage() {
 
           <CardContent className="p-5">
             <Comments
+              key={selectedCountry}
               targetType="country_guide"
               targetId={selectedCountry}
               allowAnonymous={true}
