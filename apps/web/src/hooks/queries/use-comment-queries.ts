@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { commentsApi, CommentTargetType, CreateCommentDto, UpdateCommentDto, CommentTree } from '@/lib/api/comments';
 import { Post } from '@/lib/api/board';
 import { boardKeys } from './use-board-queries';

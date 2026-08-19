@@ -23,18 +23,18 @@ import {
   Info,
   Lightbulb,
   Luggage,
-  Plane,
   ShieldCheck,
   Sparkles,
   Square
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { scamsApi, City } from "@/lib/api/scams";
-import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "@/hooks/use-translation";
+import { getCountryName } from "@/lib/utils/country";
 
 export default function GuidePage() {
   const { user } = useAuthStore();
+  const { lang } = useTranslation();
   const [selectedCountry, setSelectedCountry] = useState<string>("JP");
   const [selectedCity, setSelectedCity] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"all" | "pre_travel" | "essentials" | "baggage" | "tips">("all");
@@ -100,14 +100,14 @@ export default function GuidePage() {
 
     return {
       code: selectedCountry,
-      name: dbMeta?.countryName || selectedCountry,
+      name: getCountryName(selectedCountry, lang) || (lang === "en" ? dbMeta?.countryNameEn : dbMeta?.countryName) || selectedCountry,
       emoji: dbMeta?.emoji || "✈️",
       plug: dbMeta?.plug || "220V / 변환 어댑터 확인",
       visa: dbMeta?.visa || "무비자 여부 확인",
       currency: dbMeta?.currency || `${selectedCountry} 통화`,
       currencyCode: dbMeta?.currencyCode || selectedCountry,
     };
-  }, [selectedCountry, availableCountries]);
+  }, [selectedCountry, availableCountries, lang]);
 
   const guides = guideData?.guides || [];
 
@@ -197,7 +197,7 @@ export default function GuidePage() {
                   {availableCountries.map((c) => (
                     <SelectItem key={c.countryCode} value={c.countryCode} className="cursor-pointer hover:bg-slate-800 focus:bg-slate-800 font-semibold">
                       <span className="mr-2">{c.emoji || "✈️"}</span>
-                      {c.countryName} ({c.countryCode})
+                      {getCountryName(c.countryCode, lang) || (lang === "en" ? c.countryNameEn : c.countryName) || c.countryName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -216,9 +216,9 @@ export default function GuidePage() {
                       도시 선택 (옵션)
                     </SelectItem>
                     {availableCities.map((city) => {
-                      const displayName = city.name === city.nameEn || !city.nameEn 
-                        ? city.name 
-                        : `${city.name} (${city.nameEn})`;
+                      const displayName = lang === "en"
+                        ? (city.nameEn || city.name)
+                        : (city.name || city.nameEn);
                       return (
                         <SelectItem key={city.id} value={city.id} className="cursor-pointer hover:bg-slate-800 font-semibold">
                           📍 {displayName}
