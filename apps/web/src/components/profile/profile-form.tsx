@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { UserActivityLog } from './user-activity-log';
 import { uploadsApi } from '@/lib/api/uploads';
 import { toast } from '@/lib/toast';
+import { ChatGuestProfileGate } from '@/components/chat';
 
 const nicknameSchema = z.string()
   .min(2, '닉네임은 2자 이상이어야 합니다.')
@@ -82,7 +83,20 @@ export function ProfileForm() {
     };
   }, [previewUrl]);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <ChatGuestProfileGate
+        fallback={
+          <div className="container max-w-2xl mx-auto py-20 text-center space-y-4">
+            <p className="text-muted-foreground">로그인이 필요합니다.</p>
+            <Button onClick={() => router.push('/login')} className="cursor-pointer">
+              로그인
+            </Button>
+          </div>
+        }
+      />
+    );
+  }
 
   // Level Calc
   const currentLevel = user.level || 1;

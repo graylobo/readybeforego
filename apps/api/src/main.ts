@@ -9,6 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { patchNestjsSwagger } from '@anatine/zod-nestjs';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { json, urlencoded } from 'express';
+import { configureChatWebSocket } from 'src/modules/chat';
 
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -54,7 +55,7 @@ async function bootstrap() {
   // 롤링 배포(SIGTERM/SIGINT) 시 onModuleDestroy 훅을 실행해
   // Redis 구독/발행, BullMQ 워커, 진행 중인 SSE 연결을 정상적으로 정리한다.
   app.enableShutdownHooks();
-
+await configureChatWebSocket(app);
   await app.listen(process.env.PORT ?? 4000);
 }
 bootstrap();

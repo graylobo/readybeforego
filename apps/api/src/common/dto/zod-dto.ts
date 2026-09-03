@@ -1,6 +1,7 @@
 import { createZodDto } from '@anatine/zod-nestjs';
 import {
     BanUserSchema,
+    ClaimGuestNicknameSchema,
     CreateBoardSchema,
     CreateCommentSchema,
     CreateEmoticonPackSchema,
@@ -53,3 +54,6 @@ export class UpdateBoardZodDto extends createZodDto(UpdateBoardSchema) {}
 export class CreateEmoticonPackZodDto extends createZodDto(CreateEmoticonPackSchema) {}
 export class UpdateEmoticonPackZodDto extends createZodDto(UpdateEmoticonPackSchema) {}
 export class UpdateEmoticonPackStatusZodDto extends createZodDto(UpdateEmoticonPackStatusSchema) {}
+
+
+export class ClaimGuestNicknameZodDto extends createZodDto(ClaimGuestNicknameSchema) {}

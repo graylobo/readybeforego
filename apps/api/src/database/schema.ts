@@ -602,6 +602,47 @@ export const scamInfoReactions = pgTable('scam_info_reactions', {
   scamUserIdx: index('scam_info_reactions_idx').on(table.scamInfoId, table.userId, table.ipAddress),
 }));
 
+export const chatAuthorTypeEnum = pgEnum('chat_author_type', ['member', 'guest']);
+
+// 실시간 채팅 메시지. room_slug로 채널을 구분하며, 핫패스는 Redis 최근 메시지 캐시를 사용한다.
+// 대량 적재 시 (room_slug, created_at) 인덱스 기반 파티셔닝으로 확장한다.
+export const chatMessages = pgTable('chat_messages', {
+  id: uuid('id').primaryKey(),
+  roomSlug: text('room_slug').notNull().default('lobby'),
+  authorType: chatAuthorTypeEnum('author_type').notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  guestId: text('guest_id'),
+  nickname: text('nickname').notNull(),
+  content: text('content').notNull(),
+  replyToId: uuid('reply_to_id').references((): AnyPgColumn => chatMessages.id, { onDelete: 'set null' }),
+  replyToNickname: text('reply_to_nickname'),
+  replyToContent: text('reply_to_content'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  roomCreatedIdx: index('chat_messages_room_created_idx').on(table.roomSlug, table.createdAt),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  user: one(users, {
+    fields: [chatMessages.userId],
+    references: [users.id],
+  }),
+  replyTo: one(chatMessages, {
+    fields: [chatMessages.replyToId],
+    references: [chatMessages.id],
+  }),
+}));
+
+// 채팅 전용 설정. site_settings 계약을 깨지 않기 위해 분리한다.
+export const chatSettings = pgTable('chat_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  enabled: boolean('enabled').default(true).notNull(),
+  persistEnabled: boolean('persist_enabled').default(true).notNull(),
+  showOnlineCount: boolean('show_online_count').default(false).notNull(),
+  showMessageTime: boolean('show_message_time').default(false).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Relations
 export const countriesRelations = relations(countries, ({ many }) => ({
   cities: many(cities),

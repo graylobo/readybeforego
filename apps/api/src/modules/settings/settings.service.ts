@@ -1,16 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { SettingsRepository } from './settings.repository';
-import { UpdateSiteSettingsRequest } from '@community/shared-types';
+import { SiteSettings, UpdateSiteSettingsRequest } from '@community/shared-types';
 
 @Injectable()
 export class SettingsService {
   constructor(private readonly settingsRepository: SettingsRepository) {}
 
-  async getSettings() {
-    return this.settingsRepository.getSettings();
+  async getSettings(): Promise<SiteSettings> {
+    return this.toPublic(await this.settingsRepository.getSettings());
   }
 
-  async updateSettings(data: UpdateSiteSettingsRequest) {
-    return this.settingsRepository.updateSettings(data);
+  async updateSettings(data: UpdateSiteSettingsRequest): Promise<SiteSettings> {
+    return this.toPublic(await this.settingsRepository.updateSettings(data));
+  }
+
+  private toPublic(row: {
+    id: string;
+    showSidebarAds: boolean;
+    updatedAt: Date;
+  }): SiteSettings {
+    return {
+      id: row.id,
+      showSidebarAds: row.showSidebarAds,
+      updatedAt: row.updatedAt.toISOString(),
+    };
   }
 }

@@ -27,6 +27,6 @@ import { PointsModule } from '../points/points.module';
   ],
   controllers: [AuthController],
   providers: [AuthService, GoogleStrategy, JwtStrategy, KakaoStrategy, NaverStrategy],
-  exports: [AuthService],
+  exports: [AuthService,JwtModule],
 })
 export class AuthModule {}

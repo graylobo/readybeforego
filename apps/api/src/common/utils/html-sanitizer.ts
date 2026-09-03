@@ -1,5 +1,14 @@
 import sanitizeHtml from 'sanitize-html';
 
+export const sanitizePlainText = (content: string): string => {
+  return sanitizeHtml(content, {
+    allowedTags: [],
+    allowedAttributes: {},
+  })
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 export const sanitizeContent = (content: string): string => {
   return sanitizeHtml(content, {
     allowedTags: [

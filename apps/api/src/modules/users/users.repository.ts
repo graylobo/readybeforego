@@ -52,6 +52,16 @@ export class UsersRepository {
       });
   }
 
+  async existsByNameIgnoreCase(name: string, tx?: Transaction) {
+      const db = tx ?? this.db;
+      const [row] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(sql`lower(${users.name}) = lower(${name})`)
+          .limit(1);
+      return !!row;
+  }
+
   async updateUser(id: string, updateData: any, tx?: Transaction) {
       const db = tx ?? this.db;
       const [updated] = await db.update(users)

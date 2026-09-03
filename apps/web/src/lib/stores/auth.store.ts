@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authApi } from '@/lib/api/auth';
 import { User } from '@community/shared-types';
+import { emitAuthIdentityChange } from '@/lib/stores/auth.events';
 
 interface AuthState {
   user: User | null;
@@ -22,6 +23,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: (token: string, user: User) => {
     // We keep user in state for the current session.
     // Persistent auth is handled by the HttpOnly cookie.
+    emitAuthIdentityChange(true);
     set({ user, isAuthenticated: true });
     
     if (typeof document !== 'undefined') {
@@ -38,7 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('Logout failed:', e);
     }
     set({ user: null, token: null, isAuthenticated: false });
-
+emitAuthIdentityChange(false);
     if (typeof document !== 'undefined') {
       document.cookie = 'user=; path=/; max-age=0';
     }
@@ -56,6 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     try {
       const user = await authApi.getMe();
+      emitAuthIdentityChange(true);
       set({ user, isAuthenticated: true });
     } catch {
       set({ user: null, token: null, isAuthenticated: false });

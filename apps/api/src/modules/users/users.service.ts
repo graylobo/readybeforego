@@ -20,6 +20,10 @@ export class UsersService {
     return this.usersRepo.findByName(name);
   }
 
+  async isNameTaken(name: string) {
+    return this.usersRepo.existsByNameIgnoreCase(name);
+  }
+
 
   async createOrUpdate(data: Partial<typeof users.$inferInsert>) {
     // 1. Check if user exists by Social ID or Email

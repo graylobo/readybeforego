@@ -7,6 +7,7 @@ import { DatabaseModule } from '../../database/database.module';
 @Module({
   imports: [DatabaseModule],
   controllers: [SettingsController],
-  providers: [SettingsService, SettingsRepository]
+  providers: [SettingsService, SettingsRepository],
+  exports: [SettingsService],
 })
 export class SettingsModule {}

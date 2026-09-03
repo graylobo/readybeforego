@@ -26,6 +26,7 @@ import { isAdmin, isStaff } from '@community/shared-types';
 import { BrandLogo } from '@/components/common/brand-logo';
 import { TopNav } from './top-nav';
 import { SearchBar } from './search-bar';
+import { ChatGuestIdentity } from '@/components/chat';
 
 interface HeaderProps {
   /** 'admin'이면 커뮤니티 전용 UI(검색/탑네비/레이아웃 전환)를 숨기고 항상 사이드바 모드로 동작 */
@@ -33,7 +34,7 @@ interface HeaderProps {
 }
 
 export function Header({ variant = 'client' }: HeaderProps) {
-  const { user, logout, checkAuth } = useAuthStore();
+  const { user, checkAuth } = useAuthStore();
   const router = useRouter();
   const { toggle, isOpen } = useSidebarToggleStore();
   const { layoutMode: storeLayoutMode, toggleLayoutMode } = useLayoutStore();
@@ -125,18 +126,20 @@ export function Header({ variant = 'client' }: HeaderProps) {
             <UserMenu />
           </>
         ) : (
-          <>
-            <Button
-              onClick={handleLogin}
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-primary"
-              aria-label="Login"
-              title="Login"
-            >
-              <LogIn className="h-5 w-5" />
-            </Button>
-          </>
+        <ChatGuestIdentity
+            fallback={
+              <Button
+                onClick={handleLogin}
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-primary"
+                aria-label="Login"
+                title="Login"
+              >
+                <LogIn className="h-5 w-5" />
+              </Button>
+            }
+          />
         )}
       </div>
     </header>

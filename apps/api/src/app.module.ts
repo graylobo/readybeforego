@@ -33,6 +33,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { ScamsModule } from './modules/scams/scams.module';
 import { GuidesModule } from './modules/guides/guides.module';
 import { CountriesModule } from './modules/countries/countries.module';
+import { ChatModule } from 'src/modules/chat';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { CountriesModule } from './modules/countries/countries.module';
     ScamsModule,
     GuidesModule,
     CountriesModule,
+    ChatModule
   ],
   controllers: [AppController],
   providers: [

@@ -2,6 +2,7 @@ import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { Subject, Observable } from 'rxjs';
 import Redis from 'ioredis';
 import { NotificationsRepository } from './notifications.repository';
+import { REDIS_PUBLISHER, REDIS_SUBSCRIBER } from '../redis/redis.constants';
 
 @Injectable()
 export class NotificationsService implements OnModuleDestroy {
@@ -10,8 +11,8 @@ export class NotificationsService implements OnModuleDestroy {
 
   constructor(
     private readonly notificationsRepo: NotificationsRepository,
-    @Inject('REDIS_PUBLISHER') private readonly redisPublisher: Redis,
-    @Inject('REDIS_SUBSCRIBER') private readonly redisSubscriber: Redis,
+    @Inject(REDIS_PUBLISHER) private readonly redisPublisher: Redis,
+    @Inject(REDIS_SUBSCRIBER) private readonly redisSubscriber: Redis,
   ) {
     this.initRedisSubscription();
   }

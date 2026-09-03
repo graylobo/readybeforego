@@ -14,6 +14,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import { useLayoutStore } from '@/lib/stores/layout.store';
 import { Map, MessageCircleMore, MessageCircleQuestionMark, SlidersHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
+import { ChatShell } from '@/components/chat';
 
 function SidebarOverlay() {
   const { isOpen, toggle } = useSidebarToggleStore();
@@ -87,6 +88,29 @@ export function AppLayout({
     setMounted(true);
   }, []);
 
+  // AdSense 등이 body/html 스크롤을 유발해도 앱 셸만 스크롤되도록 잠근다.
+  React.useEffect(() => {
+    const html = document.documentElement;
+    const { body } = document;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      htmlHeight: html.style.height,
+      bodyHeight: body.style.height,
+    };
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.height = '100%';
+    body.style.height = '100%';
+    return () => {
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      html.style.height = prev.htmlHeight;
+      body.style.height = prev.bodyHeight;
+    };
+  }, []);
+
+
   // Protection: If on main(client) layout but profile not setup, redirect to setup.
   // 어드민 레이아웃은 자체 인증 가드를 가지므로 여기서는 클라이언트에서만 처리한다.
   React.useEffect(() => {
@@ -106,16 +130,19 @@ export function AppLayout({
       </div>
       <SidebarOverlay />
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative transition-[padding] duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]">
+     <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative transition-[padding] duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]">
         <React.Suspense fallback={<div className="h-16 border-b bg-background" />}>
           <Header variant={variant} />
         </React.Suspense>
-        <main className="flex-1 overflow-y-auto bg-background w-full flex flex-col transition-colors duration-300 pb-16 md:pb-0">
-          <div className={cn("flex-1", contentClassName)}>
-         {showLoading ? <Loading /> : children}
-          </div>
-          {showFooter && <Footer />}
-        </main>
+       <div className="flex-1 flex min-h-0 overflow-hidden">
+          <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-background w-full flex flex-col transition-colors duration-300 min-w-0">
+            <div className={cn("flex-1", contentClassName)}>
+              {showLoading ? <Loading /> : children}
+            </div>
+            {showFooter && <Footer />}
+          </main>
+          {!isAdminVariant && <ChatShell />}
+        </div>
       </div>
 
       {/* 모바일 전용 하단 네비게이션 바 🧭 */}

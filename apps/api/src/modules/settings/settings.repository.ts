@@ -14,7 +14,9 @@ export class SettingsRepository {
   async getSettings() {
     let settings = await this.db.query.siteSettings.findFirst();
     if (!settings) {
-      const [newSettings] = await this.db.insert(siteSettings).values({ showSidebarAds: true }).returning();
+      const [newSettings] = await this.db.insert(siteSettings).values({
+        showSidebarAds: true,
+      }).returning();
       settings = newSettings;
     }
     return settings;

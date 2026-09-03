@@ -36,6 +36,16 @@ export enum ErrorCode {
   FORBIDDEN_ACTION = 'RESOURCE_002',
   NOT_ENOUGH_POINTS = 'POINT_001',
   EMOTICON_ALREADY_PURCHASED = 'EMOTICON_001',
+
+  // 실시간 채팅
+  CHAT_NICKNAME_TAKEN = 'CHAT_001',
+  CHAT_NICKNAME_INVALID = 'CHAT_002',
+  CHAT_UNAUTHORIZED = 'CHAT_003',
+  CHAT_RATE_LIMITED = 'CHAT_004',
+  CHAT_MESSAGE_INVALID = 'CHAT_005',
+  CHAT_FORBIDDEN = 'CHAT_006',
+  CHAT_UNAVAILABLE = 'CHAT_007',
+
 }
 
 export const ErrorMessages: Record<ErrorCode, string> = {
@@ -73,4 +83,13 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.FORBIDDEN_ACTION]: '해당 작업을 수행할 권한이 없습니다.',
   [ErrorCode.NOT_ENOUGH_POINTS]: '포인트가 부족합니다.',
   [ErrorCode.EMOTICON_ALREADY_PURCHASED]: '이미 구매한 이모티콘 팩입니다.',
+
+  // 실시간 채팅
+  [ErrorCode.CHAT_NICKNAME_TAKEN]: '이미 존재하는 닉네임입니다.',
+  [ErrorCode.CHAT_NICKNAME_INVALID]: '닉네임은 2~12자의 한글, 영문, 숫자만 사용할 수 있습니다. (공백 불가)',
+  [ErrorCode.CHAT_UNAUTHORIZED]: '채팅에 참여하려면 닉네임을 설정하거나 로그인해주세요.',
+  [ErrorCode.CHAT_RATE_LIMITED]: '메시지를 너무 빠르게 보내고 있습니다. 잠시 후 다시 시도해주세요.',
+  [ErrorCode.CHAT_MESSAGE_INVALID]: '메시지 내용이 올바르지 않습니다.',
+  [ErrorCode.CHAT_FORBIDDEN]: '채팅을 이용할 수 없는 계정입니다.',
+  [ErrorCode.CHAT_UNAVAILABLE]: '채팅을 잠시 사용할 수 없습니다. 연결이 복구되면 자동으로 다시 시도합니다.',
 };

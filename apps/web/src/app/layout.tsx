@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SITE_CONFIG, UI_CONFIG } from "@/lib/constants";
 import { ResponsiveToaster } from "@/components/providers/responsive-toaster";
 import NextTopLoader from "nextjs-toploader";
+import { Toaster } from "sonner";
+import { ChatFeatureProvider } from "@/components/chat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -130,8 +132,10 @@ export default function RootLayout({
               zIndex={99999}
             />
             <QueryProvider>
+                 <ChatFeatureProvider>
                 {children}
-                <ResponsiveToaster />
+                <Toaster richColors position="top-center" />
+                </ChatFeatureProvider>
             </QueryProvider>
         </ThemeProvider>
       </body>

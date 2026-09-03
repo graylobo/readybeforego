@@ -139,3 +139,30 @@ body {
   border-radius: 8px;
   transition: box-shadow 0.5s ease-out;
 }
+
+@keyframes chat-live-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.chat-live-dot {
+  animation: chat-live-blink 2s ease-in-out infinite;
+}
+
+@keyframes chat-message-flash {
+  0% {
+    background-color: color-mix(in oklab, var(--primary) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.chat-message-flash {
+  animation: chat-message-flash 1.6s ease-out;
+}
