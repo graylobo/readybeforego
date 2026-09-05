@@ -40,6 +40,7 @@ export class ChatSettingsService {
     persistEnabled: boolean;
     showOnlineCount: boolean;
     showMessageTime: boolean;
+    defaultOpen: boolean;
     updatedAt: Date;
   }): ChatSettings {
     return {
@@ -47,6 +48,7 @@ export class ChatSettingsService {
       persistEnabled: row.persistEnabled,
       showOnlineCount: row.showOnlineCount,
       showMessageTime: row.showMessageTime,
+      defaultOpen: row.defaultOpen,
       updatedAt: row.updatedAt.toISOString(),
     };
   }

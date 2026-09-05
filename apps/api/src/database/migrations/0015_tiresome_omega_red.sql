@@ -1,0 +1,1 @@
+ALTER TABLE "chat_settings" ADD COLUMN "default_open" boolean DEFAULT true NOT NULL;

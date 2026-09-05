@@ -21,6 +21,7 @@ export interface ChatSettings {
   persistEnabled: boolean;
   showOnlineCount: boolean;
   showMessageTime: boolean;
+  defaultOpen: boolean;
   updatedAt: string;
 }
 
@@ -29,6 +30,7 @@ export const UpdateChatSettingsSchema = z.object({
   persistEnabled: z.boolean().optional(),
   showOnlineCount: z.boolean().optional(),
   showMessageTime: z.boolean().optional(),
+  defaultOpen: z.boolean().optional(),
 });
 export type UpdateChatSettingsRequest = z.infer<typeof UpdateChatSettingsSchema>;
 

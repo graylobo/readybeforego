@@ -27,6 +27,7 @@ const chatFormSchema = z.object({
   persistEnabled: z.boolean(),
   showOnlineCount: z.boolean(),
   showMessageTime: z.boolean(),
+  defaultOpen: z.boolean(),
 });
 export default function AdminSettingsPage() {
   const { data: settings, isLoading } = useSiteSettings();
@@ -48,6 +49,7 @@ export default function AdminSettingsPage() {
       persistEnabled: true,
       showOnlineCount: false,
       showMessageTime: false,
+      defaultOpen: true,
     },
   });
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function AdminSettingsPage() {
         persistEnabled: chatSettings.persistEnabled,
         showOnlineCount: chatSettings.showOnlineCount,
         showMessageTime: chatSettings.showMessageTime,
+        defaultOpen: chatSettings.defaultOpen,
       });
     }
   }, [chatSettings, chatForm]);
@@ -254,6 +257,27 @@ export default function AdminSettingsPage() {
                         <FormLabel className="text-base">채팅 시간 표시</FormLabel>
                         <FormDescription>
                           각 메시지 옆에 작성 시각(방금, N분 전 등)을 보여줍니다. 오래된 대화만 남아 있을 때는 꺼 두는 것을 권장합니다.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={updateChatSettings.isPending}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={chatForm.control}
+                  name="defaultOpen"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/20">
+                      <div className="space-y-0.5 max-w-[80%]">
+                        <FormLabel className="text-base">채팅 패널 기본 노출</FormLabel>
+                        <FormDescription>
+                          켜면 사용자가 사이트에 처음 접속했을 때 채팅창이 열린 상태로 시작합니다. 끄면 FAB 아이콘 형태로 닫힌 상태로 시작합니다.
                         </FormDescription>
                       </div>
                       <FormControl>

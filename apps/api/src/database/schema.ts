@@ -640,6 +640,7 @@ export const chatSettings = pgTable('chat_settings', {
   persistEnabled: boolean('persist_enabled').default(true).notNull(),
   showOnlineCount: boolean('show_online_count').default(false).notNull(),
   showMessageTime: boolean('show_message_time').default(false).notNull(),
+  defaultOpen: boolean('default_open').default(true).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 

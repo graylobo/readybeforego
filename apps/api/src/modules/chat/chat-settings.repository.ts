@@ -21,6 +21,7 @@ export class ChatSettingsRepository {
           persistEnabled: true,
           showOnlineCount: false,
           showMessageTime: false,
+          defaultOpen: true,
         })
         .returning();
       settings = created;
@@ -33,6 +34,7 @@ export class ChatSettingsRepository {
     persistEnabled?: boolean;
     showOnlineCount?: boolean;
     showMessageTime?: boolean;
+    defaultOpen?: boolean;
   }) {
     const current = await this.getSettings();
     const [updated] = await this.db
