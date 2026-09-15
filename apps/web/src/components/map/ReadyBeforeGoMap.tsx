@@ -10,7 +10,7 @@ import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Loader2, Locate, MapPin, Search } from "lucide-react";
+import { CheckCircle2, Loader2, Locate, MapPin, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { toast } from "sonner";
@@ -106,7 +106,7 @@ const createClusterIcon = (
 
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer">
+      <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer animate-marker-pop">
         ${badgeHtml}
         <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[120px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
           ${name}
@@ -282,6 +282,11 @@ export default function ReadyBeforeGoMap() {
   // 임시 제보 마커 참조 레퍼런스
   const markerRef = useRef<L.Marker>(null);
 
+  // 지도 위 제보 데이터 로딩 상태 피드백 관리 📍
+  const [showStatusNotice, setShowStatusNotice] = useState(false);
+  const [statusNoticeType, setStatusNoticeType] = useState<"loading" | "loaded" | null>(null);
+  const prevLoadingRef = useRef(false);
+
   // ESC 키 감지 리스너 (위치 지정 및 확인 단계 대응)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -356,10 +361,30 @@ export default function ReadyBeforeGoMap() {
     }
   }, [isReportConfirmModalOpen, reportCoords]);
 
-  const { data: regions = [] } = useQuery<Region[]>({
+  const { data: regions = [], isLoading: isRegionsLoading, isFetching: isRegionsFetching } = useQuery<Region[]>({
     queryKey: ["scam-regions"],
     queryFn: () => scamsApi.getAllRegions(),
+    staleTime: 5 * 60 * 1000, // 5분간 fresh 캐시 유지
+    gcTime: 30 * 60 * 1000,
   });
+
+  // 지도 마커 데이터 로딩 피드백 감지 및 자동 전환 🛡️
+  useEffect(() => {
+    const isFetching = isRegionsLoading || (isRegionsFetching && regions.length === 0);
+    if (isFetching) {
+      setStatusNoticeType("loading");
+      setShowStatusNotice(true);
+      prevLoadingRef.current = true;
+    } else if (prevLoadingRef.current && !isRegionsFetching) {
+      prevLoadingRef.current = false;
+      setStatusNoticeType("loaded");
+      setShowStatusNotice(true);
+      const timer = setTimeout(() => {
+        setShowStatusNotice(false);
+      }, 2400);
+      return () => clearTimeout(timer);
+    }
+  }, [isRegionsLoading, isRegionsFetching, regions.length]);
 
   // 줌 레벨별 병합 기준 반경 설정 (위경도 단위 차이)
   const getThresholdForZoom = (zoom: number) => {
@@ -767,6 +792,26 @@ export default function ReadyBeforeGoMap() {
           animation: loaderProgress 1.8s ease-in-out infinite alternate;
         }
 
+        /* 마커 등장 시 부드러운 팝인 애니메이션 🌟 */
+        @keyframes markerPopIn {
+          0% {
+            opacity: 0;
+            transform: scale(0.6) translateY(6px);
+          }
+          70% {
+            opacity: 1;
+            transform: scale(1.08) translateY(-2px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+        .animate-marker-pop {
+          animation: markerPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          will-change: transform, opacity;
+        }
+
         /* Leaflet Popup 어두운 테마 오버라이드 🛡️ */
         .leaflet-popup-content-wrapper {
           background: #0f172a !important; /* slate-900 */
@@ -846,6 +891,37 @@ export default function ReadyBeforeGoMap() {
           >
             취소
           </button>
+        </div>
+      )}
+
+      {/* 지도 위 제보 위치 데이터 로딩 상태 플로팅 뱃지 📍 */}
+      {!isReportMode && showStatusNotice && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 dark:bg-slate-950/90 text-slate-100 px-4 py-2 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 border border-slate-700/70 select-none pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-3 max-w-[calc(100%-8rem)]">
+          {statusNoticeType === "loading" ? (
+            <>
+              <div className="relative flex items-center justify-center shrink-0">
+                <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin" />
+              </div>
+              <span className="text-xs font-semibold tracking-tight text-slate-200 truncate">
+                {lang === "ko" ? "지도 위 제보 위치를 탐색하는 중..." : "Loading report locations..."}
+              </span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-xs font-semibold tracking-tight text-slate-200 truncate">
+                {(() => {
+                  const activeCount = regions.filter((r) => (r.scamCount || 0) > 0).length;
+                  if (activeCount > 0) {
+                    return lang === "ko"
+                      ? `${activeCount}곳의 제보 위치를 불러왔습니다`
+                      : `${activeCount} locations loaded`;
+                  }
+                  return lang === "ko" ? "등록된 제보 위치가 없습니다" : "No reports registered yet";
+                })()}
+              </span>
+            </>
+          )}
         </div>
       )}
 

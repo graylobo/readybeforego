@@ -252,6 +252,8 @@ export default function Home() {
   const { data: allRegions = [] } = useQuery<Region[]>({
     queryKey: ["scam-regions"],
     queryFn: () => scamsApi.getAllRegions(),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 
   // 동일/근접 좌표를 갖는 모든 지역 필터링 (클러스터 단위 통합 피드 구현 🎯)

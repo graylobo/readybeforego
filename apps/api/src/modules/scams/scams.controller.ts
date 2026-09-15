@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes, Delete, Header } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -92,6 +92,7 @@ export class ScamsController {
 
   @Get('regions/all')
   @ApiOperation({ summary: '전체 세부 지역 목록 조회 (지도 마커 로딩용)' })
+  @Header('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
   async getAllRegions() {
     return this.scamsService.getAllRegions();
   }
