@@ -106,7 +106,7 @@ const createClusterIcon = (
 
   return new L.DivIcon({
     html: `
-      <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer animate-marker-pop">
+      <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer">
         ${badgeHtml}
         <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[120px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
           ${name}
@@ -790,26 +790,6 @@ export default function ReadyBeforeGoMap() {
         }
         .animate-loader-progress {
           animation: loaderProgress 1.8s ease-in-out infinite alternate;
-        }
-
-        /* 마커 등장 시 부드러운 팝인 애니메이션 🌟 */
-        @keyframes markerPopIn {
-          0% {
-            opacity: 0;
-            transform: scale(0.6) translateY(6px);
-          }
-          70% {
-            opacity: 1;
-            transform: scale(1.08) translateY(-2px);
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-        .animate-marker-pop {
-          animation: markerPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-          will-change: transform, opacity;
         }
 
         /* Leaflet Popup 어두운 테마 오버라이드 🛡️ */
