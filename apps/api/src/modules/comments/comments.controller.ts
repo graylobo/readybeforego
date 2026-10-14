@@ -8,20 +8,11 @@ import { UserStatusGuard } from '../../common/guards/user-status.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CommentsService, CommentViewer } from './comments.service';
 import { getClientIp } from '../../common/utils/client-ip';
-import { ApiException } from '../../common/exceptions/api.exception';
-import { ErrorCode } from '@community/shared-types';
+import { CommentTargetRegistry } from './targets';
 
 // 요청한 사용자 (역할은 인증 단계에서 읽은 값을 그대로 사용)
 function toViewer(req: any): CommentViewer {
   return { userId: req.user?.id, role: req.user?.role, ipAddress: getClientIp(req) };
-}
-
-// 게시글·제보 댓글의 대상 id는 UUID다. 국가 가이드(country_guide)는 국가 코드라 길이만 확인한다
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function assertTargetId(targetType: string, targetId: string | undefined) {
-  const valid = targetType === 'country_guide' ? !!targetId && targetId.length <= 16 : UUID_PATTERN.test(targetId ?? '');
-  if (!valid) throw new ApiException(ErrorCode.POST_NOT_FOUND, HttpStatus.NOT_FOUND);
 }
 
 @ApiTags('comments')
@@ -29,7 +20,10 @@ function assertTargetId(targetType: string, targetId: string | undefined) {
 @UseGuards(JwtAuthGuard)
 @Public()
 export class CommentsController {
-  constructor(private readonly commentsService: CommentsService) {}
+  constructor(
+    private readonly commentsService: CommentsService,
+    private readonly commentTargets: CommentTargetRegistry,
+  ) {}
 
   @Post()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -41,20 +35,20 @@ export class CommentsController {
       @Body() createCommentDto: CreateCommentZodDto,
       @Req() req: any
   ) {
-    assertTargetId(createCommentDto.targetType, createCommentDto.targetId);
+    this.commentTargets.assertValidTarget(createCommentDto.targetType, createCommentDto.targetId);
     return this.commentsService.create(toViewer(req), createCommentDto, req.headers['user-agent']);
   }
 
   @Get()
   findAll(
       @Query('targetType') targetType: string,
-      // 국가 가이드 댓글의 대상 id는 국가 코드라 형식 검사는 assertTargetId에서 대상별로 한다
+      // id 형식은 대상마다 달라서(게시글은 UUID 등) 대상 클래스의 isValidId로 확인한다
       @Query('targetId') targetId: string,
       @Query('page') page: string = '1',
       @Query('limit') limit: string = '100',
       @Req() req: any
   ) {
-    assertTargetId(targetType, targetId);
+    this.commentTargets.assertValidTarget(targetType, targetId);
     return this.commentsService.getCommentsByTarget(
       targetType,
       targetId,

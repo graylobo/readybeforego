@@ -1,5 +1,6 @@
 import { BoardManagersService } from '../boards/board-managers.service';
 import { isAdmin } from '@community/shared-types';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcrypt';
@@ -7,6 +8,8 @@ import { ErrorCode } from '@community/shared-types';
 import { CommentsService } from './comments.service';
 import { CommentsRepository } from './comments.repository';
 import { UploadsService } from '../uploads/uploads.service';
+import { ApiException } from '../../common/exceptions/api.exception';
+import { CommentTarget, CommentTargetRegistry, commentTargetProviders, isUuid, PostCommentTarget } from './targets';
 
 jest.mock('uuid', () => ({ v4: () => '12345678-1234-1234-1234-123456789012' }));
 
@@ -42,6 +45,7 @@ describe('CommentsService - 비회원 댓글 비밀번호', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommentsService,
+        ...commentTargetProviders([PostCommentTarget]),
         { provide: CommentsRepository, useValue: mockCommentsRepository },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         // 실제와 같이 사이트 관리자는 모든 게시판을 관리할 수 있다 (게시판 매니저 여부는 테스트마다 바꿔 씀)
@@ -193,7 +197,7 @@ describe('CommentsService - 비회원 댓글 비밀번호', () => {
       expect(commentsRepository.createComment).not.toHaveBeenCalled();
     });
 
-    it('게시글이 아닌 대상에는 댓글을 달 수 없어야 한다', async () => {
+    it('등록되지 않은 대상에는 댓글을 달 수 없어야 한다', async () => {
       await expect(service.create({ userId: 'u1' }, { targetType: 'user', targetId: 'p1', content: 'x' })).rejects.toMatchObject({ status: 400 });
     });
   });
@@ -335,5 +339,75 @@ describe('CommentsService - 비회원 댓글 비밀번호', () => {
       expect(uploadsService.deleteImage).toHaveBeenCalledTimes(1);
       expect(uploadsService.deleteImage).toHaveBeenCalledWith('comments/u1/a.webp');
     });
+  });
+});
+
+describe('댓글 대상 등록 (CommentTargetRegistry)', () => {
+  // 게시글이 아닌 대상 예시: 대상이 있는지만 확인하고 댓글 수는 저장하지 않는다
+  @Injectable()
+  class MovieCommentTarget implements CommentTarget {
+    readonly type = 'movie';
+    isValidId = isUuid;
+    assertCanView = jest.fn(async (targetId: string) => {
+      if (targetId !== MOVIE_ID) throw new ApiException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    });
+    assertCanWrite = jest.fn((targetId: string) => this.assertCanView(targetId));
+  }
+  const MOVIE_ID = '11111111-1111-4111-8111-111111111111';
+
+  let service: CommentsService;
+  let registry: CommentTargetRegistry;
+  let repo: Record<string, jest.Mock>;
+
+  beforeEach(async () => {
+    repo = {
+      transaction: jest.fn((cb: (tx: unknown) => unknown) => cb({})),
+      createComment: jest.fn((data: Record<string, unknown>) =>
+        Promise.resolve({ id: 'c1', likeCount: 0, dislikeCount: 0, deletedAt: null, createdAt: new Date(), updatedAt: new Date(), ...data }),
+      ),
+      findPostAccess: jest.fn(),
+      updatePostCommentCount: jest.fn(),
+      findUserById: jest.fn(),
+      findById: jest.fn(),
+      findCommentsByTarget: jest.fn().mockResolvedValue([]),
+      findUserReactionsByTarget: jest.fn().mockResolvedValue([]),
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        CommentsService,
+        ...commentTargetProviders([PostCommentTarget, MovieCommentTarget]),
+        { provide: CommentsRepository, useValue: repo },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        { provide: BoardManagersService, useValue: { canModerate: jest.fn() } },
+        { provide: UploadsService, useValue: {} },
+      ],
+    }).compile();
+    service = module.get(CommentsService);
+    registry = module.get(CommentTargetRegistry);
+  });
+
+  it('모르는 대상 종류는 400, 대상별 형식에 맞지 않는 id는 404', () => {
+    expect(() => registry.assertValidTarget('user', MOVIE_ID)).toThrow(expect.objectContaining({ status: 400 }));
+    expect(() => registry.assertValidTarget('movie', 'not-a-uuid')).toThrow(expect.objectContaining({ status: 404 }));
+    expect(() => registry.assertValidTarget('post', '')).toThrow(expect.objectContaining({ status: 404 }));
+    expect(registry.assertValidTarget('movie', MOVIE_ID).type).toBe('movie');
+  });
+
+  it('등록한 대상에는 그 대상의 규칙만 적용되고 게시글 규칙(글 조회, 댓글 수)은 쓰지 않는다', async () => {
+    const result = await service.create({ userId: 'u1' }, { targetType: 'movie', targetId: MOVIE_ID, content: '재밌어요' });
+    expect(result.comment.targetType).toBe('movie');
+    expect(result.commentCount).toBeUndefined();
+    expect(repo.findPostAccess).not.toHaveBeenCalled();
+    expect(repo.updatePostCommentCount).not.toHaveBeenCalled();
+
+    await service.getCommentsByTarget('movie', MOVIE_ID);
+    expect(repo.findPostAccess).not.toHaveBeenCalled();
+  });
+
+  it('대상이 없으면 댓글을 달거나 볼 수 없다', async () => {
+    const missing = '22222222-2222-4222-8222-222222222222';
+    await expect(service.create({ userId: 'u1' }, { targetType: 'movie', targetId: missing, content: 'x' })).rejects.toMatchObject({ status: 404 });
+    await expect(service.getCommentsByTarget('movie', missing)).rejects.toMatchObject({ status: 404 });
+    expect(repo.createComment).not.toHaveBeenCalled();
   });
 });
