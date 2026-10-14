@@ -1,3 +1,6 @@
 # community-boilerplate에서 마지막으로 반영한 커밋 (다음 동기화는 이 커밋 이후의 변경만 적용)
-# 적용 방법: git fetch boilerplate && git diff <아래 커밋> boilerplate/main > bp.patch && git apply --3way bp.patch
+# 적용 방법 (보일러플레이트 기록은 평소에 연결해 두지 않는다. 그래프에 두 줄로 보여 헷갈리므로 동기화할 때만 연결):
+#   git remote add boilerplate ../community-bolierplate && git remote set-url --push boilerplate no-push
+#   git fetch boilerplate && git diff <아래 커밋> boilerplate/main > bp.patch && git apply --3way bp.patch
+#   (반영·커밋 후 아래 커밋 값을 갱신하고) git remote remove boilerplate
 e93033e1eac09f777a9ee40955eff6040d441d54
