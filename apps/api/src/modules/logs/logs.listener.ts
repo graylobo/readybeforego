@@ -66,6 +66,7 @@ export class LogsListener {
 
   @OnEvent('comment.created')
   handleCommentCreated(event: CommentCreatedEvent) {
+    if (!event.userId) return; // 활동 기록은 회원만
     this.logsService.create({
       userId: event.userId,
       type: 'COMMENT_CREATE',

@@ -1,6 +1,48 @@
 import imageCompression from 'browser-image-compression';
 import { apiClient } from '../api-client';
 
+interface UploadImageOptions {
+  compress?: boolean;
+  folder?: string;
+  onProgress?: (progress: number, loaded: number, total: number) => void;
+}
+
+async function uploadImageRequest(
+  file: File,
+  options: UploadImageOptions,
+  responsive = false,
+): Promise<{ url: string; srcset?: string | null; width?: number | null; height?: number | null }> {
+  let fileToUpload = file;
+
+  if (options.compress) {
+    fileToUpload = await uploadsApi.compressImage(file);
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileToUpload);
+  if (options.folder) {
+    formData.append('folder', options.folder);
+  }
+  if (responsive) {
+    formData.append('responsive', 'true');
+  }
+
+  const response = await apiClient.post('/uploads/images', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress: (progressEvent) => {
+      if (options.onProgress && progressEvent.total) {
+        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        options.onProgress(progress, progressEvent.loaded, progressEvent.total);
+      }
+    },
+  });
+
+  const result = response.data;
+  return result.data || result;
+}
+
 export const uploadsApi = {
   /**
    * 이미지 압축
@@ -61,37 +103,26 @@ export const uploadsApi = {
    * @param options 옵션 (압축 여부, 진행률 콜백)
    * @returns 업로드된 이미지 URL
    */
-  uploadImage: async (
-    file: File, 
-    options: { compress?: boolean; folder?: string; onProgress?: (progress: number, loaded: number, total: number) => void } = { compress: true }
-  ): Promise<string> => {
-    let fileToUpload = file;
-    
-    if (options.compress) {
-      fileToUpload = await uploadsApi.compressImage(file);
-    }
-
-    const formData = new FormData();
-    formData.append('file', fileToUpload);
-    if (options.folder) {
-      formData.append('folder', options.folder);
-    }
-
-    const response = await apiClient.post('/uploads/images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (options.onProgress && progressEvent.total) {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          options.onProgress(progress, progressEvent.loaded, progressEvent.total);
-        }
-      },
-    });
-
-    const result = response.data;
-    const data = result.data || result;
+  uploadImage: async (file: File, options: UploadImageOptions = { compress: true }): Promise<string> => {
+    const data = await uploadImageRequest(file, options);
     return data.url;
+  },
+
+  /**
+   * 게시글 본문 이미지 업로드. 서버가 작은 버전(720/1280px)을 함께 저장하고 srcset을 돌려준다
+   * (본문에서 화면 크기에 맞는 이미지를 받게 하기 위함. 댓글/프로필 등은 uploadImage 사용)
+   */
+  uploadContentImage: async (
+    file: File,
+    options: UploadImageOptions = { compress: true },
+  ): Promise<{ url: string; srcset?: string; width?: number; height?: number }> => {
+    const data = await uploadImageRequest(file, options, true);
+    return {
+      url: data.url,
+      srcset: data.srcset ?? undefined,
+      width: data.width ?? undefined,
+      height: data.height ?? undefined,
+    };
   },
 
   /**

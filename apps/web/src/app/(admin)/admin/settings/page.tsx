@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { useChatSettings, useClearChatHistory, useUpdateChatSettings } from '@/hooks/queries/use-chat-queries';
 import { useSiteSettings, useUpdateSiteSettings } from '@/hooks/queries/use-site-queries';
+import { useChatSettings, useClearChatHistory, useUpdateChatSettings } from '@/hooks/queries/use-chat-queries';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -21,7 +21,10 @@ import * as z from 'zod';
 
 const siteFormSchema = z.object({
   showSidebarAds: z.boolean(),
+  showAllBoardMenu: z.boolean(),
+  showBoardDirectoryMenu: z.boolean(),
 });
+
 const chatFormSchema = z.object({
   enabled: z.boolean(),
   persistEnabled: z.boolean(),
@@ -29,10 +32,11 @@ const chatFormSchema = z.object({
   showMessageTime: z.boolean(),
   defaultOpen: z.boolean(),
 });
+
 export default function AdminSettingsPage() {
   const { data: settings, isLoading } = useSiteSettings();
   const updateSettings = useUpdateSiteSettings();
-    const { data: chatSettings, isLoading: chatLoading, isError: chatMissing } = useChatSettings();
+  const { data: chatSettings, isLoading: chatLoading, isError: chatMissing } = useChatSettings();
   const updateChatSettings = useUpdateChatSettings();
   const clearChatHistory = useClearChatHistory();
 
@@ -40,9 +44,12 @@ export default function AdminSettingsPage() {
     resolver: zodResolver(siteFormSchema),
     defaultValues: {
       showSidebarAds: true,
+      showAllBoardMenu: true,
+      showBoardDirectoryMenu: true,
     },
   });
-    const chatForm = useForm<z.infer<typeof chatFormSchema>>({
+
+  const chatForm = useForm<z.infer<typeof chatFormSchema>>({
     resolver: zodResolver(chatFormSchema),
     defaultValues: {
       enabled: true,
@@ -52,10 +59,13 @@ export default function AdminSettingsPage() {
       defaultOpen: true,
     },
   });
+
   useEffect(() => {
     if (settings) {
       siteForm.reset({
         showSidebarAds: settings.showSidebarAds,
+        showAllBoardMenu: settings.showAllBoardMenu ?? true,
+        showBoardDirectoryMenu: settings.showBoardDirectoryMenu ?? true,
       });
     }
   }, [settings, siteForm]);
@@ -164,7 +174,46 @@ export default function AdminSettingsPage() {
                 </FormItem>
               )}
             />
-            
+
+            <FormField
+              control={siteForm.control}
+              name="showAllBoardMenu"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/20">
+                  <div className="space-y-0.5 max-w-[80%]">
+                    <FormLabel className="text-base">사이드바에 '전체 게시판' 메뉴 표시</FormLabel>
+                    <FormDescription>끄면 사이드바 커뮤니티 메뉴에서만 숨깁니다. 주소(/board/all)로는 그대로 들어갈 수 있습니다.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={updateSettings.isPending}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={siteForm.control}
+              name="showBoardDirectoryMenu"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/20">
+                  <div className="space-y-0.5 max-w-[80%]">
+                    <FormLabel className="text-base">사이드바에 '게시판 목록' 메뉴 표시</FormLabel>
+                    <FormDescription>끄면 사이드바 커뮤니티 메뉴에서만 숨깁니다. 주소(/boards)로는 그대로 들어갈 수 있습니다.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={updateSettings.isPending}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <div className="flex justify-end">
               <Button type="submit" disabled={updateSettings.isPending}>
                 {updateSettings.isPending ? '저장 중...' : '변경사항 저장'}
@@ -173,6 +222,7 @@ export default function AdminSettingsPage() {
           </form>
         </Form>
       </div>
+
       {showChatCard && (
         <div className="bg-card border rounded-lg p-6 max-w-2xl shadow-sm">
           <h2 className="text-lg font-semibold mb-1">실시간 채팅</h2>

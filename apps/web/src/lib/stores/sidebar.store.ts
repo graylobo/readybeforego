@@ -1,41 +1,21 @@
 import { create } from "zustand";
 
 interface SidebarStore {
-  expandedItems: Set<string>;
-  setExpandedItems: (items: Set<string>) => void;
-  updateExpandedItems: (updater: (prev: Set<string>) => Set<string>) => void;
-  addExpandedItem: (itemId: string) => void;
-  removeExpandedItem: (itemId: string) => void;
+  /** 사용자가 접은 메뉴 id. 기본은 모두 펼침이라, 서버 렌더링 HTML부터 펼쳐진 상태로 그려진다 */
+  collapsedItems: Set<string>;
   toggleExpandedItem: (itemId: string) => void;
 }
 
 export const useSidebarStore = create<SidebarStore>((set) => ({
-  expandedItems: new Set<string>(),
-  setExpandedItems: (items) => set({ expandedItems: items }),
-  updateExpandedItems: (updater) =>
-    set((state) => ({
-      expandedItems: updater(state.expandedItems),
-    })),
-  addExpandedItem: (itemId) =>
-    set((state) => {
-      const newSet = new Set(state.expandedItems);
-      newSet.add(itemId);
-      return { expandedItems: newSet };
-    }),
-  removeExpandedItem: (itemId) =>
-    set((state) => {
-      const newSet = new Set(state.expandedItems);
-      newSet.delete(itemId);
-      return { expandedItems: newSet };
-    }),
+  collapsedItems: new Set<string>(),
   toggleExpandedItem: (itemId) =>
     set((state) => {
-      const newSet = new Set(state.expandedItems);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
+      const next = new Set(state.collapsedItems);
+      if (next.has(itemId)) {
+        next.delete(itemId);
       } else {
-        newSet.add(itemId);
+        next.add(itemId);
       }
-      return { expandedItems: newSet };
+      return { collapsedItems: next };
     }),
 }));

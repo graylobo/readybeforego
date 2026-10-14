@@ -58,4 +58,12 @@ export class ChatRepository {
       .returning({ id: chatMessages.id });
     return deleted.length;
   }
+
+  async deleteById(id: string, roomSlug: string) {
+    const deleted = await this.db
+      .delete(chatMessages)
+      .where(and(eq(chatMessages.id, id), eq(chatMessages.roomSlug, roomSlug)))
+      .returning({ id: chatMessages.id });
+    return deleted.length;
+  }
 }

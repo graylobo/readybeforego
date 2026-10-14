@@ -25,28 +25,27 @@ export class ZodValidationPipe implements PipeTransform {
       const parsedValue = zodSchema.parse(value);
       return parsedValue;
     } catch (error: any) {
-      console.error('ZodValidationPipe Error:', error);
-      const issues = error.issues || error.errors;
-      if (issues && Array.isArray(issues) && issues.length > 0) {
+      // zod v4는 오류 목록이 issues에 있다 (v3의 errors는 없어져, 예전에는 구체적인 이유 없이 'Validation failed'만 갔다)
+      const issues: any[] | undefined = error?.issues ?? error?.errors;
+      if (Array.isArray(issues) && issues.length > 0) {
         const firstIssue = issues[0];
-        let detailMessage = firstIssue.message;
-        if (detailMessage === 'Invalid input' || detailMessage === 'Required') {
-          if (firstIssue.path && firstIssue.path.length > 0) {
-            const fieldName = firstIssue.path.join('.');
-            detailMessage = `입력 항목(${fieldName})의 값이 올바르지 않습니다.`;
-          } else {
-            detailMessage = '입력 필수 항목의 값을 확인해 주세요.';
-          }
+        let message = firstIssue.message || '입력값이 올바르지 않습니다.';
+        // 스키마에 한국어 문구가 없어 zod 기본 문구가 나오면, 어느 항목이 문제인지 알려준다
+        if (message === 'Invalid input' || message === 'Required') {
+          message = firstIssue.path?.length
+            ? `입력 항목(${firstIssue.path.join('.')})의 값이 올바르지 않습니다.`
+            : '입력 필수 항목의 값을 확인해 주세요.';
         }
         throw new BadRequestException({
-          message: detailMessage,
-          errors: issues.map((e: any) => ({
-            field: e.path.join('.'),
+          // 화면 알림에 그대로 보이도록 첫 번째 이유를 메시지로 (스키마에 적은 한국어 문구)
+          message,
+          error: issues.map((e: any) => ({
+            path: (e.path ?? []).join('.'),
             message: e.message,
           })),
         });
       }
-      throw new BadRequestException('입력 정보 검증에 실패했습니다. 각 항목의 입력값을 확인해 주세요.');
+      throw new BadRequestException('입력값이 올바르지 않습니다.');
     }
   }
 }

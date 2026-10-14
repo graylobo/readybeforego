@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { isAdmin } from '@community/shared-types';
-import { AlertOctagon, AlertTriangle, Award, BookOpen, Film, Globe, HelpCircle, Home, MessageSquare, Settings, Shield, Users } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Award, BookOpen, Bot, Film, Globe, HelpCircle, Home, MessageSquare, Settings, Shield, SquarePlus, Users } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
 
@@ -88,6 +88,12 @@ export default function AdminLayout({
       href: '/admin/boards',
     },
     {
+      id: 'admin-board-requests',
+      label: '게시판 개설 신청',
+      icon: <SquarePlus className="h-5 w-5" />,
+      href: '/admin/board-requests',
+    },
+    {
       id: 'admin-logs',
       label: '로그 관리',
       icon: <Shield className="h-5 w-5" />,
@@ -98,6 +104,12 @@ export default function AdminLayout({
       label: '신고 관리',
       icon: <AlertOctagon className="h-5 w-5" />,
       href: '/admin/reports',
+    },
+     {
+      id: 'admin-inquiries',
+      label: '1:1 문의 관리',
+      icon: <HelpCircle className="h-5 w-5 text-sky-500" />,
+      href: '/admin/inquiries',
     },
     {
       id: 'admin-inquiries',
@@ -122,6 +134,12 @@ export default function AdminLayout({
       label: '환경 설정',
       icon: <Settings className="h-5 w-5" />,
       href: '/admin/settings',
+    },
+    {
+      id: 'admin-crawler',
+      label: '콘텐츠 수집/크롤러',
+      icon: <Bot className="h-5 w-5 text-emerald-500" />,
+      href: '/admin/crawler',
     },
     {
       id: 'main',

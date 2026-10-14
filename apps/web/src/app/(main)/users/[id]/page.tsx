@@ -2,6 +2,8 @@
 
 import { CommonPagination } from '@/components/common/common-pagination';
 import { PageContainer } from '@/components/layout/page-container';
+import { scrollMainToTop } from '@/components/layout/main-scroll-restoration';
+import { parsePageParam, pushSearchParams } from '@/lib/utils/list-url';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,9 +34,10 @@ export default function UserProfilePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuthStore();
-  const page = parseInt(searchParams.get('page') || '1');
+  // 페이지 번호와 탭은 주소에 둔다: 글을 보다가 뒤로가기 하면 보던 탭·페이지로 돌아오도록
+  const page = parsePageParam(searchParams.get('page'));
   const searchQuery = searchParams.get('q') || '';
-  const [activeTab, setActiveTab] = useState<'posts' | 'comments'>('posts');
+  const activeTab: 'posts' | 'comments' = searchParams.get('tab') === 'comments' ? 'comments' : 'posts';
   const limit = 20;
 
   const { data: profile, isLoading: isProfileLoading } = usePublicProfile(id);
@@ -57,9 +60,14 @@ export default function UserProfilePage() {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const handlePageChange = (newPage: number) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('page', newPage.toString());
-    router.push(`/users/${id}?${params.toString()}`);
+    pushSearchParams({ page: newPage > 1 ? String(newPage) : null });
+    scrollMainToTop();
+  };
+
+  // 탭은 프로필 아래에 있어 스크롤 위치는 그대로 두고 1페이지부터
+  const handleTabChange = (tab: 'posts' | 'comments') => {
+    if (tab === activeTab) return;
+    pushSearchParams({ tab: tab === 'comments' ? 'comments' : null, page: null });
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -70,7 +78,7 @@ export default function UserProfilePage() {
     } else {
       params.delete('q');
     }
-    params.set('page', '1');
+    params.delete('page');
     router.push(`/users/${id}?${params.toString()}`);
   };
 
@@ -145,7 +153,7 @@ export default function UserProfilePage() {
       <div className="space-y-6">
         <div className="flex items-center justify-end gap-6 border-b pb-1 px-4">
           <button 
-            onClick={() => { setActiveTab('posts'); handlePageChange(1); }}
+            onClick={() => handleTabChange('posts')}
             className={`text-sm font-black pb-3 transition-colors relative cursor-pointer ${
               activeTab === 'posts' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -156,7 +164,7 @@ export default function UserProfilePage() {
             )}
           </button>
           <button 
-            onClick={() => { setActiveTab('comments'); handlePageChange(1); }}
+            onClick={() => handleTabChange('comments')}
             className={`text-sm font-black pb-3 transition-colors relative cursor-pointer ${
               activeTab === 'comments' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}

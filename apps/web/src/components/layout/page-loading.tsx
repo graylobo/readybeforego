@@ -1,6 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function Loading() {
+/**
+ * 페이지 이동이 늦을 때 AppLayout이 본문 대신 보여주는 스켈레톤.
+ * loading.tsx(Suspense 대체 화면)로 쓰지 않는다: React는 대체 화면을 한 번 보이면 실제 내용으로 바꾸기까지
+ * 최소 300ms를 기다리므로, 데이터가 100ms 만에 와도 이동할 때마다 300ms 이상 걸린다.
+ */
+export function PageLoading() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       {/* Title area skeleton */}

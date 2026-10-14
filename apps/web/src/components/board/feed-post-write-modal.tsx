@@ -1,5 +1,6 @@
 'use client';
 
+import { UPLOAD_LIMITS } from '@community/shared-types';
 import React, { useState, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,6 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { useCreatePost } from '@/hooks/queries/use-board-queries';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import { ContentImage } from '@/lib/utils/content-images';
+import { buildFeedContent } from '@/lib/utils/feed-content';
 import { uploadsApi } from '@/lib/api/uploads';
 import { toast } from '@/lib/toast';
 import { 
@@ -39,7 +42,7 @@ export function FeedPostWriteModal({
 
   // States
   const [content, setContent] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<ContentImage[]>([]);
   const [uploadState, setUploadState] = useState({
     isUploading: false,
     completed: 0,
@@ -53,7 +56,8 @@ export function FeedPostWriteModal({
     const animal = ['여우', '토끼', '사자', '부엉이', '하마'];
     return `${adj[Math.floor(Math.random() * 5)]}${animal[Math.floor(Math.random() * 5)]}${Math.floor(Math.random() * 1000)}`;
   });
-  const [guestPassword, setGuestPassword] = useState('1234');
+  // 비밀번호는 미리 채우지 않는다 (가려진 칸이라 기본값을 모른 채 올리면 누구나 수정/삭제할 수 있게 됨)
+  const [guestPassword, setGuestPassword] = useState('');
 
   const createPostMutation = useCreatePost(boardSlug);
 
@@ -85,16 +89,18 @@ export function FeedPostWriteModal({
     const total = imageFiles.length;
 
     try {
-      const urls: string[] = [];
+      const uploaded: ContentImage[] = [];
       for (const file of imageFiles) {
-        if (file.size > 10 * 1024 * 1024) {
-          toast.error(`${file.name}: 10MB를 초과하는 파일은 업로드할 수 없습니다.`);
+        // 원본 한도만 미리 막는다. 저장 한도(최적화 후 10MB)는 서버가 변환한 뒤 검사
+        if (file.size > UPLOAD_LIMITS.IMAGE_INPUT_SIZE) {
+          toast.error(`${file.name}: ${UPLOAD_LIMITS.IMAGE_INPUT_SIZE / 1024 / 1024}MB를 초과하는 파일은 업로드할 수 없습니다.`);
           completed++;
           continue;
         }
 
         try {
-          const url = await uploadsApi.uploadImage(file, {
+          // 본문 이미지용 업로드: 작은 버전 목록(srcset)과 크기를 받아 태그에 함께 넣는다
+          const { url, srcset, width, height } = await uploadsApi.uploadContentImage(file, {
             compress: true,
             onProgress: (progress: number) => {
               const currentGlobalProgress = Math.round((completed / total) * 100 + (progress / total));
@@ -104,7 +110,7 @@ export function FeedPostWriteModal({
               }));
             }
           });
-          urls.push(url);
+          uploaded.push({ src: url, srcset, width, height });
           completed++;
           setUploadState(prev => ({
             ...prev,
@@ -118,9 +124,9 @@ export function FeedPostWriteModal({
         }
       }
 
-      if (urls.length > 0) {
-        setUploadedImages(prev => [...prev, ...urls]);
-        toast.success(`${urls.length}개의 이미지가 추가되었습니다.`);
+      if (uploaded.length > 0) {
+        setUploadedImages(prev => [...prev, ...uploaded]);
+        toast.success(`${uploaded.length}개의 이미지가 추가되었습니다.`);
       }
     } finally {
       setUploadState(prev => ({ ...prev, isUploading: false, progress: 0 }));
@@ -171,16 +177,16 @@ export function FeedPostWriteModal({
       toast.error('내용을 입력해주세요.');
       return;
     }
+    if (!user && guestPassword.length < 4) {
+      toast.error('비밀번호를 4자 이상 입력해주세요. (글을 수정하거나 지울 때 필요합니다)');
+      return;
+    }
 
     // Title generation from the first line or first 40 chars
     const title = trimmedText.split('\n')[0]?.trim().slice(0, 40) || '이미지 게시글';
 
-    // Content formatting (markdown/HTML compatibility)
-    let finalContent = trimmedText;
-    if (uploadedImages.length > 0) {
-      // Append images as HTML image tags at the end of the post content
-      finalContent += '\n' + uploadedImages.map(url => `<img src="${url}" />`).join('\n');
-    }
+    // 한 줄을 <p> 문단 하나로 저장해 상세 화면과 목록 미리보기 모두 줄바꿈이 유지되게 한다
+    const finalContent = buildFeedContent(trimmedText, uploadedImages);
 
     const payload = {
       boardSlug,
@@ -269,7 +275,7 @@ export function FeedPostWriteModal({
               <div className="flex gap-2 overflow-x-auto py-2 mt-2 border-t border-border/30 w-full min-w-0 max-w-full">
                 {uploadedImages.map((img, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-border shrink-0 bg-muted/30">
-                    <img src={img} alt="upload preview" className="w-full h-full object-cover" />
+                    <img src={img.src} alt="upload preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => removeImage(i)}

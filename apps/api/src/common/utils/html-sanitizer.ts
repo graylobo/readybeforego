@@ -26,7 +26,8 @@ export const sanitizeContent = (content: string): string => {
       iframe: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'allow'],
       '*': ['class', 'id', 'style', 'data-*']
     },
-    allowedIframeHostnames: ['www.youtube.com', 'player.vimeo.com'],
+    // 에디터 유튜브 삽입은 nocookie 도메인을 사용한다
+    allowedIframeHostnames: ['www.youtube.com', 'www.youtube-nocookie.com', 'player.vimeo.com'],
     allowedSchemes: ['http', 'https', 'mailto', 'tel'],
   });
 };

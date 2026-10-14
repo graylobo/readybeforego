@@ -4,6 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { CommentsRepository } from '../comments/comments.repository';
 import { CommentReactionEvent } from '../comments/events/comment-actions.events';
 import { CommentCreatedEvent } from '../comments/events/comment-created.event';
+import { BoardRequestReviewedEvent } from '../boards/events/board-request-reviewed.event';
 import { PostReactionEvent } from '../posts/events/post-actions.events';
 import { PostsRepository } from '../posts/posts.repository';
 import { NotificationsService } from './notifications.service';
@@ -53,7 +54,7 @@ export class NotificationsListener {
 
             await this.notificationsService.create({
               userId: parentComment.userId,
-              actorId: event.userId,
+              actorId: event.userId ?? undefined,
               type: 'REPLY',
               content: `내 댓글에 새로운 답글이 달렸습니다: "${parentComment.content.substring(0, 20)}..."`,
               targetId: event.commentId,
@@ -81,7 +82,7 @@ export class NotificationsListener {
 
                     await this.notificationsService.create({
                       userId: post.userId,
-                      actorId: event.userId,
+                      actorId: event.userId ?? undefined,
                       type: 'COMMENT',
                       content,
                       targetId: post.id,
@@ -94,7 +95,22 @@ export class NotificationsListener {
     }
   }
 
-  @OnEvent('comment.reaction')
+  @OnEvent('board.request.reviewed')
+  async handleBoardRequestReviewed(event: BoardRequestReviewedEvent) {
+    const approved = event.status === 'approved';
+    await this.notificationsService.create({
+      userId: event.requesterId,
+      actorId: event.reviewerId,
+      type: 'SYSTEM',
+      content: approved
+        ? `신청하신 [${event.boardName}] 게시판이 개설되었습니다. 매니저로 게시판을 관리할 수 있습니다.`
+        : `신청하신 [${event.boardName}] 게시판 개설이 반려되었습니다.${event.rejectReason ? ` (사유: ${event.rejectReason})` : ''}`,
+      targetId: event.requestId,
+      link: approved && event.boardSlug ? `/board/${event.boardSlug}` : '/boards',
+    });
+  }
+
+    @OnEvent('comment.reaction')
   async handleCommentReaction(event: CommentReactionEvent) {
     if (event.authorId && event.authorId !== event.userId && event.type === 'like') {
         const comment = await this.commentsRepo.findById(event.commentId);

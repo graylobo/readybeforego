@@ -21,7 +21,7 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --sidebar: #FFFFFF;
+  --sidebar: #ffffff;
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
@@ -82,7 +82,7 @@
 }
 
 .dark {
-  --background: #181C1F;
+  --background: #181c1f;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -121,7 +121,7 @@ body {
 }
 
 .dark body {
-  background: #181C1F;
+  background: #181c1f;
 }
 
 @layer base {
@@ -165,4 +165,75 @@ body {
 
 .chat-message-flash {
   animation: chat-message-flash 1.6s ease-out;
+}
+
+/* 게시글 본문 읽기 전용 렌더링 (PostContent). 편집기 화면과 같은 모양이 되도록 맞춘다 */
+.post-content {
+  overflow-wrap: break-word;
+}
+/* 편집기에서 만든 빈 줄(<p></p>)도 한 줄 높이를 차지하도록 */
+.post-content p:empty::after {
+  content: "\00a0";
+}
+/* 편집기의 이미지 블록(my-4 block w-fit)과 동일 */
+.post-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem 0;
+  border-radius: 0.5rem;
+}
+
+/*
+ * 레이아웃 모드(sidebar/top) — head의 layoutModeBootstrapScript가 하이드레이션 전에 붙인 data-layout 기준으로 그린다.
+ * 서버 렌더링 HTML이 JS 실행 전에도 사용자가 고른 레이아웃으로 보이게 하기 위함 (스토어는 마운트 후 동기화).
+ * Tailwind v4의 translate-* 유틸리티는 transform이 아니라 translate 속성을 쓰므로 translate로 덮어쓴다.
+ */
+html[data-layout="top"] .app-layout-shell {
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  html[data-layout="top"] .app-layout-sidebar {
+    display: none;
+  }
+}
+
+html[data-layout="top"] .layout-header {
+  border-bottom: 1px solid var(--border);
+}
+
+html[data-layout="top"] .layout-top-logo {
+  opacity: 1;
+  translate: none;
+  pointer-events: auto;
+  position: static;
+}
+
+html[data-layout="sidebar"] .layout-top-logo {
+  opacity: 0;
+  translate: -1rem 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+html[data-layout="top"] .layout-top-nav {
+  opacity: 1;
+  translate: none;
+  pointer-events: auto;
+  width: auto;
+}
+
+html[data-layout="sidebar"] .layout-top-nav {
+  opacity: 0;
+  translate: 0 -1rem;
+  pointer-events: none;
+  width: 0;
+}
+
+html[data-layout="top"] .layout-sidebar-toggle {
+  opacity: 0;
+  translate: -1rem 0;
+  pointer-events: none;
+  width: 0;
 }

@@ -163,6 +163,9 @@ export function ResizableImageComponent({
           width: Math.round(maxWidth),
           height: Math.round(naturalHeight * ratio),
         });
+      } else if (naturalWidth && naturalHeight) {
+        // 작은 이미지도 크기를 저장해 둔다: 글을 볼 때 이미지가 도착하기 전에 자리가 잡혀 아래 글이 밀리지 않는다
+        updateAttributes({ width: naturalWidth, height: naturalHeight });
       }
     }
   }, [width, height, updateAttributes, isEditable]);

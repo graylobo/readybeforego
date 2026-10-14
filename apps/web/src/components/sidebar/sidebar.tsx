@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { ChevronDown, ChevronRight, Film, X } from "lucide-react";
-import { ReactNode, useState, useEffect, useRef } from "react";
+import { ReactNode, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSidebarStore } from "@/lib/stores/sidebar.store";
@@ -62,48 +62,23 @@ const renderMenuIcon = (
 };
 
 export function Sidebar({ items }: SidebarProps) {
-  const { isOpen: isLocked, toggle, layoutMode, setIsOpen } = useSidebarToggleStore();
+  // isOpen이 null이면 아직 열고 닫은 적이 없는 상태 → 화면 크기 기본값(데스크톱 열림, 모바일 닫힘)을 CSS로 그린다
+  const { isOpen, toggle, layoutMode } = useSidebarToggleStore();
   const [isHovered, setIsHovered] = useState(false);
   const { pendingPath, setPendingPath } = useLayoutStore();
   const pathname = usePathname();
-   const router = useRouter();
+  const router = useRouter();
 
   const handleNavigation = (e: React.MouseEvent, href: string) => {
     e.preventDefault();
     setPendingPath(href);
     router.push(href);
   };
-  const { expandedItems, updateExpandedItems, toggleExpandedItem } =
-    useSidebarStore();
-  const autoExpandedRef = useRef<Set<string>>(new Set());
+  const { collapsedItems, toggleExpandedItem } = useSidebarStore();
 
-  // Initialize based on screen width
-  useEffect(() => {
-    if (window.innerWidth >= 768) {
-      setIsOpen(true);
-    }
-  }, [setIsOpen]);
-
-  // Visual Open State: Open if Locked (Manual) OR Hovered
-  const isVisualOpen = isLocked || isHovered;
-
-  // Initialize expanded items: Expand all by default and keep active path expanded
-  useEffect(() => {
-    updateExpandedItems((prev) => {
-      const nextExpanded = new Set(prev);
-      let changed = false;
-      
-      for (const item of items) {
-        if (item.subMenu && item.subMenu.length > 0 && !autoExpandedRef.current.has(item.id)) {
-          nextExpanded.add(item.id);
-          autoExpandedRef.current.add(item.id);
-          changed = true;
-        }
-      }
-      
-      return changed ? nextExpanded : prev;
-    });
-  }, [items, updateExpandedItems]);
+  // Visual Open State: 기본(null)/직접 연 상태이거나, 접힌 상태에서 마우스를 올렸을 때
+  const isCollapsed = isOpen === false;
+  const isVisualOpen = !isCollapsed || isHovered;
 
   const toggleExpand = (itemId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -127,16 +102,18 @@ export function Sidebar({ items }: SidebarProps) {
     <aside
       className={cn(
         "relative h-full flex flex-col z-[60] transition-all duration-400 ease-[cubic-bezier(0.4,0,0.2,1)] max-md:fixed max-md:left-0 max-md:top-0 max-md:h-screen max-md:!w-64 max-md:z-[100]",
-        isLocked ? "w-64 max-md:translate-x-0" : "w-16 max-md:-translate-x-full",
+        isOpen === null && "w-64 max-md:-translate-x-full",
+        isOpen === true && "w-64 max-md:translate-x-0",
+        isCollapsed && "w-16 max-md:-translate-x-full",
         layoutMode === 'overlay' && "!absolute left-0 top-0 bottom-0"
       )}
-      onMouseEnter={() => !isLocked && setIsHovered(true)}
+      onMouseEnter={() => isCollapsed && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
         className={cn(
           "bg-sidebar dark:bg-[#181C1F] border-r border-sidebar-border flex flex-col h-full w-full overflow-hidden transition-all duration-300 ease-out",
-          !isLocked && isHovered && "absolute top-0 left-0 w-64 shadow-[4px_0_24px_rgba(0,0,0,0.1)]"
+          isCollapsed && isHovered && "absolute top-0 left-0 w-64 shadow-[4px_0_24px_rgba(0,0,0,0.1)]"
         )}
       >
         {/* Sidebar Header (Logo + Close) */}
@@ -160,7 +137,7 @@ export function Sidebar({ items }: SidebarProps) {
         <nav className="flex-1 overflow-y-auto p-2">
           {items.map((item) => {
             const isActive = isItemActive(item);
-            const isExpanded = expandedItems.has(item.id);
+            const isExpanded = !collapsedItems.has(item.id);
             const hasSubMenuDefined = item.subMenu !== undefined;
             const hasSubMenuItems = item.subMenu && item.subMenu.length > 0;
 

@@ -21,9 +21,15 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { boardCommunityApi } from '@/lib/api/board-community';
+import { toast } from '@/lib/toast';
 import {
   Check,
   Edit2,
+  Lock,
+  LockOpen,
+  Flame,
+  UserCog,
   Eye,
   EyeOff,
   GripVertical,
@@ -44,6 +50,7 @@ interface Board {
     sortOrder: number;
     allowAnonymous: boolean;
     isPrivate: boolean;
+    isReadOnly?: boolean;
     viewMode: 'list' | 'lounge' | 'feed';
 }
 
@@ -116,10 +123,47 @@ export default function AdminBoardsPage() {
     };
 
     const handleDelete = (board: Board) => {
-        if (!confirm(`'${board.name}' 게시판을 삭제하시겠습니까?\n(게시판 내 모든 게시글도 함께 삭제됩니다)`)) {
+        if (!confirm(`'${board.name}' 게시판을 삭제하시겠습니까?\n(게시글이 남아 있으면 삭제되지 않습니다. 글까지 지우려면 불꽃 버튼을 쓰세요)`)) {
             return;
         }
         deleteMutation.mutate(board.id);
+    };
+
+    const handleToggleReadOnly = (board: Board) => {
+        const next = !board.isReadOnly;
+        if (!confirm(next
+            ? `'${board.name}'을(를) 읽기 전용으로 바꿀까요?\n(글은 그대로 보이고, 새 글·댓글은 막힙니다)`
+            : `'${board.name}'의 읽기 전용을 풀까요?`)) return;
+        updateMutation.mutate({ id: board.id, data: { isReadOnly: next } });
+    };
+
+    // 매니저 변경: 예) 실제 크루 관리자가 요청하면 그 회원으로 바꿔 준다
+    const handleChangeManager = async (board: Board) => {
+        const name = prompt(`'${board.name}'의 새 매니저 닉네임을 입력하세요.\n(이전 매니저는 관리자에서 빠지고, 부매니저였다면 매니저로 올라갑니다)`);
+        if (!name?.trim()) return;
+        try {
+            await boardCommunityApi.changeManager(board.id, name.trim());
+            toast.success(`${name.trim()} 님을 매니저로 지정했습니다.`);
+        } catch {
+            // 오류 알림은 공통 처리에서 띄운다
+        }
+    };
+
+    // 게시판을 글·댓글·이미지까지 모두 삭제 (되돌릴 수 없어 게시판 이름을 직접 입력하게 한다)
+    const handleDeleteWithPosts = async (board: Board) => {
+        const typed = prompt(`'${board.name}' 게시판과 그 안의 모든 글·댓글·이미지를 삭제합니다. 되돌릴 수 없습니다.\n계속하려면 게시판 이름을 똑같이 입력하세요.`);
+        if (typed === null) return;
+        if (typed.trim() !== board.name) {
+            alert('게시판 이름이 일치하지 않아 취소했습니다.');
+            return;
+        }
+        try {
+            const { deletedPosts } = await boardCommunityApi.deleteBoardWithPosts(board.id);
+            toast.success(`게시판과 글 ${deletedPosts}개를 삭제했습니다.`);
+            queryClient.invalidateQueries();
+        } catch {
+            // 오류 알림은 공통 처리에서 띄운다
+        }
     };
 
     const startEdit = (board: Board) => {
@@ -345,7 +389,7 @@ export default function AdminBoardsPage() {
                                             <TableCell className="text-muted-foreground">{board.description || '-'}</TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant={board.type === 'system' ? 'secondary' : 'outline'}>
-                                                    {board.type === 'system' ? '시스템' : '사용자'}
+                                                    {board.type === 'system' ? '기본' : '신청'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-center">
@@ -362,6 +406,7 @@ export default function AdminBoardsPage() {
                                                 <Badge variant={board.isPrivate ? 'destructive' : 'outline'}>
                                                     {board.isPrivate ? '비공개' : '공개'}
                                                 </Badge>
+                                                {board.isReadOnly && <Badge variant="secondary" className="ml-1">읽기 전용</Badge>}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                  <Button
@@ -375,11 +420,20 @@ export default function AdminBoardsPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-center gap-1">
-                                                    <Button size="icon" variant="ghost" onClick={() => startEdit(board)}>
+                                                    <Button size="icon" variant="ghost" onClick={() => startEdit(board)} title="수정">
                                                         <Edit2 className="h-4 w-4" />
                                                     </Button>
-                                                    <Button size="icon" variant="ghost" onClick={() => handleDelete(board)}>
+                                                    <Button size="icon" variant="ghost" onClick={() => handleToggleReadOnly(board)} title={board.isReadOnly ? '읽기 전용 해제' : '읽기 전용으로'}>
+                                                        {board.isReadOnly ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                                                    </Button>
+                                                    <Button size="icon" variant="ghost" onClick={() => handleChangeManager(board)} title="매니저 변경">
+                                                        <UserCog className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button size="icon" variant="ghost" onClick={() => handleDelete(board)} title="삭제 (글이 없을 때)">
                                                         <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                    <Button size="icon" variant="ghost" onClick={() => handleDeleteWithPosts(board)} title="글까지 모두 삭제">
+                                                        <Flame className="h-4 w-4 text-destructive" />
                                                     </Button>
                                                 </div>
                                             </TableCell>

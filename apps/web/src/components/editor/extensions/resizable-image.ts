@@ -13,6 +13,7 @@ declare module '@tiptap/core' {
     resizableImage: {
       setImage: (options: {
         src: string;
+        srcset?: string | null;
         alt?: string;
         title?: string;
         width?: number;
@@ -46,6 +47,10 @@ export const ResizableImage = Node.create<ResizableImageOptions>({
   addAttributes() {
     return {
       src: {
+        default: null,
+      },
+      // 작은 버전 이미지 목록 (서버 업로드 응답). 저장된 HTML에 그대로 남아 글을 볼 때 쓰인다
+      srcset: {
         default: null,
       },
       alt: {

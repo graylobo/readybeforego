@@ -1,6 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { getClientIp } from '../utils/client-ip';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -11,7 +12,8 @@ export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const ctx = context.switchToHttp();
     const req = ctx.getRequest();
-    const { method, originalUrl, ip } = req;
+    const { method, originalUrl } = req;
+    const ip = getClientIp(req);
     
     const userAgent = req.get('user-agent') || '';
     const startTime = Date.now();

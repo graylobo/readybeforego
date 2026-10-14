@@ -97,7 +97,7 @@ export default function AdminInquiriesPage() {
   const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
 
   // Fetch inquiry board posts
-  const { data: postsData, isLoading } = usePosts('inquiry', page, limit);
+  const { data: postsData, isLoading } = usePosts('inquiry', page, limit, undefined, undefined, undefined, undefined, undefined, { includeContent: true });
 
   const rawInquiries = postsData?.items || [];
   const totalCount = postsData?.total || 0;

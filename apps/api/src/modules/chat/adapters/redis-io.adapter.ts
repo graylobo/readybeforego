@@ -67,7 +67,7 @@ export class RedisIoAdapter extends IoAdapter {
       pingInterval: 20000,
       pingTimeout: 25000,
       maxHttpBufferSize: 1e4,
-    } as ServerOptions);
+    });
 
     if (this.adapterConstructor) {
       server.adapter(this.adapterConstructor);

@@ -32,9 +32,8 @@ export function GoogleAd({
   style,
 }: GoogleAdProps) {
   const isPushed = useRef(false);
-  const isDev =
-    process.env.NODE_ENV === "development" ||
-    (typeof window !== "undefined" && window.location.hostname === "localhost");
+  // 서버와 브라우저가 같은 값을 내야 한다 (window로 판단하면 localhost에서 서버/브라우저 결과가 달라 하이드레이션 오류)
+  const isDev = process.env.NODE_ENV === "development";
 
   useEffect(() => {
     if (isDev) return;

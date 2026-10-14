@@ -1,7 +1,12 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import type { StorageProvider } from '../interfaces/storage-provider.interface';
 
+/**
+ * 게시글에 사용되지 않은 temp 업로드 파일 정리
+ *
+ * 실행: 배치 작업(src/jobs/uploads-temp-cleanup.ts)을 외부 스케줄러(PM2 cron 등)로 매일 실행한다.
+ * 서버리스 환경(Cloud Run 등)에서는 인프로세스 크론이 보장되지 않으므로 사용하지 않는다.
+ */
 @Injectable()
 export class UploadsCleanupService {
   private readonly logger = new Logger(UploadsCleanupService.name);
@@ -11,7 +16,6 @@ export class UploadsCleanupService {
     private readonly storageProvider: StorageProvider,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async handleCleanup() {
     this.logger.log('Starting cleanup of temp folder...');
 
@@ -24,6 +28,7 @@ export class UploadsCleanupService {
       this.logger.log('Cleanup process completed.');
     } catch (e) {
       this.logger.error('Cleanup process failed:', e);
+      throw e;
     }
   }
 }

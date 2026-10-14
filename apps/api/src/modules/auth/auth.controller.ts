@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { PointsService } from '../points/points.service';
 import type { User } from '@community/shared-types';
 import * as Express from 'express';
+import { getClientIp } from '../../common/utils/client-ip';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -58,9 +59,9 @@ export class AuthController {
         `${process.env.FRONTEND_URL}/login?error=auth_failed`,
       );
     }
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
-    const { access_token, user } = this.authService.login(req.user, ip as string, userAgent);
+    const { access_token, user } = this.authService.login(req.user, ip, userAgent);
     
     // Set HttpOnly cookie
     res.cookie('access_token', access_token, {

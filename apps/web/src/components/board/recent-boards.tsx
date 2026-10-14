@@ -1,11 +1,21 @@
 'use client';
 
 import Link from 'next/link';
+import { useSyncExternalStore } from 'react';
 import { X } from 'lucide-react';
-import { useRecentBoardsStore } from '@/lib/stores/recent-boards.store';
+import { RecentBoard, useRecentBoardsStore } from '@/lib/stores/recent-boards.store';
 
-export function RecentBoards() {
-  const { recentBoards, removeBoard } = useRecentBoardsStore();
+const noopSubscribe = () => () => {};
+
+/**
+ * @param current 지금 보고 있는 게시판. 방문 기록은 브라우저 저장소에 있어 서버는 모르므로,
+ *   서버 렌더링과 하이드레이션 중에는 이 게시판만 그리고(줄 높이가 미리 잡혀 본문이 밀리지 않게) 이후 저장된 기록으로 바꾼다
+ */
+export function RecentBoards({ current }: { current?: RecentBoard }) {
+  const { recentBoards: storedBoards, removeBoard } = useRecentBoardsStore();
+  // 서버 렌더링/하이드레이션 중에는 false, 이후 true (저장소 값이 달라 생기는 하이드레이션 불일치 방지)
+  const isHydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const recentBoards = isHydrated ? storedBoards : current ? [current] : [];
 
   if (recentBoards.length === 0) return null;
 

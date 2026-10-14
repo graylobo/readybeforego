@@ -121,7 +121,7 @@ gcloud secrets list
 
 | 변수 | 설명 |
 |---|---|
-| `{db-connection-string}` | `postgresql://user:pass@host:5432/dbname` |
+| `{db-connection-string}` | Supabase **Transaction pooler** 주소 `postgresql://user:pass@<지역>.pooler.supabase.com:6543/postgres` (아래 "DB 연결 주소 고르기") |
 | `{jwt-secret-key}` | 랜덤 문자열 (최소 32자 이상 권장) |
 | `{google-client-secret}` | Google Cloud Console에서 발급 |
 | `{kakao-client-secret}` | Kakao Developers에서 발급 |
@@ -339,9 +339,40 @@ git push origin main (apps/api/** 변경 감지)
   → Docker 빌드 (--target api)
   → Artifact Registry 푸시 ({git-sha} 태그)
   → Cloud Run 새 리비전 배포 (콘솔/Secret Manager 환경변수 그대로 유지)
-  → entrypoint.sh: db:migrate 실행
   → pnpm --filter api run start:prod
 ```
+
+> 배포 워크플로는 DB 마이그레이션을 실행하지 않습니다. 스키마가 바뀌는 배포는 **push 전에** 마이그레이션을 직접 실행하세요
+> (Session pooler 5432 주소로, 아래 "DB 연결 주소 고르기").
+
+```
+```
+
+---
+
+## DB 연결 주소 고르기 (Supabase)
+
+Supabase 주소 뒤에는 **Supavisor**라는 연결 관리 프로그램(풀러)이 있고, 같은 주소에서 포트에 따라 다르게 동작합니다.
+
+| 포트 | 방식 | 동작 | 쓰는 곳 |
+|---|---|---|---|
+| **6543** | Transaction pooler | 조회(트랜잭션) 하는 동안만 DB 자리를 빌렸다가 바로 돌려줌. 서버 쪽 연결은 수백 개까지 받음 | **API 서버, 워커 등 계속 켜져 있는 프로그램** |
+| 5432 | Session pooler | 연결이 끊길 때까지 DB 자리 하나를 계속 차지. 작은 요금제는 자리 15개 | **마이그레이션** (몇 초 쓰고 끝나면 반납) |
+
+왜 서버는 6543인가:
+- 서버는 연결을 새로 맺는 시간(TCP·TLS·인증)을 아끼려고 연결을 최대 `DATABASE_POOL_MAX`(기본 10)개 열어 두고, 안 써도 5분(`DATABASE_POOL_IDLE_TIMEOUT_MS`) 동안 유지합니다.
+- Session pooler에서는 이 놀고 있는 연결도 자리를 차지합니다. Cloud Run은 배포 중(예전·새 리비전이 몇 분간 같이 뜸)이나 트래픽이 늘 때 인스턴스가 여러 대가 되므로,
+  2대만 돼도 15자리를 넘어 `(EMAXCONNSESSION) max clients reached in session mode` 로 500 오류가 납니다 (예전 리비전이 꺼지면 저절로 사라짐).
+- Transaction pooler에서는 서버가 연결을 열어 둬도 DB 자리는 실제로 조회 중일 때만 쓰입니다. 붙였다 떼는 비용은 메모리 안의 배정이라 거의 없습니다.
+
+Transaction pooler에서 안 되는 것 (이 프로젝트 코드는 쓰지 않음 — 새로 쓰려면 5432나 직접 연결을 따로 쓰세요):
+- 이름 붙인 준비된 쿼리(prepared statement), 연결별 `SET`, `LISTEN/NOTIFY`, 세션 단위 advisory lock, 임시 테이블
+
+마이그레이션 실행 (스키마가 바뀌는 배포는 push 전에):
+```bash
+DATABASE_URL='<Session pooler 5432 주소>' pnpm --filter api db:migrate
+```
+- `CREATE INDEX CONCURRENTLY`처럼 트랜잭션 밖에서 실행해야 하는 작업, `pg_dump` 같은 도구도 5432(또는 직접 연결)를 씁니다.
 
 ---
 
@@ -375,3 +406,59 @@ gcloud secrets versions disable {버전번호} --secret={SECRET_NAME}
 ```
 
 Secret Manager 값은 변경 즉시 다음 컨테이너 시작 시 반영됩니다. (재배포 불필요)
+
+---
+
+## 정기 배치 작업 (스케줄 작업)
+
+Cloud Run 은 요청을 처리하는 동안에만 CPU 가 할당되고, 트래픽이 없으면 인스턴스가 0대로 줄어듭니다.
+따라서 API 서버 안의 `@Cron` 은 **실행이 보장되지 않으며** 인스턴스가 여러 대면 대수만큼 중복 실행됩니다.
+정기 작업은 API 서버에 두지 않고 `apps/api/src/jobs/` 의 단독 실행 스크립트로 만들어 외부 스케줄러로 실행합니다.
+
+| 작업 | 실행 명령 | 권장 주기 |
+|---|---|---|
+| 미사용 temp 업로드 이미지 정리 | `pnpm --filter api run prod:cleanup-temp-uploads` | 매일 1회 (예: 새벽 4시) |
+
+스케줄러 선택지 (비용 순)
+
+- **이미 상시 가동 중인 서버가 있다면**: PM2 `cron_restart` 또는 crontab 으로 위 명령 실행 (추가 비용 0원)
+- **Cloud Scheduler + Cloud Run Jobs**: 같은 이미지로 Job 을 만들어 스케줄 실행 (Cloud Scheduler 는 결제 계정당 작업 3개까지 무료)
+
+스크립트는 DB/스토리지 환경변수(`DATABASE_URL`, `STORAGE_TYPE`, `SUPABASE_*` 등)를 API 서버와 동일하게 필요로 합니다.
+
+---
+
+## 게시글 자동수집 크롤러 워커
+
+크롤러 수집(즉시 수집 / 일괄 수집 / 정기 수집)은 수 분씩 걸리는 작업이라 Cloud Run API 서버에서 실행하지 않습니다.
+API 는 수집 명령을 Redis 큐에 넣기만 하고, **상시 가동 서버의 크롤러 워커**가 받아서 실행합니다.
+
+```
+관리자 화면 ──▶ Cloud Run API ──(BullMQ 큐: crawler)──▶ 크롤러 워커 (pm2)
+                     │                                       │
+                     └──── 진행 상태 / 중지 요청 / 결과 (Redis: crawler:*) ────┘
+```
+
+### 실행 (pm2)
+
+```bash
+pnpm install && pnpm --filter api run build
+pm2 start ecosystem.crawler.config.js
+```
+
+- 워커는 `apps/api/.env` 를 읽으며 API 서버와 같은 `DATABASE_URL`, `REDIS_URL`, LLM 키, 스토리지 설정이 필요합니다.
+- `STORAGE_TYPE=local` 이면 이미지가 워커 서버 디스크에 저장되어 API 에서 서빙되지 않으므로 운영에서는 `supabase` 를 사용합니다.
+- 정기 수집 검사(매 1분)도 워커에서 실행됩니다. `CRAWLER_AUTO_SCHEDULE_ENABLED=false` 이면 꺼집니다.
+- 워커가 꺼져 있으면 즉시 수집은 "대기 중" 상태로 남고(최대 5분 후 자동 해제), 대기 중에는 취소할 수 있습니다.
+- 워커를 여러 대 띄워도 Redis 실행 락으로 같은 대상이 동시에 두 번 수집되지 않습니다.
+
+### Cloud Run Jobs 로 전환하려면 (B 방식)
+
+실행 로직(`CrawlerRunner`)과 상태 관리(`CrawlerRunRegistry`)는 실행 환경과 분리되어 있어 아래만 추가하면 됩니다.
+
+1. `apps/api/src/modules/crawler/dispatchers/` 에 `CrawlerDispatcher` 구현체 추가
+   - `dispatch(command)` 에서 Cloud Run Jobs API 로 Job 을 실행하며 환경변수 `CRAWLER_COMMAND=<JSON.stringify(command)>` 를 넘김
+2. `crawler.module.ts` 의 `CRAWLER_DISPATCHER` 팩토리에 `cloud-run-job` 분기 추가 후 `CRAWLER_DISPATCHER=cloud-run-job`
+3. 같은 이미지로 Cloud Run Job 생성, 실행 명령 `pnpm --filter api run prod:crawler-run`
+4. 정기 수집: Cloud Scheduler 로 1분마다 같은 Job 을 인자 `tick` 으로 실행 (`prod:crawler-run -- tick`)
+5. pm2 워커 중지

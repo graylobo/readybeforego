@@ -71,7 +71,7 @@ export const SITE_CONFIG = {
 | 변수명 | 설명 |
 |---|---|
 | `POSTGRES_DB` | 데이터베이스 이름 (예: `myproject_db`) |
-| `DATABASE_URL` | PostgreSQL 연결 URL (DB 이름 포함) |
+| `DATABASE_URL` | PostgreSQL 연결 URL (DB 이름 포함). Supabase 운영은 **Transaction pooler(포트 6543)** 주소 — 마이그레이션만 Session pooler(5432) |
 | `JWT_SECRET` | 랜덤하고 강력한 시크릿 키로 교체 |
 | `NEXT_PUBLIC_APP_URL` | 프론트엔드 도메인 |
 | `NEXT_PUBLIC_API_URL` | 백엔드 API 도메인 |

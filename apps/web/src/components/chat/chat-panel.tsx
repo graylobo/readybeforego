@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Maximize2, Minimize2, Settings, SquareArrowOutUpRight, X } from 'lucide-react';
-import { ErrorCode, ErrorMessages, formatGuestTag } from '@community/shared-types';
+import { ErrorCode, ErrorMessages, formatGuestTag, isSuperAdmin } from '@community/shared-types';
 import { Button } from '@/components/ui/button';
 import { useChatAlerts } from '@/hooks/use-chat-alerts';
 import { useChatSocket } from '@/hooks/use-chat-socket';
@@ -76,6 +76,7 @@ export function ChatPanel({ variant = 'rail' }: ChatPanelProps) {
     error,
     canSend,
     sendMessage,
+    deleteMessage,
   } = useChatSocket({ enabled: true });
 
   useChatAlerts(messages, joined, nickname, selfUserId, selfGuestId);
@@ -255,8 +256,14 @@ export function ChatPanel({ variant = 'rail' }: ChatPanelProps) {
             loading={!unavailable && !joined}
             blurred={showGate}
             canReply={canSend}
+            canModerate={isSuperAdmin(user?.role)}
             selfUserId={selfUserId}
             selfGuestId={selfGuestId}
+            onDeleteMessage={(id) => {
+              deleteMessage(id);
+              if (replyTo?.id === id) clearReply();
+            }}
+            isOpen={panelVisible}
           />
           {unavailable && <ChatUnavailable />}
           {showGate && <ChatGuestGate />}

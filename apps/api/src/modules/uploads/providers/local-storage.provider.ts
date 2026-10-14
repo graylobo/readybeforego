@@ -24,7 +24,7 @@ export class LocalStorageProvider implements StorageProvider {
 
     fs.writeFileSync(fullPath, file);
 
-    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4000';
+    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4001';
     const url = `${apiUrl}/uploads/${filePath}`;
 
     return {
@@ -53,7 +53,7 @@ export class LocalStorageProvider implements StorageProvider {
       fs.renameSync(fullFromPath, fullToPath);
     }
 
-    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4000';
+    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4001';
     const url = `${apiUrl}/uploads/${toPath}`;
 
     return {

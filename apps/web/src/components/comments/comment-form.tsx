@@ -64,6 +64,7 @@ export function CommentForm({
     setValue,
     watch,
     reset,
+    unregister,
   } = useForm<CreateCommentDto>({
     resolver: zodResolver(CreateCommentSchema),
     defaultValues: {
@@ -75,6 +76,12 @@ export function CommentForm({
       guestPassword: !user && allowAnonymous ? undefined : undefined,
     },
   });
+
+  // 로그인 확인 전에는 비회원 입력칸(닉네임/비밀번호)이 잠깐 그려져 빈 값('')이 폼에 남는다.
+  // 그대로 두면 로그인한 사용자도 '비밀번호를 입력해주세요' 검사에 걸려 댓글을 쓸 수 없으므로 지운다
+  useEffect(() => {
+    if (user) unregister(['guestName', 'guestPassword']);
+  }, [user, unregister]);
 
   // Sync state to react-hook-form for validation
   useEffect(() => {
@@ -114,6 +121,10 @@ export function CommentForm({
       toast.error('내용, 이모티콘, 또는 이미지를 입력해주세요.');
       return;
     }
+    if (!user && !data.guestPassword) {
+      toast.error('비밀번호를 입력해주세요. (댓글을 수정하거나 지울 때 필요합니다)');
+      return;
+    }
     if (data.guestName) {
       sessionGuestName = data.guestName;
     }
@@ -145,6 +156,7 @@ export function CommentForm({
 
       if (!parentId) {
         reset({
+          ...data,
           targetId,
           targetType,
           parentId,

@@ -67,11 +67,10 @@ Cloud Run
 │    └─ Artifact Registry에서 이미지 pull
 │
 ├─ 컨테이너 시작
-│    ├─ entrypoint.sh 실행
-│    │    └─ pnpm --filter api run db:migrate (DB 마이그레이션)
-│    │
 │    └─ pnpm --filter api run start:prod (NestJS 앱 시작)
 │         └─ PORT=4000 에서 수신 대기
+│    (DB 마이그레이션은 배포에 포함되지 않음 — push 전에 Session pooler 5432 주소로 직접 실행.
+│     CLOUDRUN_DEPLOY_GUIDE.md "DB 연결 주소 고르기")
 │
 ├─ 헬스체크 통과 확인
 │    └─ 실패 시 → 이전 리비전으로 자동 롤백

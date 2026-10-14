@@ -4,31 +4,37 @@ import { RecentBoards } from '@/components/board/recent-boards';
 import { Comments } from '@/components/comments/comments';
 import { ReactionButtons } from '@/components/common/reaction-buttons';
 import { UserProfilePopover } from '@/components/common/user-profile-popover';
-import { TiptapViewer } from '@/components/editor/tiptap-editor';
 import { PageContainer } from '@/components/layout/page-container';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DelayedRender } from "@/components/ui/delayed-render";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePostDetailBehavior } from '@/hooks/use-post-detail-behavior';
-import { Post } from '@/lib/api/board';
+import { Board, Post } from '@/lib/api/board';
 import { cn } from '@/lib/utils/cn';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
-import { Bookmark, BookmarkCheck, Link as LinkIcon, Pencil, Trash2, Flag } from 'lucide-react';
+import { formatSiteDate } from '@/lib/utils/date';
+import { Bookmark, BookmarkCheck, Link as LinkIcon, Pencil, Trash2, Flag, Bot, Megaphone, EyeOff, Eye } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/lib/stores/auth.store';
 import { ReportDialog } from '@/components/common/report-dialog';
 import { TimeDisplay } from '@/components/common/time-display';
+import { BotSourceButton } from '@/components/board/bot-source-button';
+import { PostContent } from '@/components/board/post-content';
+import type { CommentListData } from '@/lib/api/comments';
 
 interface PostDetailClientProps {
   slug: string;
   postId: string;
   initialPost?: Post;
+  initialBoard?: Board;
+  initialComments?: CommentListData;
+  /** 서버 렌더링 결과가 방문자(비회원) IP 기준으로 조회된 값인지 */
+  initialIsForVisitor?: boolean;
 }
 
-export function PostDetailClient({ slug, postId, initialPost }: PostDetailClientProps) {
+export function PostDetailClient({ slug, postId, initialPost, initialBoard, initialComments, initialIsForVisitor = false }: PostDetailClientProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const queryClient = useQueryClient();
@@ -38,11 +44,17 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
         isLoading, 
         isPending, 
         canEdit, 
+        canDelete,
+        canModerate,
+        handleToggleNotice,
+        handleToggleHidden,
         handleScrap, 
         handleCopyLink, 
         handleDelete, 
         handleReaction 
-    } = usePostDetailBehavior({ slug, postId, initialPost });
+    } = usePostDetailBehavior({ slug, postId, initialPost, initialBoard, initialIsForVisitor });
+    const { user } = useAuthStore();
+    const isSuperAdmin = user?.role === 'super_admin';
     const [isReportOpen, setIsReportOpen] = useState(false);
 
     useEffect(() => {
@@ -95,60 +107,83 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
         );
     }
 
+    // 주소 복사·신고·스크랩. PC는 제목 오른쪽, 모바일은 조회수 줄 오른쪽에 그린다
+    const postActions = (
+        <>
+        <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full transition-all text-muted-foreground/60 hover:text-foreground hover:bg-muted"
+            onClick={handleCopyLink}
+            title="주소 복사"
+        >
+            <LinkIcon className="h-5 w-5" />
+        </Button>
+        <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full transition-all text-muted-foreground/60 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+            onClick={() => setIsReportOpen(true)}
+            title="신고하기"
+        >
+            <Flag className="h-5 w-5" />
+        </Button>
+        <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+                "rounded-full transition-all",
+                activePost.isScrapped ? "text-primary hover:text-primary/80 bg-primary/5" : "text-muted-foreground/40 hover:text-primary hover:bg-primary/5"
+            )}
+            onClick={handleScrap}
+            disabled={isPending}
+            title={activePost.isScrapped ? "스크랩 취소" : "스크랩"}
+        >
+            {activePost.isScrapped ? (
+                <BookmarkCheck className="h-6 w-6 fill-current" />
+            ) : (
+                <Bookmark className="h-6 w-6" />
+            )}
+        </Button>
+        </>
+    );
+
     return (
         <PageContainer className="md:px-10 py-4 md:py-8 min-h-screen">
-              <RecentBoards />
+              <RecentBoards current={board?.name ? { slug, name: board.name } : undefined} />
 
               <article className="max-w-screen-xl mx-auto">
                 <header className="mb-6">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {activePost.hiddenAt && (
+                            <span
+                                className="px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-sm inline-flex items-center gap-1"
+                                title="Super Admin 전용: 다른 사람에게는 보이지 않는 글"
+                            >
+                                <EyeOff className="w-3.5 h-3.5" /> 비공개 글 (Super Admin만 볼 수 있음)
+                            </span>
+                        )}
                         {activePost.category && (
                             <span className="px-2 py-0.5 text-xs font-bold bg-muted text-muted-foreground rounded-sm">
                                 {activePost.category}
                             </span>
                         )}
+                        {isSuperAdmin && activePost.isBot && (
+                            <span
+                                className="px-2 py-0.5 text-xs font-semibold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-sm inline-flex items-center gap-1"
+                                title="Super Admin 전용: 크롤러 봇에 의해 등록된 게시글"
+                            >
+                                <Bot className="w-3.5 h-3.5" /> 🤖 AI 봇 등록 글{activePost.botSource?.targetName && ` · ${activePost.botSource.targetName}${activePost.botSource.galleryId ? ` (디시 ID: ${activePost.botSource.galleryId})` : ' (삭제된 카드)'}`} (Super Admin 전용)
+                            </span>
+                        )}
+                        {isSuperAdmin && activePost.isBot && <BotSourceButton postId={activePost.id} className="px-2 text-xs" />}
                     </div>
                     <div className="flex items-center justify-between gap-4 mb-4">
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground min-w-0 break-words">
                             {activePost.title}
                         </h1>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="rounded-full transition-all text-muted-foreground/60 hover:text-foreground hover:bg-muted"
-                                onClick={handleCopyLink}
-                                title="주소 복사"
-                            >
-                                <LinkIcon className="h-5 w-5" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="rounded-full transition-all text-muted-foreground/60 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => setIsReportOpen(true)}
-                                title="신고하기"
-                            >
-                                <Flag className="h-5 w-5" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                    "rounded-full transition-all",
-                                    activePost.isScrapped ? "text-primary hover:text-primary/80 bg-primary/5" : "text-muted-foreground/40 hover:text-primary hover:bg-primary/5"
-                                )}
-                                onClick={handleScrap}
-                                disabled={isPending}
-                                title={activePost.isScrapped ? "스크랩 취소" : "스크랩"}
-                            >
-                                {activePost.isScrapped ? (
-                                    <BookmarkCheck className="h-6 w-6 fill-current" />
-                                ) : (
-                                    <Bookmark className="h-6 w-6" />
-                                )}
-                            </Button>
-                        </div>
+                        {/* 모바일은 제목이 너비를 다 쓰도록 아이콘을 아래 조회수 줄 오른쪽에 둔다 */}
+                        <div className="hidden md:flex items-center gap-1 shrink-0">{postActions}</div>
                     </div>
 
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/60">
@@ -180,24 +215,27 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
                                 <span className="text-muted-foreground italic">
                                     <TimeDisplay 
                                         date={activePost.createdAt}
-                                        formattedDate={format(new Date(activePost.createdAt), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                                        formattedDate={formatSiteDate(activePost.createdAt, 'yyyy.MM.dd HH:mm')}
                                     />
                                 </span>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground font-medium">
-                            <span>조회수 {activePost.viewCount}</span>
-                            <span className="text-muted-foreground/30">|</span>
-                            <span>추천 {activePost.likeCount || 0}</span>
-                            <span className="text-muted-foreground/30">|</span>
-                            <span>댓글 {activePost.commentCount || 0}</span>
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground font-medium">
+                                <span>조회수 {activePost.viewCount}</span>
+                                <span className="text-muted-foreground/30">|</span>
+                                <span>추천 {activePost.likeCount || 0}</span>
+                                <span className="text-muted-foreground/30">|</span>
+                                <span>댓글 {activePost.commentCount || 0}</span>
+                            </div>
+                            <div className="flex md:hidden items-center -my-2 -mr-2 shrink-0">{postActions}</div>
                         </div>
                     </div>
                 </header>
 
                 <div className="min-h-[300px]">
-                    <TiptapViewer content={activePost.content} className="border-none p-0" />
+                    <PostContent html={activePost.content ?? ""} />
                 </div>
 
                 {/* Reaction Buttons */}
@@ -213,8 +251,33 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
                 </div>
 
                 {/* Actions */}
-                {canEdit && (
+                {canDelete && (
                   <div className="flex items-center justify-end gap-2 mt-8">
+                    {isSuperAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs font-semibold px-4 rounded-md shadow-sm"
+                      onClick={handleToggleHidden}
+                      disabled={isPending}
+                    >
+                      {activePost.hiddenAt ? <Eye className="h-3.5 w-3.5 mr-1.5" /> : <EyeOff className="h-3.5 w-3.5 mr-1.5" />}
+                      {activePost.hiddenAt ? '다시 공개' : '비공개'}
+                    </Button>
+                    )}
+                    {canModerate && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs font-semibold px-4 rounded-md shadow-sm"
+                      onClick={handleToggleNotice}
+                      disabled={isPending}
+                    >
+                      <Megaphone className="h-3.5 w-3.5 mr-1.5" />
+                      {activePost.isNotice ? '공지 내리기' : '공지로 올리기'}
+                    </Button>
+                    )}
+                    {canEdit && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -224,6 +287,7 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
                       <Pencil className="h-3.5 w-3.5 mr-1.5" />
                       수정
                     </Button>
+                    )}
                     <Button
                       variant="destructive"
                       size="sm"
@@ -251,6 +315,10 @@ export function PostDetailClient({ slug, postId, initialPost }: PostDetailClient
                             targetType="post" 
                             targetId={postId} 
                             allowAnonymous={board?.allowAnonymous}
+                            canModerate={canModerate}
+                            readOnly={!!board?.isReadOnly}
+                            initialData={initialComments}
+                            initialIsForVisitor={initialIsForVisitor}
                         />
                     </Suspense>
                   </section>

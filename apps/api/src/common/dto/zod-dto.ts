@@ -1,7 +1,11 @@
 import { createZodDto } from '@anatine/zod-nestjs';
 import {
+    AddSubManagerSchema,
     BanUserSchema,
-    ClaimGuestNicknameSchema,
+    ChangeBoardManagerSchema,
+    CreateBoardRequestSchema,
+    ReviewBoardRequestSchema,
+    UpdateBoardSettingsSchema,
     CreateBoardSchema,
     CreateCommentSchema,
     CreateEmoticonPackSchema,
@@ -18,7 +22,8 @@ import {
     UpdatePostSchema,
     UpdateUserRoleSchema,
     UpdateUserSchema,
-    WarnUserSchema
+    WarnUserSchema,
+    ClaimGuestNicknameSchema
 } from '@community/shared-types';
 
 // Comments
@@ -49,11 +54,16 @@ export class UpdateUserRoleZodDto extends createZodDto(UpdateUserRoleSchema) {}
 // Boards
 export class CreateBoardZodDto extends createZodDto(CreateBoardSchema) {}
 export class UpdateBoardZodDto extends createZodDto(UpdateBoardSchema) {}
+export class CreateBoardRequestZodDto extends createZodDto(CreateBoardRequestSchema) {}
+export class ReviewBoardRequestZodDto extends createZodDto(ReviewBoardRequestSchema) {}
+export class UpdateBoardSettingsZodDto extends createZodDto(UpdateBoardSettingsSchema) {}
+export class AddSubManagerZodDto extends createZodDto(AddSubManagerSchema) {}
+export class ChangeBoardManagerZodDto extends createZodDto(ChangeBoardManagerSchema) {}
 
 // Emoticons
 export class CreateEmoticonPackZodDto extends createZodDto(CreateEmoticonPackSchema) {}
 export class UpdateEmoticonPackZodDto extends createZodDto(UpdateEmoticonPackSchema) {}
 export class UpdateEmoticonPackStatusZodDto extends createZodDto(UpdateEmoticonPackStatusSchema) {}
 
-
+// Chat
 export class ClaimGuestNicknameZodDto extends createZodDto(ClaimGuestNicknameSchema) {}

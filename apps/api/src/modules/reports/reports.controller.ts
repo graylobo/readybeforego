@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { USER_ROLES } from '@community/shared-types';
@@ -15,6 +16,8 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Post()
+  // 같은 사람이 신고를 대량으로 넣지 못하게 한다 (비회원은 중복 신고 확인이 안 됨)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: '신고하기 (인증 필요없음 - 익명 허용 시 / 하지만 현재 로그인 권장)' })
   @UsePipes(new ZodValidationPipe(CreateReportZodDto))

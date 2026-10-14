@@ -22,7 +22,7 @@ export class SettingsRepository {
     return settings;
   }
 
-  async updateSettings(data: { showSidebarAds?: boolean }) {
+  async updateSettings(data: { showSidebarAds?: boolean; showAllBoardMenu?: boolean; showBoardDirectoryMenu?: boolean }) {
     const current = await this.getSettings();
     const [updated] = await this.db.update(siteSettings)
       .set({ ...data, updatedAt: new Date() })

@@ -41,6 +41,7 @@ export default function WritePage() {
         register,
         handleSubmit,
         setValue,
+        setError,
         watch,
         formState: { errors, isDirty },
     } = useForm<CreatePostDto>({
@@ -55,7 +56,8 @@ export default function WritePage() {
                 const animal = ['여우', '토끼', '사자', '부엉이', '하마'];
                 return `${adj[Math.floor(Math.random() * 5)]}${animal[Math.floor(Math.random() * 5)]}${Math.floor(Math.random() * 1000)}`;
             })() : undefined,
-            guestPassword: !user ? '1234' : undefined,
+            // 비밀번호는 미리 채우지 않는다 (가려진 칸이라 기본값을 모른 채 올리면 누구나 수정/삭제할 수 있게 됨)
+            guestPassword: undefined,
             allowComments: true,
             receiveCommentNotification: true,
         },
@@ -125,6 +127,10 @@ export default function WritePage() {
     }
 
     const onSubmit = (data: CreatePostDto) => {
+        if (!user && !data.guestPassword) {
+            setError('guestPassword', { message: '비밀번호를 입력해주세요. (글을 수정하거나 지울 때 필요합니다)' });
+            return;
+        }
         createPostMutation.mutate(data, {
             onSuccess: () => {
                 router.push(`/board/${slug}`);

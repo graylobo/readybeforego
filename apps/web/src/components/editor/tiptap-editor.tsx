@@ -1,5 +1,6 @@
 'use client';
 
+import { UPLOAD_LIMITS } from '@community/shared-types';
 import { uploadsApi } from '@/lib/api/uploads';
 import { cn } from '@/lib/utils';
 import Highlight from '@tiptap/extension-highlight';
@@ -52,7 +53,8 @@ const formatBytes = (bytes: number) => {
 };
 
 const MAX_UPLOAD_FILES = 30;
-const MAX_FILE_SIZE_MB = 10;
+// 원본 한도만 미리 막는다. 저장 한도(최적화 후 10MB)는 서버가 변환한 뒤 검사
+const MAX_FILE_SIZE_MB = UPLOAD_LIMITS.IMAGE_INPUT_SIZE / 1024 / 1024;
 
 interface TiptapEditorProps {
   content: string;
@@ -263,7 +265,7 @@ export function TiptapEditor({
     const total = imageFiles.length;
     
     try {
-      const validUrls: string[] = [];
+      const validUrls: { url: string; srcset?: string }[] = [];
       for (const file of imageFiles) {
         // 파일 크기 제한
         if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
@@ -280,7 +282,7 @@ export function TiptapEditor({
         }));
 
         try {
-          const url = await uploadsApi.uploadImage(file, {
+          const uploaded = await uploadsApi.uploadContentImage(file, {
             compress: true,
             onProgress: (progress: number, loaded: number, totalBytes: number) => {
                const currentGlobalProgress = Math.round((completed / total) * 100 + (progress / total));
@@ -293,7 +295,7 @@ export function TiptapEditor({
             }
           });
           
-          validUrls.push(url);
+          validUrls.push(uploaded);
           completed++;
           setUploadState(prev => ({
             ...prev,
@@ -308,9 +310,10 @@ export function TiptapEditor({
       }
       
       if (validUrls.length > 0) {
-        const nodes = validUrls.map(url => ({
+        // srcset: 서버가 만든 작은 버전 목록 (글을 볼 때 화면 크기에 맞는 이미지를 받게 함)
+        const nodes = validUrls.map(({ url, srcset }) => ({
           type: 'image',
-          attrs: { src: url }
+          attrs: { src: url, srcset: srcset ?? null }
         }));
         
         let command = editor.chain().focus();

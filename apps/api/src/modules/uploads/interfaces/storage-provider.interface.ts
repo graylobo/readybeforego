@@ -3,6 +3,16 @@ export interface UploadResult {
   path: string;
 }
 
+/** 이미지 업로드 결과. responsive 업로드면 작은 버전 주소를 srcset으로 함께 돌려준다 */
+export interface ImageUploadResult extends UploadResult {
+  width?: number;
+  height?: number;
+  /** <img srcset>에 그대로 넣는 값 (예: "…-w720.webp 720w, …webp 1598w"). 작은 버전이 없으면 undefined */
+  srcset?: string;
+  /** 함께 저장한 작은 버전 파일 경로 (실패 시 정리용) */
+  variantPaths: string[];
+}
+
 export interface StorageProvider {
   upload(file: Buffer, path: string, mimeType: string): Promise<UploadResult>;
   delete(path: string): Promise<void>;

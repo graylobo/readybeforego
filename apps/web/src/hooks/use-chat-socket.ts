@@ -12,6 +12,7 @@ import {
   ChatHistoryPayload,
   ChatJoinedPayload,
   ChatMessage,
+  ChatMessageDeletedPayload,
   ChatOnlinePayload,
   ErrorCode,
 } from '@community/shared-types';
@@ -119,6 +120,11 @@ export function useChatSocket({ enabled }: UseChatSocketOptions) {
       });
     });
 
+    socket.on(CHAT_EVENTS.MESSAGE_DELETED, (payload: ChatMessageDeletedPayload) => {
+      if (!payload?.id) return;
+      setMessages((prev) => prev.filter((item) => item.id !== payload.id));
+    });
+
     socket.on(CHAT_EVENTS.ONLINE, (payload: ChatOnlinePayload) => {
       setOnlineCount(payload.count);
     });
@@ -200,6 +206,16 @@ export function useChatSocket({ enabled }: UseChatSocketOptions) {
     return true;
   }, [unavailable]);
 
+  const deleteMessage = useCallback((id: string) => {
+    if (!id || !socketRef.current?.connected || unavailable) return false;
+    setError(null);
+    socketRef.current.emit(CHAT_EVENTS.DELETE, {
+      id,
+      room: CHAT_ROOM_DEFAULT,
+    });
+    return true;
+  }, [unavailable]);
+
   const canSend =
     connected &&
     joined &&
@@ -219,5 +235,6 @@ export function useChatSocket({ enabled }: UseChatSocketOptions) {
     error,
     canSend,
     sendMessage,
+    deleteMessage,
   };
 }

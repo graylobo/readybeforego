@@ -11,7 +11,7 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
     private readonly authService: AuthService,
   ) {
     const apiUrl =
-      configService.get<string>('API_URL') || 'http://localhost:4000';
+      configService.get<string>('API_URL') || 'http://localhost:4001';
 
     super({
       clientID: configService.get<string>('KAKAO_CLIENT_ID') || 'mock_id',

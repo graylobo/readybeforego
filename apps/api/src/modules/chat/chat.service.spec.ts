@@ -62,6 +62,8 @@ describe('ChatService', () => {
       insertMessage: jest.fn(),
       findRecent: jest.fn(),
       findById: jest.fn().mockResolvedValue(null),
+      deleteById: jest.fn().mockResolvedValue(1),
+      deleteByRoom: jest.fn().mockResolvedValue(0),
     };
     persistQueue = {
       add: jest.fn().mockResolvedValue(undefined),
@@ -243,6 +245,72 @@ describe('ChatService', () => {
         nickname: '하루',
         content: '!모더나',
       });
+    });
+  });
+
+  describe('deleteMessage', () => {
+    const cached = {
+      id: '11111111-1111-1111-1111-111111111111',
+      roomSlug: 'lobby',
+      authorType: 'guest' as const,
+      userId: null,
+      guestId: 'g1',
+      nickname: '게스트닉',
+      content: '지울 메시지',
+      createdAt: new Date().toISOString(),
+    };
+
+    it('본인 메시지도 슈퍼 관리자가 아니면 CHAT_FORBIDDEN을 던진다', async () => {
+      usersService.isNameTaken.mockResolvedValue(false);
+      redis.lrange.mockResolvedValue([JSON.stringify(cached)]);
+
+      await expect(
+        service.deleteMessage(
+          { kind: 'guest', guestId: 'g1', nickname: '게스트닉' },
+          cached.id,
+          'lobby',
+        ),
+      ).rejects.toMatchObject({ errorCode: ErrorCode.CHAT_FORBIDDEN });
+      expect(chatRepo.deleteById).not.toHaveBeenCalled();
+    });
+
+    it('일반 관리자는 삭제할 수 없다', async () => {
+      await expect(
+        service.deleteMessage(
+          {
+            kind: 'member',
+            userId: 'admin-1',
+            nickname: '관리자',
+            status: 'active',
+            role: 'admin',
+          },
+          cached.id,
+          'lobby',
+        ),
+      ).rejects.toMatchObject({ errorCode: ErrorCode.CHAT_FORBIDDEN });
+      expect(chatRepo.deleteById).not.toHaveBeenCalled();
+    });
+
+    it('슈퍼 관리자만 메시지를 삭제할 수 있다', async () => {
+      redis.lrange.mockResolvedValue([JSON.stringify(cached)]);
+
+      await expect(
+        service.deleteMessage(
+          {
+            kind: 'member',
+            userId: 'sa-1',
+            nickname: '슈퍼관리자',
+            status: 'active',
+            role: 'super_admin',
+          },
+          cached.id,
+          'lobby',
+        ),
+      ).resolves.toEqual({
+        room: 'lobby',
+        id: cached.id,
+      });
+      expect(chatRepo.deleteById).toHaveBeenCalledWith(cached.id, 'lobby');
     });
   });
 });

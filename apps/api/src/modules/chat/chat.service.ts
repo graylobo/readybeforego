@@ -25,6 +25,8 @@ import {
   ErrorCode,
   ErrorMessages,
   GUEST_NICKNAME_REGEX,
+  isSuperAdmin,
+  UserRole,
 } from '@community/shared-types';
 import { UsersService } from '../users/users.service';
 import { REDIS_PUBLISHER } from '../redis/redis.constants';
@@ -40,7 +42,7 @@ import {
 import { sanitizePlainText } from '../../common/utils/html-sanitizer';
 
 export type ChatIdentity =
-  | { kind: 'member'; userId: string; nickname: string; status: string }
+  | { kind: 'member'; userId: string; nickname: string; status: string; role?: UserRole }
   | { kind: 'guest'; guestId: string; nickname: string };
 
 export class ChatDomainError extends Error {
@@ -194,6 +196,38 @@ export class ChatService implements OnModuleDestroy {
     this.assertLive();
     const slug = this.normalizeRoom(room);
     return this.countPresence(slug);
+  }
+
+  async deleteMessage(
+    identity: ChatIdentity,
+    messageId: string,
+    room?: string,
+  ): Promise<{ room: string; id: string }> {
+    this.assertLive();
+    const slug = this.normalizeRoom(room);
+    await this.assertCanSend(identity);
+
+    if (!this.canDeleteMessage(identity)) {
+      throw new ChatDomainError(ErrorCode.CHAT_FORBIDDEN, '이 메시지를 삭제할 권한이 없습니다.');
+    }
+
+    const cached = await this.findCachedMessage(slug, messageId);
+    const row = cached ? null : await this.chatRepo.findById(messageId, slug);
+    const existing = cached ?? (row ? this.toChatMessage(row) : null);
+    if (!existing) {
+      throw new ChatDomainError(ErrorCode.CHAT_MESSAGE_NOT_FOUND);
+    }
+
+    await this.removeFromRecentCache(slug, messageId);
+    try {
+      await this.chatRepo.deleteById(messageId, slug);
+    } catch (error) {
+      this.logger.warn(
+        `chat message db delete skipped: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+
+    return { room: slug, id: messageId };
   }
 
   async clearHistory(room = CHAT_ROOM_DEFAULT): Promise<{ room: string; deletedCount: number }> {
@@ -415,6 +449,7 @@ export class ChatService implements OnModuleDestroy {
         userId: user.id,
         nickname: user.name,
         status: user.status,
+        role: user.role,
       };
     } catch {
       return null;
@@ -518,6 +553,10 @@ export class ChatService implements OnModuleDestroy {
     return { id: row.id, nickname: row.nickname, content: row.content };
   }
 
+  private canDeleteMessage(identity: ChatIdentity) {
+    return identity.kind === 'member' && isSuperAdmin(identity.role);
+  }
+
   private async findCachedMessage(room: string, id: string): Promise<ChatMessage | null> {
     try {
       const raw = await this.redis.lrange(CHAT_REDIS_KEYS.recent(room), 0, CHAT_LIMITS.RECENT_CACHE_SIZE - 1);
@@ -556,6 +595,26 @@ export class ChatService implements OnModuleDestroy {
     await this.withRedis(async () => {
       const key = CHAT_REDIS_KEYS.recent(room);
       await this.redis.lpush(key, JSON.stringify(message));
+      await this.redis.ltrim(key, 0, CHAT_LIMITS.RECENT_CACHE_SIZE - 1);
+    });
+  }
+
+  private async removeFromRecentCache(room: string, id: string): Promise<void> {
+    await this.withRedis(async () => {
+      const key = CHAT_REDIS_KEYS.recent(room);
+      const raw = await this.redis.lrange(key, 0, CHAT_LIMITS.RECENT_CACHE_SIZE - 1);
+      const kept = raw.filter((item) => {
+        try {
+          return (JSON.parse(item) as ChatMessage).id !== id;
+        } catch {
+          return true;
+        }
+      });
+      await this.redis.del(key);
+      if (kept.length === 0) return;
+      for (const item of kept.slice().reverse()) {
+        await this.redis.lpush(key, item);
+      }
       await this.redis.ltrim(key, 0, CHAT_LIMITS.RECENT_CACHE_SIZE - 1);
     });
   }

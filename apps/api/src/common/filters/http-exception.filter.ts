@@ -60,8 +60,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status >= 500) {
       const logMessage = exception instanceof Error ? exception.message : String(exception);
+      // DB 오류는 'Failed query: ...'만 남고 실제 원인(연결 한도 초과 등)은 cause에 들어 있다
+      const cause = exception instanceof Error && exception.cause instanceof Error ? exception.cause : undefined;
+      const causeText = cause ? `[원인: ${(cause as { code?: string }).code ?? ''} ${cause.message}] ` : '';
       this.logger.error(
-        `[${request.method}] ${request.url} - ${status} - ${logMessage}`,
+        `[${request.method}] ${request.url} - ${status} - ${causeText}${logMessage}`,
         exception instanceof Error ? exception.stack : undefined,
       );
     } else {

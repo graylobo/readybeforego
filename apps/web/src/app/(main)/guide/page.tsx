@@ -27,7 +27,7 @@ import {
   Sparkles,
   Square
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { useTranslation } from "@/hooks/use-translation";
 import { getCountryName } from "@/lib/utils/country";
@@ -431,13 +431,16 @@ export default function GuidePage() {
           </CardHeader>
 
           <CardContent className="p-5">
-            <Comments
-              key={selectedCountry}
-              targetType="country_guide"
-              targetId={selectedCountry}
-              allowAnonymous={true}
-              deleteMode="hard"
-            />
+            {/* 댓글은 주소 쿼리(useSearchParams)를 읽어서, 정적 페이지인 가이드에서는 Suspense로 감싸야 빌드된다 */}
+            <Suspense fallback={null}>
+              <Comments
+                key={selectedCountry}
+                targetType="country_guide"
+                targetId={selectedCountry}
+                allowAnonymous={true}
+                deleteMode="hard"
+              />
+            </Suspense>
           </CardContent>
         </Card>
 

@@ -3,6 +3,8 @@
 import { PostList } from '@/components/board/post-list';
 import { CommonPagination } from '@/components/common/common-pagination';
 import { PageContainer } from '@/components/layout/page-container';
+import { scrollMainToTop } from '@/components/layout/main-scroll-restoration';
+import { parsePageParam, pushSearchParams } from '@/lib/utils/list-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMyScrappedPosts } from '@/hooks/queries/use-board-queries';
 import { useAuthStore } from '@/lib/stores/auth.store';
@@ -13,15 +15,16 @@ import { Suspense, useEffect } from 'react';
 function ScrapedPostsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, isLoading } = useAuthStore();
-  const page = parseInt(searchParams.get('page') || '1');
+  const { user, authChecked } = useAuthStore();
+  const page = parsePageParam(searchParams.get('page'));
   const limit = 20;
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/auth/login?redirect=/scraped');
+    // 로그인 확인이 끝난 뒤에만 보낸다 (주소로 바로 들어오면 처음에는 user가 아직 없음). 로그인 화면 주소는 /login
+    if (authChecked && !user) {
+      router.push('/login?redirect=/scraped');
     }
-  }, [user, isLoading, router]);
+  }, [user, authChecked, router]);
 
   const { data, isLoading: isDataLoading } = useMyScrappedPosts(page, limit);
 
@@ -34,12 +37,11 @@ function ScrapedPostsContent() {
   const totalPages = Math.ceil(totalCount / limit);
 
   const handlePageChange = (newPage: number) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('page', newPage.toString());
-    router.push(`/scraped?${params.toString()}`);
+    pushSearchParams({ page: newPage > 1 ? String(newPage) : null });
+    scrollMainToTop();
   };
 
-  if (!user && !isLoading) return null;
+  if (!user) return null;
 
   return (
     <PageContainer maxWidth="lg" className="py-8">

@@ -9,6 +9,8 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** 로그인 확인(checkAuth)을 한 번이라도 마쳤는지. 처음 화면에서는 user가 null이어도 '비로그인'인지 '아직 모름'인지 구분해야 한다 */
+  authChecked: boolean;
   setAuth: (token: string, user: User) => void;
   logout: () => void;
   checkAuth: (force?: boolean) => Promise<void>;
@@ -19,12 +21,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   isAuthenticated: false,
   isLoading: false,
+  authChecked: false,
 
   setAuth: (token: string, user: User) => {
-    // We keep user in state for the current session.
-    // Persistent auth is handled by the HttpOnly cookie.
     emitAuthIdentityChange(true);
-    set({ user, isAuthenticated: true });
+    set({ user, isAuthenticated: true, authChecked: true });
     
     if (typeof document !== 'undefined') {
       document.cookie = `user=${encodeURIComponent(
@@ -40,7 +41,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('Logout failed:', e);
     }
     set({ user: null, token: null, isAuthenticated: false });
-emitAuthIdentityChange(false);
+    emitAuthIdentityChange(false);
+
     if (typeof document !== 'undefined') {
       document.cookie = 'user=; path=/; max-age=0';
     }
@@ -51,7 +53,6 @@ emitAuthIdentityChange(false);
 
     if (!force && isLoading) return;
     
-    // If already authenticated and not forced, don't check again to save bandwidth
     if (isAuthenticated && !force) return;
 
     if (!force) set({ isLoading: true });
@@ -63,7 +64,7 @@ emitAuthIdentityChange(false);
     } catch {
       set({ user: null, token: null, isAuthenticated: false });
     } finally {
-      if (!force) set({ isLoading: false });
+      set({ authChecked: true, ...(!force && { isLoading: false }) });
     }
   },
 }));

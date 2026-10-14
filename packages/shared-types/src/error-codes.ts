@@ -21,6 +21,8 @@ export enum ErrorCode {
   POST_NOT_FOUND = 'POST_001',
   POST_INVALID_PASSWORD = 'POST_002',
   POST_PERMISSION_DENIED = 'POST_003',
+  // 비공개 처리한 글 (Super Admin 말고는 없는 글처럼 404). 화면이 서버 렌더링 때 로그인 정보 없이 받았을 수 있어 브라우저에서 다시 시도하도록 따로 구분
+  POST_HIDDEN = 'POST_004',
 
   // 댓글
   COMMENT_NOT_FOUND = 'COMMENT_001',
@@ -45,7 +47,7 @@ export enum ErrorCode {
   CHAT_MESSAGE_INVALID = 'CHAT_005',
   CHAT_FORBIDDEN = 'CHAT_006',
   CHAT_UNAVAILABLE = 'CHAT_007',
-
+  CHAT_MESSAGE_NOT_FOUND = 'CHAT_008',
 }
 
 export const ErrorMessages: Record<ErrorCode, string> = {
@@ -67,6 +69,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.BOARD_NOT_FOUND]: '게시판을 찾을 수 없습니다.',
   [ErrorCode.POST_NOT_FOUND]: '게시글을 찾을 수 없습니다.',
   [ErrorCode.POST_INVALID_PASSWORD]: '비밀번호가 일치하지 않습니다.',
+  [ErrorCode.POST_HIDDEN]: '게시글을 찾을 수 없습니다.',
   [ErrorCode.POST_PERMISSION_DENIED]: '게시글에 대한 권한이 없습니다.',
 
   // 댓글
@@ -92,4 +95,5 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.CHAT_MESSAGE_INVALID]: '메시지 내용이 올바르지 않습니다.',
   [ErrorCode.CHAT_FORBIDDEN]: '채팅을 이용할 수 없는 계정입니다.',
   [ErrorCode.CHAT_UNAVAILABLE]: '채팅을 잠시 사용할 수 없습니다. 연결이 복구되면 자동으로 다시 시도합니다.',
+  [ErrorCode.CHAT_MESSAGE_NOT_FOUND]: '메시지를 찾을 수 없습니다.',
 };

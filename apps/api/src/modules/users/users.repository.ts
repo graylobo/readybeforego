@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { eq, or, and, isNull, sql, ilike, SQL } from 'drizzle-orm';
+import { eq, or, and, isNull, sql, ilike, inArray, SQL } from 'drizzle-orm';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
 import { users } from '../../database/schema';
@@ -132,11 +132,63 @@ export class UsersRepository {
       return result.count;
   }
 
+  /**
+   * 회원을 완전히 삭제한다. 회원이 남긴 반응·댓글은 DB가 함께 지우므로(onDelete cascade),
+   * 게시글/댓글에 저장해 둔 추천 수와 댓글 수도 같은 트랜잭션에서 맞춰 준다
+   */
   async deleteUser(id: string, tx?: Transaction) {
+      const run = async (db: Transaction) => {
+          await db.execute(sql`
+              UPDATE posts p SET
+                  like_count = greatest(p.like_count - r.likes, 0),
+                  dislike_count = greatest(p.dislike_count - r.dislikes, 0)
+              FROM (
+                  SELECT post_id,
+                         COUNT(*) FILTER (WHERE type = 'like')::int AS likes,
+                         COUNT(*) FILTER (WHERE type = 'dislike')::int AS dislikes
+                  FROM post_reactions WHERE user_id = ${id} GROUP BY post_id
+              ) r
+              WHERE p.id = r.post_id`);
+          await db.execute(sql`
+              UPDATE comments c SET
+                  like_count = greatest(c.like_count - r.likes, 0),
+                  dislike_count = greatest(c.dislike_count - r.dislikes, 0)
+              FROM (
+                  SELECT comment_id,
+                         COUNT(*) FILTER (WHERE type = 'like')::int AS likes,
+                         COUNT(*) FILTER (WHERE type = 'dislike')::int AS dislikes
+                  FROM comment_reactions WHERE user_id = ${id} GROUP BY comment_id
+              ) r
+              WHERE c.id = r.comment_id`);
+
+          // 회원의 댓글(과 그 답글)이 지워질 게시글 목록. 삭제 후 댓글 수를 다시 센다
+          const commentedPosts = await db
+              .selectDistinct({ postId: schema.comments.targetId })
+              .from(schema.comments)
+              .where(and(eq(schema.comments.userId, id), eq(schema.comments.targetType, 'post')));
+
+          const [deleted] = await db.delete(users)
+              .where(eq(users.id, id))
+              .returning();
+
+          if (deleted && commentedPosts.length > 0) {
+              await this.recountPostComments(commentedPosts.map((row: { postId: string }) => row.postId), db);
+          }
+          return deleted;
+      };
+      return tx ? run(tx) : this.db.transaction(run);
+  }
+
+  // 게시글의 댓글 수를 실제로 남아 있는(삭제 표시되지 않은) 댓글 기준으로 다시 계산
+  async recountPostComments(postIds: string[], tx?: Transaction) {
       const db = tx ?? this.db;
-      const [deleted] = await db.delete(users)
-          .where(eq(users.id, id))
-          .returning();
-      return deleted;
+      await db.update(schema.posts)
+          .set({
+              commentCount: sql`(
+                  SELECT COUNT(*)::int FROM comments c
+                  WHERE c.target_type = 'post' AND c.target_id = ${schema.posts.id}::text AND c.deleted_at IS NULL
+              )`,
+          })
+          .where(inArray(schema.posts.id, postIds));
   }
 }

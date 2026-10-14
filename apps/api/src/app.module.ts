@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
@@ -14,6 +13,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
+import { SplitThrottlerStorage } from './common/guards/split-throttler.storage';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { DatabaseModule } from './database/database.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -33,7 +33,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { ScamsModule } from './modules/scams/scams.module';
 import { GuidesModule } from './modules/guides/guides.module';
 import { CountriesModule } from './modules/countries/countries.module';
-import { ChatModule } from 'src/modules/chat';
+import { ChatModule } from './modules/chat';
+import { CrawlerModule } from './modules/crawler/crawler.module';
 
 @Module({
   imports: [
@@ -73,8 +74,14 @@ import { ChatModule } from 'src/modules/chat';
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
+      serveStaticOptions: {
+        // 로컬 저장소(STORAGE_TYPE=local)의 업로드 이미지는 웹(다른 주소)에서 불러온다.
+        // helmet 기본값(same-origin)이면 브라우저가 이미지를 막으므로 이 경로만 다른 주소에서 쓰도록 허용
+        setHeaders: (res) => {
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        },
+      },
     }),
-    ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     UploadsModule,
     ThrottlerModule.forRootAsync({
@@ -83,8 +90,9 @@ import { ChatModule } from 'src/modules/chat';
       useFactory: (configService: ConfigService) => {
         const throttlers = [{ ttl: 60000, limit: 120 }];
         const redisUrl = configService.get<string>('REDIS_URL');
-        // 다중 인스턴스(스케일아웃) 환경에서 rate limit 카운트를 공유하기 위해
-        // Redis 저장소를 사용한다. REDIS_URL이 없으면 인메모리(단일 인스턴스)로 폴백.
+        // 다중 인스턴스(스케일아웃) 환경에서 쓰기 요청의 rate limit 카운트를 공유하기 위해
+        // Redis 저장소를 사용한다. 조회 요청은 속도를 위해 인메모리로 센다 (SplitThrottlerStorage).
+        // REDIS_URL이 없으면 전부 인메모리(단일 인스턴스)로 폴백.
         if (!redisUrl) {
           return { throttlers };
         }
@@ -94,7 +102,9 @@ import { ChatModule } from 'src/modules/chat';
         }
         return {
           throttlers,
-          storage: new ThrottlerStorageRedisService(new Redis(redisUrl, options)),
+          storage: new SplitThrottlerStorage(
+            new ThrottlerStorageRedisService(new Redis(redisUrl, options)),
+          ),
         };
       },
     }),
@@ -104,7 +114,8 @@ import { ChatModule } from 'src/modules/chat';
     ScamsModule,
     GuidesModule,
     CountriesModule,
-    ChatModule
+    ChatModule,
+    CrawlerModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,34 +1,56 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { boardApi, Post } from '@/lib/api/board';
+import { Board, boardApi, BoardPageData, BoardPageParams, Post } from '@/lib/api/board';
 export type { Post };
 
 export const boardKeys = {
   all: ['boards'] as const,
   lists: () => [...boardKeys.all, 'list'] as const,
   detail: (slug: string) => [...boardKeys.all, 'detail', slug] as const,
-  posts: (boardSlug: string, page: number = 1) => [...boardKeys.all, 'posts', boardSlug, { page }] as const,
+  // 모든 게시글 목록(게시판 화면, 전체/베스트 게시판, 최근 글 등)의 공통 접두사
+  allPosts: () => [...boardKeys.all, 'posts'] as const,
   post: (id: string) => [...boardKeys.all, 'post', id] as const,
   scrapped: (page: number = 1) => [...boardKeys.all, 'scrapped', { page }] as const,
+  // 'posts' 아래에 두어 게시글 목록을 무효화/갱신하는 기존 코드가 게시판 화면 데이터에도 함께 적용되게 한다
+  boardPage: (slug: string, params: BoardPageParams, viewerId: string) =>
+    [...boardKeys.all, 'posts', 'board-page', slug, params, viewerId] as const,
 };
 
-export function useBoards() {
+/**
+ * 게시글 목록 형태의 캐시 데이터({ items }) 또는 게시판 화면 데이터({ notices, best, posts: { items } })의
+ * 모든 게시글에 fn을 적용한다. (추천 등 낙관적 업데이트에서 두 형태를 함께 처리)
+ */
+function mapPostsInListData(data: any, fn: (post: any) => any) {
+  if (!data) return data;
+  if (Array.isArray(data.items)) return { ...data, items: data.items.map(fn) };
+  if (data.posts && Array.isArray(data.posts.items)) {
+    return {
+      ...data,
+      notices: (data.notices ?? []).map(fn),
+      best: (data.best ?? []).map(fn),
+      posts: { ...data.posts, items: data.posts.items.map(fn) },
+    };
+  }
+  return data;
+}
+
+export function useBoards(initialData?: Board[]) {
   return useQuery({
     queryKey: boardKeys.lists(),
     queryFn: () => boardApi.getBoards(),
+    // 서버에서 받은 목록으로 바로 그리되, 오래됐을 수 있으니 화면이 뜨면 다시 받는다
+    initialData,
+    initialDataUpdatedAt: 0,
   });
 }
 
-export function useBoard(slug: string) {
-  const queryClient = useQueryClient();
+export function useBoard(slug: string, initialBoard?: Board) {
   return useQuery({
     queryKey: boardKeys.detail(slug),
     queryFn: () => boardApi.getBoard(slug),
     enabled: !!slug,
-    staleTime: 1000 * 60 * 5, // 5분간 캐시 신선도 유지
-    initialData: () => {
-      const boards = queryClient.getQueryData<any[]>(boardKeys.lists());
-      return boards?.find((b: any) => b.slug === slug);
-    },
+    // 서버 렌더링에서 이미 받은 게시판 정보가 있으면 그대로 쓰고 바로 다시 요청하지 않는다
+    // (게시판 정보는 사용자마다 다르지 않고, API도 60초 캐시)
+    ...(initialBoard && { initialData: initialBoard, staleTime: 60_000 }),
   });
 }
 
@@ -41,32 +63,72 @@ export function usePosts(
   authorId?: string,
   isBest?: string,
   isNotice?: string,
-  includeBlocks?: string,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; includeContent?: boolean }
 ) {
+  const includeContent = options?.includeContent;
   return useQuery({
-    queryKey: [...boardKeys.all, 'posts', boardSlug || 'all', { page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeBlocks }],
-    queryFn: () => boardApi.getPosts(boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeBlocks),
-    enabled: options?.enabled ?? true,
-    staleTime: 1000 * 30, // 30초간 신선도 유지하여 탭/페이지 전환 시 즉시 렌더링 ⚡
+    queryKey: [...boardKeys.all, 'posts', boardSlug || 'all', { page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeContent }],
+    queryFn: () => boardApi.getPosts(boardSlug, page, limit, searchType, searchQuery, authorId, isBest, isNotice, includeContent),
+    enabled: options?.enabled ?? true, 
     placeholderData: (previousData: any) => previousData,
   });
 }
 
-export function usePost(id: string) {
-  const queryClient = useQueryClient();
+/**
+ * 게시판 화면 데이터 (게시판 정보 + 공지/인기글 + 목록을 한 번의 요청으로)
+ *
+ * 서버 렌더링 결과(initialData)는 비로그인 기준이다. (로그인 쿠키는 API 주소에만 있어 웹 서버 요청에 실리지 않음)
+ * - 비로그인 + 방문자 IP 기준으로 조회됨(isForVisitor): 같은 조건이면 그대로 쓰고 다시 요청하지 않는다
+ * - 그 밖(로그인, IP 미전달): 서버 렌더링 결과를 먼저 보여주면서 내 반응/비공개 게시판 글이 반영된 목록을 받아 바꾼다
+ */
+export function useBoardPage(
+  slug: string,
+  params: BoardPageParams,
+  viewerId: string | undefined,
+  initial?: { params: BoardPageParams; data: BoardPageData; isForVisitor: boolean },
+) {
+  const viewerKey = viewerId ?? 'guest';
+  const matchesInitial =
+    !!initial &&
+    initial.params.page === params.page &&
+    initial.params.limit === params.limit &&
+    (initial.params.searchQuery || '') === (params.searchQuery || '') &&
+    (!params.searchQuery || initial.params.searchType === params.searchType);
+  const useInitialAsData = matchesInitial && viewerKey === 'guest' && initial!.isForVisitor;
+
+  return useQuery({
+    queryKey: boardKeys.boardPage(slug, params, viewerKey),
+    queryFn: () => boardApi.getBoardPage(slug, params),
+    enabled: !!slug,
+    ...(useInitialAsData && { initialData: initial!.data, staleTime: 30_000 }),
+    placeholderData: (previousData: BoardPageData | undefined) =>
+      previousData ?? (matchesInitial ? initial!.data : undefined),
+  });
+}
+
+/**
+ * @param initial 서버 렌더링에서 받은 게시글. isForViewer(지금 보는 사람 기준으로 조회된 값)이면 그대로 쓰고,
+ *   아니면(로그인 사용자, 방문자 IP를 전달하지 못한 경우) 먼저 보여준 뒤 내 추천/스크랩 여부를 위해 다시 받는다.
+ *   조회수는 이 요청이 아니라 boardApi.recordView로 따로 기록한다
+ */
+export function usePost(id: string, initial?: { data: Post; isForViewer: boolean }) {
   return useQuery({
     queryKey: boardKeys.post(id),
-    queryFn: () => {
-      // 캐시에 기존 데이터가 이미 존재한다면 (예: 좋아요/댓글 후 refetch), 조회수를 올리지 않음
-      const existingData = queryClient.getQueryData(boardKeys.post(id));
-      const shouldIncrement = !existingData;
-      return boardApi.getPost(id, shouldIncrement);
-    },
+    queryFn: () => boardApi.getPost(id),
     enabled: !!id,
-    // 게시글 상세의 경우 추천/댓글 등 부가 작업 시 다시 불러오지 않도록
-    // staleTime을 적절히 주거나 수동 캐시 업데이트만 활용
-    staleTime: 1000 * 60 * 5, 
+    // 추천/댓글 등 부가 작업은 캐시를 직접 고치므로 자주 다시 받을 필요가 없다
+    staleTime: 1000 * 60 * 5,
+    // 없는 글·비공개 처리한 글·권한 없음(4xx)은 다시 받아도 같으니 바로 "찾을 수 없음"을 보여준다 (기본값은 3번 더 시도해 몇 초간 빈 화면)
+    retry: (failureCount, error: any) => {
+      const status = error?.response?.status;
+      return !(status >= 400 && status < 500) && failureCount < 3;
+    },
+    // 화면이 "게시글을 찾을 수 없습니다"를 직접 보여주므로 같은 내용의 알림을 띄우지 않는다
+    meta: { preventToast: true },
+    ...(initial && {
+      initialData: initial.data,
+      initialDataUpdatedAt: initial.isForViewer ? undefined : 0,
+    }),
   });
 }
 
@@ -75,7 +137,7 @@ export function useCreatePost(boardSlug: string) {
   return useMutation({
     mutationFn: (data: any) => boardApi.createPost(boardSlug, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: boardKeys.posts(boardSlug, 1) });
+      queryClient.invalidateQueries({ queryKey: boardKeys.allPosts() });
       queryClient.invalidateQueries({ queryKey: ['points'] });
     },
   });
@@ -87,7 +149,19 @@ export function useUpdatePost(boardSlug: string, postId: string) {
         mutationFn: (data: any) => boardApi.updatePost(postId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: boardKeys.post(postId) });
-            queryClient.invalidateQueries({ queryKey: boardKeys.posts(boardSlug) });
+            queryClient.invalidateQueries({ queryKey: boardKeys.allPosts() });
+        },
+    });
+}
+
+/** 게시글 비공개/공개 전환 (Super Admin). 상세와 목록을 다시 받아 표시를 맞춘다 */
+export function useSetPostHidden(postId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (hidden: boolean) => boardApi.setPostHidden(postId, hidden),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: boardKeys.post(postId) });
+            queryClient.invalidateQueries({ queryKey: boardKeys.allPosts() });
         },
     });
 }
@@ -98,7 +172,7 @@ export function useDeletePost(boardSlug: string) {
         mutationFn: (data: { id: string; guestPassword?: string }) => 
             boardApi.deletePost(data.id, data.guestPassword),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: boardKeys.posts(boardSlug) });
+            queryClient.invalidateQueries({ queryKey: boardKeys.allPosts() });
         },
     });
 }
@@ -144,13 +218,10 @@ export function useTogglePostReaction(postId: string) {
 
             // 2. 피드 목록 쿼리들 낙관적 업데이트 수행
             previousQueries.forEach(([queryKey, oldData]: [any, any]) => {
-                if (!oldData || !oldData.items) return;
-                
-                queryClient.setQueryData(queryKey, (prev: any) => {
-                    if (!prev || !prev.items) return prev;
-                    return {
-                        ...prev,
-                        items: prev.items.map((item: any) => {
+                if (!oldData) return;
+
+                queryClient.setQueryData(queryKey, (prev: any) =>
+                    mapPostsInListData(prev, (item: any) => {
                             if (item.id !== postId) return item;
                             
                             const newReaction = type === item.userReaction ? null : type;
@@ -169,9 +240,8 @@ export function useTogglePostReaction(postId: string) {
                                 likeCount: Math.max(0, newLikeCount),
                                 dislikeCount: Math.max(0, newDislikeCount),
                             };
-                        })
-                    };
-                });
+                    })
+                );
             });
 
             return { previousPost, previousQueries };
@@ -191,23 +261,19 @@ export function useTogglePostReaction(postId: string) {
             // 피드 목록 캐시들 서버 최신값으로 업데이트
             const postQueries = queryClient.getQueriesData({ queryKey: ['boards', 'posts'] });
             postQueries.forEach(([queryKey, oldData]: [any, any]) => {
-                if (!oldData || !oldData.items) return;
-                
-                queryClient.setQueryData(queryKey, (prev: any) => {
-                    if (!prev || !prev.items) return prev;
-                    return {
-                        ...prev,
-                        items: prev.items.map((item: any) => {
-                            if (item.id !== postId) return item;
-                            return {
-                                ...item,
-                                likeCount: data.likeCount,
-                                dislikeCount: data.dislikeCount,
-                                userReaction: data.userReaction,
-                            };
-                        })
-                    };
-                });
+                if (!oldData) return;
+
+                queryClient.setQueryData(queryKey, (prev: any) =>
+                    mapPostsInListData(prev, (item: any) => {
+                        if (item.id !== postId) return item;
+                        return {
+                            ...item,
+                            likeCount: data.likeCount,
+                            dislikeCount: data.dislikeCount,
+                            userReaction: data.userReaction,
+                        };
+                    })
+                );
             });
         },
         onError: (err, type, context) => {

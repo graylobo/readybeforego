@@ -91,6 +91,8 @@ trigger: always_on
    1. 기본은 서버 컴포넌트로 두고, 데이터 페칭을 서버에서 한다.
    2. 상호작용이 필요한 부분만 "use client"로 분리하되, 트리 말단(leaf)으로 밀어 넣는다 ("push client down").
    3. SEO가 중요한 페이지는: 서버에서 데이터를 가져와 클라이언트 컴포넌트에 props로 내려주거나, react-query라면 서버에서 prefetch → dehydrate/hydrate 패턴을 쓴다.
+- 만약 테이블 형태의 데이터를 보여줘야 할때는 ag-grid를 사용하고 특별한 이유가 아니라면
+서버사이드 페이지네이션/검색 방식으로 구현한다.
 
 ---
 

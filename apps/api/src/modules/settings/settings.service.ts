@@ -17,11 +17,15 @@ export class SettingsService {
   private toPublic(row: {
     id: string;
     showSidebarAds: boolean;
+    showAllBoardMenu: boolean;
+    showBoardDirectoryMenu: boolean;
     updatedAt: Date;
   }): SiteSettings {
     return {
       id: row.id,
       showSidebarAds: row.showSidebarAds,
+      showAllBoardMenu: row.showAllBoardMenu,
+      showBoardDirectoryMenu: row.showBoardDirectoryMenu,
       updatedAt: row.updatedAt.toISOString(),
     };
   }

@@ -134,16 +134,18 @@ export default function AdminReportsPage() {
       headerName: '대상',
       width: 250,
       cellRenderer: (params: any) => {
-        const { targetType, targetId, targetUrl } = params.data;
+        const { targetType, targetId, targetUrl, targetDeleted } = params.data;
         return (
           <div className="flex flex-col justify-center h-full py-1 gap-0.5">
             <div className="flex items-center">
               <span className={`text-[11px] font-bold ${targetType === 'POST' ? 'text-primary' : 'text-foreground'}`}>
                 {targetType === 'POST' ? '게시글' : '댓글'}
               </span>
+              {/* 신고 뒤에 지워진 대상은 열어도 없는 페이지라 링크 대신 표시만 한다 */}
+              {targetDeleted && <span className="ml-1.5 text-[11px] text-destructive">(삭제됨)</span>}
             </div>
             <div className="text-[11px] text-muted-foreground truncate w-full" title={targetId}>
-              {targetUrl ? (
+              {targetUrl && !targetDeleted ? (
                 <Link href={targetUrl} className="hover:underline hover:text-primary transition-colors" target="_blank">
                   {targetId}
                 </Link>

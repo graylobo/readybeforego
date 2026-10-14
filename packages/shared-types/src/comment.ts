@@ -46,12 +46,13 @@ export interface CommentTree {
 }
 
 export const CreateCommentSchema = z.object({
-  targetId: z.string(),
+  // 게시글·제보는 UUID, 국가 가이드는 국가 코드(예: JP)라 형식은 서버(CommentsController)에서 대상별로 확인한다
+  targetId: z.string().min(1).max(255),
   targetType: CommentTargetTypeSchema,
   content: z.string().max(1000, '댓글은 1000자 이내로 입력해주세요.').optional(),
   emoticonUrl: z.string().url().nullable().optional(),
   imageUrl: z.string().url().nullable().optional(),
-  parentId: z.string().optional(),
+  parentId: z.string().uuid().optional(),
   guestName: z.string()
     .min(1, '닉네임을 입력해주세요.')
     .min(2, '닉네임은 2자 이상이어야 합니다.')

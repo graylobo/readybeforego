@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { BadgeCheck, ChevronDown, MessageSquareText, Reply } from 'lucide-react';
+import { BadgeCheck, ChevronDown, MessageSquareText, Reply, Trash2 } from 'lucide-react';
 import { formatChatReplyPreview, formatGuestTag, type ChatMessage } from '@community/shared-types';
 import { maskProfanity } from '@/lib/chat/profanity';
 import { cn } from '@/lib/utils/cn';
@@ -118,8 +118,11 @@ interface ChatMessageListProps {
   loading?: boolean;
   blurred?: boolean;
   canReply?: boolean;
+  canModerate?: boolean;
   selfUserId?: string | null;
   selfGuestId?: string | null;
+  onDeleteMessage?: (id: string) => void;
+  isOpen?: boolean;
 }
 
 export function ChatMessageList({
@@ -127,8 +130,11 @@ export function ChatMessageList({
   loading,
   blurred,
   canReply = false,
+  canModerate = false,
   selfUserId = null,
   selfGuestId = null,
+  onDeleteMessage,
+  isOpen = true,
 }: ChatMessageListProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -165,6 +171,34 @@ export function ChatMessageList({
     clearUnread();
     el.scrollTo({ top: el.scrollHeight, behavior });
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    stickToBottomRef.current = true;
+    clearUnread();
+    const el = scrollerRef.current;
+    const jump = () => {
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+    jump();
+    const raf = window.requestAnimationFrame(jump);
+    const timeout = window.setTimeout(jump, 80);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !isOpen) return;
+    const observer = new ResizeObserver(() => {
+      if (!stickToBottomRef.current) return;
+      el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   useEffect(() => {
     if (!showMessageTime) return;
@@ -207,6 +241,10 @@ export function ChatMessageList({
 
     if (nextLen <= prevLenRef.current) {
       prevLenRef.current = nextLen;
+      setLatestUnread((current) => {
+        if (!current) return current;
+        return visibleMessages.some((message) => message.id === current.id) ? current : null;
+      });
       return;
     }
 
@@ -286,6 +324,7 @@ export function ChatMessageList({
         {visibleMessages.map((message) => {
           const mine = isSelfMessage(message, selfUserId, selfGuestId);
           const canReplyHere = canReply && !mine;
+          const canDelete = Boolean(onDeleteMessage) && canModerate;
           const guestTag =
             message.authorType === 'guest' && message.guestId
               ? formatGuestTag(message.guestId)
@@ -297,8 +336,9 @@ export function ChatMessageList({
               key={message.id}
               id={messageDomId(message.id)}
               className={cn(
-                'relative leading-relaxed rounded-md px-2 py-1.5',
+                'group relative leading-relaxed rounded-md px-2 py-1.5',
                 canReplyHere && 'cursor-pointer hover:bg-muted/40',
+                canDelete && !canReplyHere && 'hover:bg-muted/40',
                 highlighted && 'chat-message-flash',
               )}
               onClick={() => {
@@ -326,6 +366,21 @@ export function ChatMessageList({
                   <time className="text-[11px] text-muted-foreground shrink-0">
                     {formatChatTime(message.createdAt)}
                   </time>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    className="ml-auto shrink-0 rounded p-1 text-muted-foreground cursor-pointer hover:bg-destructive/10 hover:text-destructive opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                    aria-label="메시지 삭제"
+                    title="메시지 삭제"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+                      onDeleteMessage?.(message.id);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 )}
               </div>
 

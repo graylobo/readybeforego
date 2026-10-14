@@ -1,7 +1,6 @@
 'use client';
 
 import { ThemeToggle } from '@/components/common/theme-toggle';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { useLayoutStore } from '@/lib/stores/layout.store';
@@ -11,22 +10,18 @@ import {
   Film,
   LayoutTemplate,
   LogIn,
-  LogOut,
   Menu,
-  Shield,
   X
 } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { NotificationBell } from './notification-bell';
 import { UserMenu } from './user-menu';
-
 import { isAdmin, isStaff } from '@community/shared-types';
 import { BrandLogo } from '@/components/common/brand-logo';
+import { ChatGuestIdentity } from '@/components/chat';
 import { TopNav } from './top-nav';
 import { SearchBar } from './search-bar';
-import { ChatGuestIdentity } from '@/components/chat';
 
 interface HeaderProps {
   /** 'admin'이면 커뮤니티 전용 UI(검색/탑네비/레이아웃 전환)를 숨기고 항상 사이드바 모드로 동작 */
@@ -39,7 +34,6 @@ export function Header({ variant = 'client' }: HeaderProps) {
   const { toggle, isOpen } = useSidebarToggleStore();
   const { layoutMode: storeLayoutMode, toggleLayoutMode } = useLayoutStore();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const isAdminVariant = variant === 'admin';
   // 어드민 영역은 top 레이아웃을 지원하지 않고 항상 사이드바 모드로 통일한다.
@@ -49,14 +43,16 @@ export function Header({ variant = 'client' }: HeaderProps) {
     checkAuth();
   }, [checkAuth]);
 
+  // 쿼리는 누를 때 읽는다. useSearchParams를 쓰면 정적 페이지에서 헤더 전체가 서버에서 그려지지 않는다
   const handleLogin = () => {
-    const currentUrl = encodeURIComponent(`${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+    const currentUrl = encodeURIComponent(`${pathname}${window.location.search}`);
     router.push(`/login?redirect=${currentUrl}`);
   };
 
   return (
     <header className={cn(
       "h-16 bg-background flex items-center justify-between pl-[10px] pr-4 md:px-6 shrink-0 gap-2 md:gap-4 z-50",
+      !isAdminVariant && "layout-header",
       layoutMode !== 'sidebar' && "border-b border-border"
     )}>
       <div className="flex items-center gap-2 md:gap-6 lg:gap-8 flex-1">
@@ -81,6 +77,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
             onClick={toggle}
             className={cn(
               "text-foreground hidden md:flex transition-all duration-500",
+              !isAdminVariant && "layout-sidebar-toggle",
               layoutMode === 'sidebar' && (!user || user.isProfileSetup) ? "opacity-100 translate-x-0 w-10 px-0" : "opacity-0 -translate-x-4 pointer-events-none w-0"
             )}
             aria-label="Toggle Sidebar"
@@ -93,6 +90,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
         <div 
           className={cn(
             "items-center gap-3 cursor-pointer transition-all duration-500 flex shrink-0 whitespace-nowrap",
+            !isAdminVariant && "layout-top-logo",
             layoutMode === 'top' ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 pointer-events-none absolute"
           )}
           onClick={() => router.push('/')}
@@ -126,7 +124,7 @@ export function Header({ variant = 'client' }: HeaderProps) {
             <UserMenu />
           </>
         ) : (
-        <ChatGuestIdentity
+          <ChatGuestIdentity
             fallback={
               <Button
                 onClick={handleLogin}

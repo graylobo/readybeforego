@@ -3,10 +3,11 @@
 import React, { MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { CommentTree, CommentTargetType } from '@/lib/api/comments';
-import { isAdmin } from '@community/shared-types';
+import { isAdmin, isSuperAdmin } from '@community/shared-types';
 import { CreateCommentDto } from '@community/shared-types';
 import { CommentEditForm } from './comment-edit-form';
 import { CommentForm } from './comment-form';
+import { useCommentModeration } from './comment-moderation-context';
 import { UserProfilePopover } from '@/components/common/user-profile-popover';
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { SmartImage } from '@/components/common/smart-image';
+import { commentImageThumbnailUrl } from '@community/shared-types';
 import { EmoticonDetailsModal } from '@/components/emoticons/emoticon-details-modal';
 import { ReportDialog } from '@/components/common/report-dialog';
 import { TimeDisplay } from '@/components/common/time-display';
@@ -40,6 +42,8 @@ import { TimeDisplay } from '@/components/common/time-display';
 export interface CommentActions {
   handleCommentAction: (id: string, action: 'upvote' | 'downvote') => void;
   handleDeleteComment: (id: string) => void;
+  /** Super Admin 완전 삭제 (답글 포함, 흔적 없이) */
+  handlePurgeComment: (id: string) => void;
   handleUpdateComment: (id: string, content: string, imageUrl?: string | null, emoticonUrl?: string | null) => void;
   handleReply: (dto: CreateCommentDto) => void;
   scrollToComment: (id: string) => void;
@@ -119,6 +123,8 @@ CommentItem = React.memo(function CommentItem({
 
   const isOwner = user && user.id === comment.userId;
   const isUserAdmin = isAdmin(user?.role);
+  const isUserSuperAdmin = isSuperAdmin(user?.role);
+  const { canModerate, readOnly } = useCommentModeration();
   const isAnonymous = !comment.userId;
   const isReply = comment.parentId !== null;
   const hasReplies = comment.replies.length > 0;
@@ -214,7 +220,19 @@ CommentItem = React.memo(function CommentItem({
               <div className="flex flex-col sm:flex-row gap-4 justify-between items-start">
                 <div className="flex-1 min-w-0">
                   {comment.isDeleted ? (
-                    <p className="text-gray-400 italic">삭제된 댓글</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-gray-400 italic">삭제된 댓글</p>
+                      {isUserSuperAdmin && !readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => actions.handlePurgeComment(comment.id)}
+                          className="inline-flex items-center gap-1 text-[11px] text-red-600/80 hover:text-red-600 cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          완전 삭제
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <>
                       {comment.content && (
@@ -240,13 +258,15 @@ CommentItem = React.memo(function CommentItem({
                           </button>
                         </div>
                       )}
-                      {(comment as any).imageUrl && (
+                      {comment.imageUrl && (
                         <div className="mt-1.5">
+                          {/* 댓글 칸은 작아서 서버가 함께 만든 작은 버전(440px)을 보여주고, 누르면 원본을 연다 */}
                           <SmartImage
-                            src={(comment as any).imageUrl}
+                            src={commentImageThumbnailUrl(comment.imageUrl) ?? comment.imageUrl}
+                            fallbackSrc={comment.imageUrl}
                             alt="attached image"
                             className="max-w-[220px] max-h-[160px] object-contain rounded-xl border border-border/30 bg-muted/10 cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => window.open((comment as any).imageUrl, '_blank')}
+                            onClick={() => window.open(comment.imageUrl!, '_blank')}
                             fallbackClassName="w-[220px] h-[120px]"
                           />
                         </div>
@@ -285,6 +305,7 @@ CommentItem = React.memo(function CommentItem({
                         {comment.downvoteCount > 0 && <span className="text-[12px]">{comment.downvoteCount}</span>}
                       </Button>
                     </>
+                    {!readOnly && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -297,6 +318,7 @@ CommentItem = React.memo(function CommentItem({
                     >
                       <MessageCircle className="h-3.5 w-3.5" />
                     </Button>
+                    )}
 
                     {!comment.isDeleted && (
                       <DropdownMenu>
@@ -319,12 +341,21 @@ CommentItem = React.memo(function CommentItem({
                             </DropdownMenuItem>
                           )}
 
-                          {(isOwner || isUserAdmin || isAnonymous) && (
+                          {(isOwner || isUserAdmin || isAnonymous || canModerate) && (
                             <DropdownMenuItem
                               onClick={() => actions.handleDeleteComment(comment.id)}
                               className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20 cursor-pointer py-2"
                             >
                               삭제
+                            </DropdownMenuItem>
+                          )}
+
+                          {isUserSuperAdmin && (
+                            <DropdownMenuItem
+                              onClick={() => actions.handlePurgeComment(comment.id)}
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20 cursor-pointer py-2"
+                            >
+                              완전 삭제
                             </DropdownMenuItem>
                           )}
 

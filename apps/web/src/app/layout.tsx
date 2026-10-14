@@ -3,21 +3,24 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { ChatFeatureProvider } from "@/components/chat";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SITE_CONFIG, UI_CONFIG } from "@/lib/constants";
 import { ResponsiveToaster } from "@/components/providers/responsive-toaster";
+import { layoutModeBootstrapScript } from "@/lib/layout-mode";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
-import { ChatFeatureProvider } from "@/components/chat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
+// 고정폭 글꼴은 관리자 화면 일부에서만 써서, 모든 페이지에서 미리 받지 않는다 (첫 화면 CSS와 대역폭을 다투지 않게)
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -76,6 +79,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* 하이드레이션 전에 data-layout을 붙여 레이아웃 모드를 CSS로 바로 그린다 */}
+        <script dangerouslySetInnerHTML={{ __html: layoutModeBootstrapScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
@@ -119,7 +126,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
         >
-            <NextTopLoader
+           <NextTopLoader
               color="#3b82f6"
               initialPosition={0.08}
               crawlSpeed={200}
@@ -132,7 +139,7 @@ export default function RootLayout({
               zIndex={99999}
             />
             <QueryProvider>
-                 <ChatFeatureProvider>
+                <ChatFeatureProvider>
                 {children}
                 <Toaster richColors position="top-center" />
                 </ChatFeatureProvider>

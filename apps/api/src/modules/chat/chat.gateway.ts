@@ -17,6 +17,7 @@ import {
   ErrorMessages,
 } from '@community/shared-types';
 import type {
+  ChatDeletePayload,
   ChatErrorPayload,
   ChatJoinPayload,
   ChatSendPayload,
@@ -28,6 +29,7 @@ import {
   isChatDomainError,
 } from './chat.service';
 import { PRESENCE_TOUCH_INTERVAL_MS } from './chat.constants';
+import { pickForwardedIp } from '../../common/utils/client-ip';
 
 type ChatSocket = Socket & {
   data: {
@@ -172,6 +174,24 @@ export class ChatGateway
     }
   }
 
+  @SubscribeMessage(CHAT_EVENTS.DELETE)
+  async handleDelete(@ConnectedSocket() client: ChatSocket, @MessageBody() body: ChatDeletePayload) {
+    try {
+      this.chatService.assertLive();
+      if (!client.data.room) {
+        throw new ChatDomainError(ErrorCode.CHAT_UNAUTHORIZED, '채팅방에 입장한 후 메시지를 삭제할 수 있습니다.');
+      }
+      const room = client.data.room;
+      const identity = await this.chatService.assertCanSend(client.data.identity);
+      client.data.identity = identity;
+
+      const result = await this.chatService.deleteMessage(identity, body?.id ?? '', room);
+      this.server.to(room).emit(CHAT_EVENTS.MESSAGE_DELETED, result);
+    } catch (error) {
+      this.handleSocketError(client, error);
+    }
+  }
+
   private handleAvailabilityChange(available: boolean) {
     if (!this.server) return;
     if (available) {
@@ -220,10 +240,13 @@ export class ChatGateway
 
   private extractIp(client: Socket): string {
     const forwarded = client.handshake.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) {
-      return forwarded.split(',')[0].trim();
-    }
-    return client.handshake.address || 'unknown';
+    // 맨 앞 값은 사용자가 꾸며 보낼 수 있으므로 앞단 프록시가 덧붙인 값만 사용
+    return (
+      pickForwardedIp(
+        typeof forwarded === 'string' ? forwarded : undefined,
+        client.handshake.address,
+      ) || 'unknown'
+    );
   }
 
   private handleSocketError(client: Socket, error: unknown) {

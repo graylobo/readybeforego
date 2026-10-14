@@ -3,8 +3,8 @@ import { toast } from '@/lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { format } from 'date-fns';
-import { CommentTargetType, CommentTree } from '@/lib/api/comments';
+import { formatSiteDate } from '@/lib/utils/date';
+import { COMMENT_PAGE_LIMIT, CommentListData, CommentTargetType, CommentTree } from '@/lib/api/comments';
 import { CreateCommentDto, isAdmin } from '@community/shared-types';
 import { uploadsApi } from '@/lib/api/uploads';
 import {
@@ -23,16 +23,27 @@ interface UseCommentsBehaviorProps {
   defaultRepliesVisible?: boolean;
   onMutationSuccess?: () => void;
   deleteMode?: 'soft' | 'hard';
+  /** 서버 렌더링에서 받은 첫 페이지 (limit은 COMMENT_PAGE_LIMIT) */
+  initialData?: CommentListData;
+  initialIsForVisitor?: boolean;
+  /** 게시판 관리자·사이트 관리자: 남의 댓글을 비밀번호 없이 지울 수 있음 */
+  canModerate?: boolean;
 }
 
-export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisible = true, onMutationSuccess, deleteMode = 'soft' }: UseCommentsBehaviorProps) {
+export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisible = true, onMutationSuccess, deleteMode = 'soft', initialData, initialIsForVisitor = false, canModerate = false }: UseCommentsBehaviorProps) {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
-  const limit = 30;
+  const limit = COMMENT_PAGE_LIMIT;
 
-  const { data, isLoading: loading, isPlaceholderData } = useComments(targetType, targetId, page, limit);
+  const { data, isLoading: loading, isPlaceholderData } = useComments(
+    targetType,
+    targetId,
+    page,
+    limit,
+    initialData ? { data: initialData, isForViewer: !user && initialIsForVisitor } : undefined,
+  );
 
   const comments = useMemo(() => data?.comments ?? [], [data?.comments]);
   const bestComments = useMemo(() => data?.bestComments ?? [], [data?.bestComments]);
@@ -199,10 +210,11 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
   const handleCreateComment = async (dto: CreateCommentDto) => {
     try {
       await createCommentMutation.mutateAsync(dto, {
-        onSuccess: () => {
-          if (!dto.parentId) {
-            setPage(1);
-          }
+        onSuccess: ({ comment }) => {
+          // 새 댓글은 마지막 페이지 끝에 붙으므로 그 페이지로 이동해 보여준다
+          const totalRootCount = (pagination?.totalRootCount ?? 0) + 1;
+          setPage(Math.max(1, Math.ceil(totalRootCount / limit)));
+          scrollToComment(comment.id);
           onMutationSuccess?.();
           toast.success('댓글이 등록되었습니다.');
         }
@@ -278,10 +290,13 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
 
     let guestPasswordInput: string | undefined = undefined;
     const isUserAdmin = isAdmin(user?.role);
-    if (!comment.userId && !isUserAdmin) {
+    // 게시판 관리자는 비밀번호 없이 지운다 (서버가 게시판 관리 권한을 확인)
+    if (!comment.userId && !isUserAdmin && !canModerate) {
       const input = prompt('비밀번호를 입력해주세요.');
       if (!input) return;
       guestPasswordInput = input;
+    } else if (canModerate && comment.userId !== user?.id && !confirm('이 댓글을 삭제할까요?')) {
+      return;
     }
 
     try {
@@ -296,6 +311,24 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
       });
     } catch (e) {
       console.error('Failed to delete comment:', e);
+    }
+  };
+
+  // Super Admin 완전 삭제: DB에서 지워 '삭제된 댓글입니다' 표시도 남지 않는다 (답글도 함께 지워짐)
+  const handlePurgeComment = async (commentId: string) => {
+    const comment = findComment(comments, commentId);
+    if (!comment) return;
+    const replies = getReplyCount(comment);
+    const target = replies > 0 ? `이 댓글과 답글 ${replies}개를` : '이 댓글을';
+    if (!confirm(`${target} 완전히 삭제할까요?\n되돌릴 수 없고, '삭제된 댓글입니다' 표시도 남지 않습니다.`)) return;
+
+    try {
+      await deleteCommentMutation.mutateAsync(
+        { id: commentId, deleteMode: 'hard' },
+        { onSuccess: () => onMutationSuccess?.() },
+      );
+    } catch (e) {
+      console.error('Failed to purge comment:', e);
     }
   };
 
@@ -422,7 +455,7 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
   };
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'yyyy.MM.dd HH:mm');
+    return formatSiteDate(dateString, 'yyyy.MM.dd HH:mm');
   };
 
   const getReplyCount = (comment: CommentTree): number => {
@@ -451,6 +484,7 @@ export function useCommentsBehavior({ targetType, targetId, defaultRepliesVisibl
   actionsRef.current = {
     handleCommentAction,
     handleDeleteComment,
+    handlePurgeComment,
     handleUpdateComment,
     handleReply,
     scrollToComment,

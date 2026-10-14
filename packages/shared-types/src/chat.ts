@@ -1,20 +1,5 @@
 import { z } from 'zod';
-
-export const CHAT_LIMITS = {
-  NICKNAME_MIN: 2,
-  NICKNAME_MAX: 12,
-  MESSAGE_MAX: 200,
-  HISTORY_DEFAULT: 50,
-  HISTORY_MAX: 100,
-  RECENT_CACHE_SIZE: 200,
-  RATE_LIMIT_WINDOW_MS: 3000,
-  RATE_LIMIT_MAX: 5,
-  MAX_CONNECTIONS_PER_IP: 8,
-  GUEST_TOKEN_EXPIRES_IN: '30d',
-  REPLY_PREVIEW_MAX: 40,
-} as const;
-
-export const CHAT_ROOM_DEFAULT = 'lobby';
+import { CHAT_LIMITS, GUEST_NICKNAME_REGEX } from './chat-utils';
 
 export interface ChatSettings {
   enabled: boolean;
@@ -33,21 +18,6 @@ export const UpdateChatSettingsSchema = z.object({
   defaultOpen: z.boolean().optional(),
 });
 export type UpdateChatSettingsRequest = z.infer<typeof UpdateChatSettingsSchema>;
-
-export const CHAT_SOCKET_NAMESPACE = '/chat';
-
-export const CHAT_EVENTS = {
-  JOIN: 'join',
-  SEND: 'send',
-  JOINED: 'joined',
-  MESSAGE: 'message',
-  HISTORY: 'history',
-  ONLINE: 'online',
-  ERROR: 'error',
-  AVAILABLE: 'available',
-} as const;
-
-export const GUEST_NICKNAME_REGEX = /^[가-힣a-zA-Z0-9]+$/;
 
 export const ClaimGuestNicknameSchema = z.object({
   nickname: z
@@ -91,21 +61,6 @@ export interface ChatMessage {
   replyTo?: ChatReplyTo | null;
 }
 
-export function formatChatReplyPreview(
-  content: string,
-  max: number = CHAT_LIMITS.REPLY_PREVIEW_MAX,
-): string {
-  const compact = content.replace(/\s+/g, ' ').trim();
-  if (compact.length <= max) return compact;
-  return `${compact.slice(0, max)}…`;
-}
-
-/** 동일 닉 게스트를 UI에서 구분하기 위한 짧은 태그 (#a3f1) */
-export function formatGuestTag(guestId: string): string {
-  const compact = guestId.replace(/-/g, '').slice(0, 4).toLowerCase();
-  return `#${compact}`;
-}
-
 export interface ChatGuestClaimResponse {
   token: string;
   nickname: string;
@@ -143,6 +98,22 @@ export interface ChatSendPayload {
   content: string;
   room?: string;
   replyToId?: string;
+}
+
+export const DeleteChatMessageSchema = z.object({
+  id: z.string().uuid(),
+  room: z.string().min(1).max(32).optional(),
+});
+export type DeleteChatMessageDto = z.infer<typeof DeleteChatMessageSchema>;
+
+export interface ChatDeletePayload {
+  id: string;
+  room?: string;
+}
+
+export interface ChatMessageDeletedPayload {
+  room: string;
+  id: string;
 }
 
 export interface ChatJoinPayload {

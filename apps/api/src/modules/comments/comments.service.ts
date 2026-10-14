@@ -1,16 +1,85 @@
-import { ErrorCode, isAdmin } from '@community/shared-types';
+import { ErrorCode, isAdmin, isSuperAdmin, PointActionType, USER_ROLES } from '@community/shared-types';
 import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { createHash } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { ApiException } from '../../common/exceptions/api.exception';
-import { sanitizeContent } from '../../common/utils/html-sanitizer';
+import { omitGuestPassword } from '../../common/utils/omit-guest-password';
 import { CommentsRepository } from './comments.repository';
 import { CommentDeletedEvent, CommentReactionEvent, CommentUpdatedEvent } from './events/comment-actions.events';
 import { CommentCreatedEvent } from './events/comment-created.event';
 import { UploadsService } from '../uploads/uploads.service';
+import { BoardManagersService } from '../boards/board-managers.service';
+import { PointsRevokeEvent } from '../points/events/points-revoke.event';
 
 const BEST_COMMENT_MIN_UPVOTES = 10;
 const BEST_COMMENT_MAX_COUNT = 3;
+
+/** 요청한 사용자. role은 인증 단계에서 읽은 값(req.user.role) */
+export interface CommentViewer {
+  userId?: string;
+  role?: string;
+  ipAddress?: string;
+}
+
+// 비회원 댓글 작성자 IP는 앞 두 자리만 공개 (예: 123.45)
+export function maskIp(ip: string | null | undefined): string | null {
+  if (!ip) return null;
+  const cleaned = ip.replace(/^.*:/, '');
+  const parts = cleaned.split('.');
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : null;
+}
+
+// 댓글을 달 수 있는 대상: 게시글, 사기 제보(scam_info), 국가 가이드(country_guide, 국가 코드).
+// 글 접근 권한·댓글 수 같은 게시판 규칙은 게시글에만 적용한다
+const COMMENT_TARGET_TYPES = ['post', 'scam_info', 'country_guide'];
+
+type CommentRow = {
+  id: string;
+  targetId: string;
+  targetType: string;
+  userId: string | null;
+  guestName: string | null;
+  ipAddress: string | null;
+  parentId: string | null;
+  content: string;
+  emoticonUrl: string | null;
+  imageUrl: string | null;
+  likeCount: number;
+  dislikeCount: number;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: { name: string | null; picture: string | null } | null;
+};
+
+/** 화면에 보여줄 댓글 형태(CommentTree). 목록 조회와 작성 응답이 같은 형태를 쓰도록 공유 */
+export function toCommentTree(comment: CommentRow, myReaction?: string) {
+  const isDeleted = !!comment.deletedAt;
+  return {
+    id: comment.id,
+    targetId: comment.targetId,
+    targetType: comment.targetType,
+    userId: comment.userId,
+    guestName: comment.guestName,
+    // 회원 댓글은 IP를 내려주지 않고, 비회원 댓글도 앞 두 자리만 공개
+    ipAddress: comment.userId ? null : maskIp(comment.ipAddress),
+    userName: comment.user?.name ?? null,
+    userEmail: null,
+    userPicture: comment.user?.picture ?? null,
+    parentId: comment.parentId,
+    content: isDeleted ? '삭제된 댓글입니다.' : comment.content,
+    emoticonUrl: isDeleted ? null : comment.emoticonUrl,
+    imageUrl: isDeleted ? null : comment.imageUrl,
+    isDeleted,
+    upvoteCount: isDeleted ? 0 : comment.likeCount,
+    downvoteCount: isDeleted ? 0 : comment.dislikeCount,
+    isUpvoted: !isDeleted && myReaction === 'like',
+    isDownvoted: !isDeleted && myReaction === 'dislike',
+    createdAt: comment.createdAt.toISOString(),
+    updatedAt: comment.updatedAt.toISOString(),
+    replies: [] as any[],
+  };
+}
 
 @Injectable()
 export class CommentsService {
@@ -19,153 +88,171 @@ export class CommentsService {
     private readonly commentsRepo: CommentsRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly uploadsService: UploadsService,
+    private readonly boardManagers: BoardManagersService,
   ) {}
 
-  private hashPassword(password: string): string {
-    return createHash('sha256').update(password).digest('hex');
+  // 게시글 비회원 비밀번호와 동일하게 bcrypt(salt 포함)로 저장
+  private async hashPassword(password: string): Promise<string> {
+    const salt = await bcrypt.genSalt(10);
+    return bcrypt.hash(password, salt);
   }
 
-  private comparePassword(password: string, hash: string): boolean {
-    const hashed = this.hashPassword(password);
-    return hashed === hash;
+  private async comparePassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
   }
 
-  async create(userId: string | undefined, dto: any, ipAddress?: string, userAgent?: string) {
-    const guestPasswordHash = dto.guestPassword 
-      ? this.hashPassword(dto.guestPassword) 
-      : null;
+  private assertTargetType(targetType: string) {
+    if (!COMMENT_TARGET_TYPES.includes(targetType)) {
+      throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  /**
+   * 댓글 첨부 이미지는 그 사용자가 올린 댓글 이미지(comments/{사용자 id}/...)만 허용한다.
+   * 다른 사람의 파일 주소를 넣은 뒤 댓글을 지워 그 파일을 지우게 하는 것을 막기 위함 (댓글 삭제 시 첨부 이미지를 지움)
+   */
+  private assertOwnCommentImage(imageUrl: string | null | undefined, ownerIds: (string | null | undefined)[]) {
+    if (!imageUrl) return;
+    const path = this.uploadsService.extractPathFromUrl(imageUrl);
+    const isOwn = !!path && !path.includes('..') && ownerIds.some((id) => !!id && path.startsWith(`comments/${id}/`));
+    if (!isOwn) {
+      throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST, '첨부할 수 없는 이미지입니다.');
+    }
+  }
+
+  /**
+   * 댓글을 보거나 달 수 있는 게시글인지 확인. 없거나 삭제된 글은 404,
+   * 비공개 게시판 글은 글과 같은 기준으로 작성자/관리자만 허용, 비공개 처리한 글은 Super Admin만 (그 외에는 404)
+   */
+  private assertCanAccessPost(
+    postAccess: { userId: string | null; isPrivate: boolean; hiddenAt: Date | null } | undefined,
+    viewer: CommentViewer,
+  ) {
+    if (!postAccess) throw new ApiException(ErrorCode.POST_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (postAccess.hiddenAt && viewer.role !== USER_ROLES.SUPER_ADMIN) {
+      throw new ApiException(ErrorCode.POST_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+    if (!postAccess.isPrivate) return;
+    if (!viewer.userId) throw new ApiException(ErrorCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+    if (postAccess.userId !== viewer.userId && !isAdmin(viewer.role as any)) {
+      throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
+    }
+  }
+
+  /**
+   * 댓글 작성. 화면이 목록을 다시 불러오지 않고 바로 끼워 넣을 수 있도록 목록과 같은 형태(CommentTree)로 돌려준다
+   */
+  async create(viewer: CommentViewer, dto: any, userAgent?: string) {
+    const userId = viewer.userId;
+    const ipAddress = viewer.ipAddress;
+    this.assertTargetType(dto.targetType);
+    const isPost = dto.targetType === 'post';
+
+    // 글 접근 정보, 답글 대상, 작성자 정보, 비밀번호 해시는 서로 독립적이라 동시에 처리
+    const [postAccess, parent, user, guestPasswordHash] = await Promise.all([
+      isPost ? this.commentsRepo.findPostAccess(dto.targetId) : Promise.resolve(undefined),
+      dto.parentId ? this.commentsRepo.findById(dto.parentId) : Promise.resolve(undefined),
+      userId ? this.commentsRepo.findUserById(userId) : Promise.resolve(undefined),
+      dto.guestPassword ? this.hashPassword(dto.guestPassword) : Promise.resolve(null),
+    ]);
+
+    if (isPost) this.assertCanAccessPost(postAccess, viewer);
+    // 비회원 댓글은 비밀번호로만 수정/삭제할 수 있으므로 반드시 받는다
+    if (!userId && !dto.guestPassword) {
+      throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST, '비밀번호를 입력해주세요.');
+    }
+    this.assertOwnCommentImage(dto.imageUrl, [userId]);
+    if (postAccess?.isReadOnly && !isAdmin(viewer.role as any)) {
+      throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, '읽기 전용 게시판이라 새 댓글을 달 수 없습니다.');
+    }
+    if (postAccess?.allowComments === false) {
+      throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, '작성자가 댓글 작성을 허용하지 않은 게시글입니다.');
+    }
+    // 답글은 같은 글의 (삭제되지 않은) 댓글에만 달 수 있다
+    if (dto.parentId && (!parent || parent.targetType !== dto.targetType || parent.targetId !== dto.targetId)) {
+      throw new ApiException(ErrorCode.COMMENT_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
 
     let guestName = dto.guestName;
-    if (!userId && !guestName && ipAddress) {
-      const cleanedIp = ipAddress.replace(/^.*:/, '');
-      const parts = cleanedIp.split('.');
-      if (parts.length >= 2) {
-        guestName = `${parts[0]}.${parts[1]}`;
-      } else {
-        guestName = '익명';
-      }
+    if (!userId && !guestName) {
+      guestName = maskIp(ipAddress) ?? '익명';
     }
 
-    const emoticonUrl = dto.emoticonUrl || null;
-    const imageUrl = dto.imageUrl || null;
-
-    if (dto.targetType === 'post') {
-      const postSettings = await this.commentsRepo.getPostSettings(dto.targetId);
-      if (postSettings && postSettings.allowComments === false) {
-        throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, '작성자가 댓글 작성을 허용하지 않은 게시글입니다.');
-      }
-    }
-
-    const result = await this.commentsRepo.transaction(async (tx) => {
-      const comment = await this.commentsRepo.createComment({
+    const { comment, commentCount } = await this.commentsRepo.transaction(async (tx) => {
+      const created = await this.commentsRepo.createComment({
           targetId: dto.targetId,
           targetType: dto.targetType,
           userId: userId || null,
           guestName: guestName || null,
           guestPassword: guestPasswordHash,
           ipAddress: ipAddress || null,
-          content: dto.content ? sanitizeContent(dto.content) : '',
-          emoticonUrl: emoticonUrl || null,
-          imageUrl: imageUrl || null,
+          // 댓글은 화면에서 글자로만 그린다(HTML로 그리지 않음). HTML 정화를 하면 &, < 같은 글자가 &amp; 처럼 바뀌어 보이므로 그대로 저장
+          content: dto.content ?? '',
+          emoticonUrl: dto.emoticonUrl || null,
+          imageUrl: dto.imageUrl || null,
           parentId: dto.parentId || null,
       }, tx);
-
-      let commentCount: number | undefined;
-      if (dto.targetType === 'post') {
-        commentCount = await this.commentsRepo.updatePostCommentCount(dto.targetId, 1, tx);
-      }
-
-      let user: { id: string; name: string; picture: string | null } | null = null;
-        if (userId) {
-          user = await this.commentsRepo.findUserById(userId, tx) || null;
-        }
-        
-      return {
-        ...comment,
-        user,
-        commentCount
-      };
+      const count = isPost ? await this.commentsRepo.updatePostCommentCount(dto.targetId, 1, tx) : undefined;
+      return { comment: created, commentCount: count };
     });
 
-    if (userId) {
-      this.eventEmitter.emit(
-        'comment.created',
-        new CommentCreatedEvent(
-          userId as string,
-          result.id,
-          dto.targetId,
-          dto.targetType,
-          result.content,
-          ipAddress,
-          userAgent
-        )
-      );
-    }
+    // 비회원 댓글도 알림(글쓴이/원댓글 작성자)은 가야 하므로 항상 알린다 (포인트·활동 기록은 받는 쪽에서 회원만 처리)
+    this.eventEmitter.emit(
+      'comment.created',
+      new CommentCreatedEvent(
+        userId ?? null,
+        comment.id,
+        dto.targetId,
+        dto.targetType,
+        comment.content,
+        ipAddress,
+        userAgent
+      )
+    );
 
-    return result;
+    return {
+      comment: toCommentTree({ ...comment, user: user ?? null } as CommentRow),
+      commentCount,
+    };
   }
 
   async getCommentsByTarget(
-    targetType: any,
+    targetType: string,
     targetId: string,
-    currentUserId?: string,
-    currentIp?: string,
+    viewer: CommentViewer = {},
     page: number = 1,
     limit: number = 100,
   ) {
-    const allComments = await this.commentsRepo.findCommentsByTarget(
-      targetType,
-      targetId,
-    );
+    this.assertTargetType(targetType);
+    page = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
+    limit = Number.isFinite(limit) && limit >= 1 ? Math.min(Math.floor(limit), 200) : 100;
+
+    // 댓글, 내 반응, 글 접근 권한을 동시에 조회. 추천 수는 댓글에 저장된 값을 사용
+    const [allComments, myReactions, postAccess] = await Promise.all([
+      this.commentsRepo.findCommentsByTarget(targetType, targetId),
+      this.commentsRepo.findUserReactionsByTarget(targetType, targetId, viewer.userId, viewer.ipAddress),
+      targetType === 'post' ? this.commentsRepo.findPostAccess(targetId) : Promise.resolve(undefined),
+    ]);
+
+    if (targetType === 'post') this.assertCanAccessPost(postAccess, viewer);
 
     if (allComments.length === 0) {
-      return { comments: [], bestComments: [] };
-    }
-
-    // 1) DB에서 해당 타겟 글에 속한 모든 댓글의 추천/비추천 수를 한 번에 집계합니다. (inArray 제거)
-    const counts = await this.commentsRepo.countCommentReactionsByTarget(targetType, targetId);
-    const commentActionCounts: Record<string, { upvoteCount: number; downvoteCount: number }> = {};
-    for (const count of counts) {
-      commentActionCounts[count.commentId] = {
-        upvoteCount: Number(count.upvoteCount) || 0,
-        downvoteCount: Number(count.downvoteCount) || 0,
+      return {
+        comments: [],
+        bestComments: [],
+        total: 0,
+        pagination: { page, limit, totalRootCount: 0, totalPages: 0 },
       };
     }
+
+    const myReactionMap = new Map(myReactions.map((r) => [r.commentId, r.type]));
 
     const commentMap = new Map<string, any>();
     const rootComments: any[] = [];
     const allMappedComments: any[] = [];
 
     for (const comment of allComments) {
-      const counts = commentActionCounts[comment.id] || {
-        upvoteCount: 0,
-        downvoteCount: 0,
-      };
-
-      const commentTree = {
-        id: comment.id,
-        targetId: comment.targetId,
-        targetType: comment.targetType,
-        userId: comment.userId,
-        guestName: comment.guestName,
-        ipAddress: comment.ipAddress,
-        userName: comment.user?.name,
-        userEmail: comment.user?.email,
-        userPicture: comment.user?.picture,
-        parentId: comment.parentId,
-        content: comment.deletedAt ? '삭제된 댓글입니다.' : comment.content,
-        emoticonUrl: comment.deletedAt ? null : (comment as any).emoticonUrl,
-        imageUrl: comment.deletedAt ? null : (comment as any).imageUrl,
-        isDeleted: !!comment.deletedAt,
-        upvoteCount: comment.deletedAt ? 0 : counts.upvoteCount,
-        downvoteCount: comment.deletedAt ? 0 : counts.downvoteCount,
-        isUpvoted: false, // 2) 지연 바인딩을 위해 임시 false 설정
-        isDownvoted: false, // 2) 지연 바인딩을 위해 임시 false 설정
-        createdAt: comment.createdAt.toISOString(),
-        updatedAt: comment.updatedAt.toISOString(),
-        replies: [],
-      };
-
+      const commentTree = toCommentTree(comment as CommentRow, myReactionMap.get(comment.id) as string | undefined);
       commentMap.set(comment.id, commentTree);
       allMappedComments.push(commentTree);
     }
@@ -227,40 +314,6 @@ export class CommentsService {
       page * limit,
     );
 
-    // 3) 실제 노출할 타겟 댓글들의 ID만 선별 수집
-    const visibleCommentIds: string[] = [];
-    bestComments.forEach((c) => visibleCommentIds.push(c.id));
-    
-    const collectIds = (comment: any) => {
-      visibleCommentIds.push(comment.id);
-      comment.replies.forEach(collectIds);
-    };
-    paginatedRootComments.forEach(collectIds);
-
-    const uniqueVisibleCommentIds = Array.from(new Set(visibleCommentIds));
-
-    // 4) 실제로 화면에 보이는 소수의 댓글(30~50개)에 대해서만 현재 유저의 반응(좋아요 여부) 조회
-    const commentActions = await this.getCommentActions(
-      uniqueVisibleCommentIds,
-      currentUserId,
-      currentIp,
-    );
-
-    // 5) 유저 반응 데이터 바인딩
-    const bindActions = (comment: any) => {
-      const action = commentActions[comment.id] || { isUpvoted: false, isDownvoted: false };
-      comment.isUpvoted = action.isUpvoted;
-      comment.isDownvoted = action.isDownvoted;
-      comment.replies.forEach(bindActions);
-    };
-    
-    paginatedRootComments.forEach(bindActions);
-    bestComments.forEach((bc) => {
-      const action = commentActions[bc.id] || { isUpvoted: false, isDownvoted: false };
-      bc.isUpvoted = action.isUpvoted;
-      bc.isDownvoted = action.isDownvoted;
-    });
-
     return {
       comments: paginatedRootComments,
       bestComments,
@@ -275,53 +328,41 @@ export class CommentsService {
   }
 
 
-  async getCommentActions(commentIds: string[], userId?: string, ipAddress?: string) {
-    if (commentIds.length === 0) return {};
-    if (!userId && !ipAddress) return {};
-
-    const actions = await this.commentsRepo.findCommentReactions(commentIds, userId, ipAddress);
-
-    const result: Record<string, { isUpvoted: boolean; isDownvoted: boolean }> = {};
-    for (const action of actions) {
-      result[action.commentId] = {
-        isUpvoted: action.type === 'like',
-        isDownvoted: action.type === 'dislike',
-      };
+  /**
+   * 수정/삭제 권한 확인. 회원 댓글은 작성자 또는 관리자, 비회원 댓글은 비밀번호 일치 또는 관리자
+   */
+  private async assertCanModify(
+    comment: { userId: string | null; guestPassword: string | null },
+    viewer: CommentViewer,
+    guestPassword?: string,
+  ) {
+    const viewerIsAdmin = !!viewer.userId && isAdmin(viewer.role as any);
+    if (comment.userId) {
+        if (comment.userId === viewer.userId || viewerIsAdmin) return;
+        if (!viewer.userId) throw new ApiException(ErrorCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
     }
-    return result;
+    if (viewerIsAdmin) return;
+    if (!guestPassword) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
+    const isPasswordValid = await this.comparePassword(guestPassword, comment.guestPassword || '');
+    if (!isPasswordValid) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
   }
 
-  async getCommentActionCounts(commentIds: string[]) {
-    if (commentIds.length === 0) return {};
-
-    const counts = await this.commentsRepo.countCommentReactions(commentIds);
-
-    const result: Record<string, { upvoteCount: number; downvoteCount: number }> = {};
-    
-    for (const count of counts) {
-        result[count.commentId] = {
-            upvoteCount: Number(count.upvoteCount) || 0,
-            downvoteCount: Number(count.downvoteCount) || 0,
-        };
-    }
-    return result;
-  }
-
-  async update(id: string, userId: string | undefined, dto: { content?: string; emoticonUrl?: string | null; imageUrl?: string | null; guestPassword?: string }, ip?: string, userAgent?: string) {
+  async update(id: string, viewer: CommentViewer, dto: { content?: string; emoticonUrl?: string | null; imageUrl?: string | null; guestPassword?: string }, userAgent?: string) {
     const comment = await this.commentsRepo.findById(id);
 
     if (!comment) throw new ApiException(ErrorCode.COMMENT_NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    if (comment.userId) {
-        if (comment.userId !== userId && !isAdmin(userId as any)) throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
-    } else {
-        if (!dto.guestPassword) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
-        const isPasswordValid = await this.comparePassword(dto.guestPassword, comment.guestPassword || '');
-        if (!isPasswordValid) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
+    await this.assertCanModify(comment, viewer, dto.guestPassword);
+    const userId = viewer.userId;
+    const ip = viewer.ipAddress;
+    // 관리자가 남의 댓글을 고칠 때는 작성자 또는 관리자 본인이 올린 이미지를 허용
+    if (dto.imageUrl && dto.imageUrl !== comment.imageUrl) {
+      this.assertOwnCommentImage(dto.imageUrl, [comment.userId, userId]);
     }
 
     const updated = await this.commentsRepo.updateComment(id, {
-        ...(dto.content !== undefined && { content: sanitizeContent(dto.content) }),
+        ...(dto.content !== undefined && { content: dto.content }),
         ...(dto.emoticonUrl !== undefined && { emoticonUrl: dto.emoticonUrl }),
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         updatedAt: new Date(),
@@ -341,56 +382,82 @@ export class CommentsService {
         );
     }
 
-    return updated;
+    return omitGuestPassword(updated);
   }
 
   async remove(
-    id: string, 
-    userId: string | undefined, 
-    guestPassword?: string, 
+    id: string,
+    viewer: CommentViewer,
+    guestPassword?: string,
     deleteMode: 'soft' | 'hard' = 'soft',
-    ip?: string, 
     userAgent?: string
   ) {
-    const comment = await this.commentsRepo.findById(id);
+    // 완전 삭제(DB에서 지움, 답글까지 함께)는 Super Admin만. 이미 삭제된 댓글('삭제된 댓글입니다'로 남은 것)도 지울 수 있다
+    if (deleteMode === 'hard' && !(viewer.userId && isSuperAdmin(viewer.role as any))) {
+      throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
+    }
+    const comment =
+      deleteMode === 'hard'
+        ? await this.commentsRepo.findByIdIncludingDeleted(id)
+        : await this.commentsRepo.findById(id);
 
     if (!comment) throw new ApiException(ErrorCode.COMMENT_NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    if (comment.userId) {
-        if (comment.userId !== userId && !isAdmin(userId as any)) throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
-    } else {
-        if (!guestPassword) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
-        const isPasswordValid = await this.comparePassword(guestPassword, comment.guestPassword || '');
-        if (!isPasswordValid && !isAdmin(userId as any)) throw new ApiException(ErrorCode.COMMENT_INVALID_PASSWORD, HttpStatus.FORBIDDEN);
-    }
+    // 게시판 관리자(매니저·부매니저)는 자기 게시판 글에 달린 댓글을 지울 수 있다
+    const postAccess = comment.targetType === 'post' ? await this.commentsRepo.findPostAccess(comment.targetId) : undefined;
+    const isModerator = !!postAccess && (await this.boardManagers.canModerate(postAccess.boardId, viewer));
+    if (!isModerator) await this.assertCanModify(comment, viewer, guestPassword);
+    const userId = viewer.userId;
+    const ip = viewer.ipAddress;
+
+    // 완전 삭제는 답글까지 지워지므로 답글 이미지·포인트도 함께 정리한다 (지우기 전에 모아 둔다)
+    const removed =
+      deleteMode === 'hard'
+        ? await this.commentsRepo.findThread(id)
+        : [{ id: comment.id, userId: comment.userId, imageUrl: comment.imageUrl, isDeleted: false }];
+    const imageUrls = removed.map((c) => c.imageUrl).filter((url): url is string => !!url);
+    let softDeleted = false;
 
     const result = await this.commentsRepo.transaction(async (tx) => {
+        // Update Post commentCount if target is post
+        // 완전 삭제는 답글까지 함께 지워지므로(onDelete cascade) 남은 댓글을 다시 센다
+        let commentCount: number | undefined;
         if (deleteMode === 'hard') {
             await this.commentsRepo.hardDeleteComment(id, tx);
+            if (comment.targetType === 'post') {
+                commentCount = await this.commentsRepo.recountPostCommentCount(comment.targetId, tx);
+            }
         } else {
-            await this.commentsRepo.softDeleteComment(id, tx);
-        }
-
-        // Update Post commentCount if target is post
-        let commentCount: number | undefined;
-        if (comment.targetType === 'post') {
-            commentCount = await this.commentsRepo.updatePostCommentCount(comment.targetId, -1, tx);
+            const changed = await this.commentsRepo.softDeleteComment(id, tx);
+            softDeleted = changed;
+            if (changed && comment.targetType === 'post') {
+                commentCount = await this.commentsRepo.updatePostCommentCount(comment.targetId, -1, tx);
+            }
         }
 
         return { success: true, commentCount };
 
     });
 
-    // 댓글 삭제 완료 후, 업로드된 이미지가 있으면 스토리지에서 비동기 삭제 (트랜잭션 차단 방지)
-    if (comment.imageUrl) {
+    // 지워진 댓글로 받은 포인트를 되돌린다 (이미 지워져 있던 답글은 그때 회수됨, 동시에 두 번 지우면 한 번만)
+    if (deleteMode === 'hard' || softDeleted) {
+      for (const c of removed) {
+        if (c.userId && !c.isDeleted) {
+          this.eventEmitter.emit('points.revoke', new PointsRevokeEvent(c.userId, PointActionType.COMMENT_CREATED, c.id, 'comment'));
+        }
+      }
+    }
+
+    // 댓글 삭제 완료 후, 업로드된 이미지가 있으면 스토리지에서 삭제 (트랜잭션 차단 방지)
+    for (const imageUrl of new Set(imageUrls)) {
       try {
-        const imagePath = this.uploadsService.extractPathFromUrl(comment.imageUrl);
+        const imagePath = this.uploadsService.extractCommentImagePath(imageUrl);
         if (imagePath) {
           await this.uploadsService.deleteImage(imagePath);
-          this.logger.log(`Successfully deleted comment image from storage: ${comment.imageUrl}`);
+          this.logger.log(`Successfully deleted comment image from storage: ${imageUrl}`);
         }
       } catch (err) {
-        this.logger.error(`Failed to delete comment image from storage: ${comment.imageUrl}`, err);
+        this.logger.error(`Failed to delete comment image from storage: ${imageUrl}`, err);
       }
     }
 
@@ -409,45 +476,70 @@ export class CommentsService {
     return result;
   }
 
-  async toggleReaction(id: string, userId: string | undefined, type: 'like' | 'dislike', ipAddress?: string, userAgent?: string) {
+  /**
+   * 댓글 추천/비추천 토글. 댓글에 저장된 추천 수를 변화량만큼만 갱신한다
+   */
+  async toggleReaction(id: string, viewer: CommentViewer, type: 'like' | 'dislike', userAgent?: string) {
+    const { userId, ipAddress } = viewer;
+    if (!userId && !ipAddress) throw new ApiException(ErrorCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
     let reactionEvent: CommentReactionEvent | null = null;
 
     const result = await this.commentsRepo.transaction(async (tx) => {
         const comment = await this.commentsRepo.findById(id, tx);
-        if (!comment) throw new NotFoundException('Comment not found');
+        if (!comment) throw new ApiException(ErrorCode.COMMENT_NOT_FOUND, HttpStatus.NOT_FOUND);
+        // 삭제된 글이나 볼 수 없는 비공개 게시판 글의 댓글에는 반응할 수 없다
+        if (comment.targetType === 'post') {
+          this.assertCanAccessPost(await this.commentsRepo.findPostAccess(comment.targetId, tx), viewer);
+        }
 
         const existing = await this.commentsRepo.findUserReaction(id, userId, ipAddress, tx);
+        const delta = { like: 0, dislike: 0 };
+        let userReaction: 'like' | 'dislike' | null;
+        let message: string;
 
-        if (existing) {
-            if (existing.type === type) {
-                await this.commentsRepo.deleteReaction(existing.id, tx);
-                return { message: 'Reaction removed' };
-            } else {
-                await this.commentsRepo.updateReaction(existing.id, type, tx);
-                return { message: 'Reaction updated' };
+        // 동시에 같은 요청이 와도 실제로 바뀐 행이 있을 때만 수치를 바꾼다
+        if (existing && existing.type === type) {
+            if (await this.commentsRepo.deleteReaction(existing.id, tx)) delta[type] -= 1;
+            userReaction = null;
+            message = 'Reaction removed';
+        } else if (existing) {
+            if (await this.commentsRepo.updateReaction(existing.id, existing.type, type, tx)) {
+                delta[existing.type] -= 1;
+                delta[type] += 1;
             }
+            userReaction = type;
+            message = 'Reaction updated';
         } else {
-            await this.commentsRepo.createReaction({
+            const inserted = await this.commentsRepo.createReaction({
                 commentId: id,
                 userId: userId || null,
                 ipAddress: !userId ? ipAddress : null,
                 type,
             }, tx);
+            if (inserted) delta[type] += 1;
+            userReaction = type;
+            message = 'Reaction added';
 
-            if (userId && type === 'like') {
+            if (inserted && userId && type === 'like' && comment.userId) {
                 reactionEvent = new CommentReactionEvent(
                     userId,
                     id,
                     comment.content,
-                    comment.userId!,
+                    comment.userId,
                     type,
                     ipAddress,
                     userAgent
                 );
             }
-
-            return { message: 'Reaction added' };
         }
+
+        const counts = await this.commentsRepo.applyReactionDelta(id, delta.like, delta.dislike, tx);
+        return {
+            message,
+            userReaction,
+            upvoteCount: counts.likeCount,
+            downvoteCount: counts.dislikeCount,
+        };
     });
 
     if (reactionEvent) {
@@ -460,8 +552,10 @@ export class CommentsService {
   async findByUser(userId: string, page: number = 1, limit: number = 20) {
     const offset = (page - 1) * limit;
     
-    const items = await this.commentsRepo.findCommentsByUserWithPostDetails(userId, offset, limit);
-    const totalCount = await this.commentsRepo.countCommentsByUser(userId);
+    const [items, totalCount] = await Promise.all([
+      this.commentsRepo.findCommentsByUserWithPostDetails(userId, offset, limit),
+      this.commentsRepo.countCommentsByUser(userId),
+    ]);
 
     return {
       items,

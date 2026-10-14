@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { format, isToday } from 'date-fns';
-import { Eye, Image as ImageIcon, Pin, ThumbsUp, ChevronDown, ChevronUp, Heart, MessageSquare, Pencil, Trash2, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
+import { formatSiteDate, isSiteToday } from '@/lib/utils/date';
+import { Eye, Image as ImageIcon, Pin, ThumbsUp, ChevronDown, ChevronUp, Heart, MessageSquare, Pencil, Trash2, ChevronLeft, ChevronRight, Share2, Bot, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Post as ApiPost } from '@/lib/api/board';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import { markPendingNavigation, useLayoutStore } from '@/lib/stores/layout.store';
 import { useDeletePost, useTogglePostReaction } from '@/hooks/queries/use-board-queries';
 import { toast } from '@/lib/toast';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Comments } from '@/components/comments/comments';
 import { useRef } from 'react';
 import { FeedPostEditModal } from '@/components/board/feed-post-edit-modal';
+import { ContentImage, extractContentImages } from '@/lib/utils/content-images';
+import { htmlToPreviewText, isFeedEditableContent } from '@/lib/utils/feed-content';
 import { MediaDetailModal } from '@/components/common/media-detail-modal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { BotSourceButton } from '@/components/board/bot-source-button';
 
 interface PostListProps {
   posts: (ApiPost & { _isBestBlock?: boolean })[];
@@ -23,6 +27,21 @@ interface PostListProps {
   viewMode?: 'list' | 'lounge' | 'feed';
 }
 
+
+/** 비공개 처리한 글 표시. 비공개 글은 Super Admin 목록에만 내려오므로 따로 권한을 확인하지 않는다 */
+function HiddenBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 px-1.5 py-0.5 font-semibold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-sm inline-flex items-center gap-0.5",
+        className,
+      )}
+      title="Super Admin 전용: 비공개 처리한 글 (다른 사람에게는 보이지 않음)"
+    >
+      <EyeOff className="h-3 w-3" /> 비공개
+    </span>
+  );
+}
 
 function HighlightedText({ text, query }: { text: string; query?: string }) {
   if (!query?.trim()) return <>{text}</>;
@@ -56,43 +75,53 @@ const getRelativeTimeStr = (dateStr: string) => {
   if (diffHours < 24) return `${diffHours}시간 전`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays}일 전`;
-  return format(d, 'yyyy.MM.dd');
+  return formatSiteDate(d, 'yyyy.MM.dd');
 };
 
 
 
-const extractAllImages = (content: string): string[] => {
+const extractAllImages = (content: string | undefined): ContentImage[] => {
   if (!content) return [];
-  const urls: string[] = [];
-  
-  // HTML img tags match src
-  const htmlRegex = /<img\s+[^>]*src=["']([^"']+)["']/gi;
-  let match;
-  while ((match = htmlRegex.exec(content)) !== null) {
-    urls.push(match[1]);
-  }
-  
+  const images = extractContentImages(content);
+
   // Markdown image match url
   const mdRegex = /!\[.*?\]\((.*?)\)/g;
+  let match;
   while ((match = mdRegex.exec(content)) !== null) {
-    urls.push(match[1]);
+    if (match[1] && !images.some((img) => img.src === match![1])) images.push({ src: match[1] });
   }
-  
-  return Array.from(new Set(urls)).filter(Boolean);
+
+  return images;
 };
 
-function FeedImageGrid({ images }: { images: string[] }) {
+/**
+ * 피드 이미지. 작은 버전 목록(srcset)이 있으면 칸 크기(sizes)에 맞는 것을 받는다.
+ * 피드는 최대 768px(max-w-3xl) 너비라, 원본(최대 1920px)을 그대로 받으면 용량 낭비가 크다.
+ */
+const FEED_FULL_SIZES = '(max-width: 768px) 100vw, 768px';
+const FEED_HALF_SIZES = '(max-width: 768px) 50vw, 384px';
+
+function FeedImage({ image, sizes, alt, className }: { image: ContentImage; sizes: string; alt: string; className: string }) {
+  return (
+    <img
+      src={image.src}
+      srcSet={image.srcset}
+      sizes={image.srcset ? sizes : undefined}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
+
+function FeedImageGrid({ images }: { images: ContentImage[] }) {
   if (images.length === 0) return null;
 
   if (images.length === 1) {
     return (
       <div className="relative w-full rounded-2xl overflow-hidden border border-border/50 aspect-video max-h-[360px] bg-muted/50">
-        <img 
-          src={images[0]} 
-          alt="post image" 
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-          loading="lazy"
-        />
+        <FeedImage image={images[0]} sizes={FEED_FULL_SIZES} alt="post image" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
       </div>
     );
   }
@@ -102,12 +131,7 @@ function FeedImageGrid({ images }: { images: string[] }) {
       <div className="grid grid-cols-2 gap-2 w-full aspect-[2/1] max-h-[300px]">
         {images.map((img, i) => (
           <div key={i} className="relative rounded-xl overflow-hidden border border-border/50 bg-muted/50 h-full">
-            <img 
-              src={img} 
-              alt={`post image ${i + 1}`} 
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-              loading="lazy"
-            />
+            <FeedImage image={img} sizes={FEED_HALF_SIZES} alt={`post image ${i + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
           </div>
         ))}
       </div>
@@ -121,23 +145,13 @@ function FeedImageGrid({ images }: { images: string[] }) {
         <div className="grid grid-cols-2 gap-2 aspect-[2/1] max-h-[220px]">
           {images.slice(0, 2).map((img, i) => (
             <div key={i} className="relative rounded-xl overflow-hidden border border-border/50 bg-muted/50 h-full">
-              <img 
-                src={img} 
-                alt={`post image ${i + 1}`} 
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-                loading="lazy"
-              />
+              <FeedImage image={img} sizes={FEED_HALF_SIZES} alt={`post image ${i + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
             </div>
           ))}
         </div>
         {/* Bottom 1 full width */}
         <div className="relative w-full rounded-xl overflow-hidden border border-border/50 aspect-[3/1] max-h-[140px] bg-muted/50">
-          <img 
-            src={images[2]} 
-            alt="post image 3" 
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-            loading="lazy"
-          />
+          <FeedImage image={images[2]} sizes={FEED_FULL_SIZES} alt="post image 3" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
         </div>
       </div>
     );
@@ -151,12 +165,7 @@ function FeedImageGrid({ images }: { images: string[] }) {
         const isLast = i === 3;
         return (
           <div key={i} className="relative rounded-xl overflow-hidden border border-border/50 bg-muted/50 h-full">
-            <img 
-              src={img} 
-              alt={`post image ${i + 1}`} 
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-              loading="lazy"
-            />
+            <FeedImage image={img} sizes={FEED_HALF_SIZES} alt={`post image ${i + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
             {isLast && remaining > 0 && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center text-white text-lg font-black select-none">
                 +{remaining}
@@ -169,12 +178,8 @@ function FeedImageGrid({ images }: { images: string[] }) {
   );
 }
 
-const stripHtml = (html: string) => {
-  if (!html) return '';
-  let text = html.replace(/<[^>]*>/g, '');
-  text = text.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  return text.trim();
-};
+// 문단 끝을 줄바꿈으로 바꿔 미리보기(whitespace-pre-line)에서도 줄이 붙지 않게 한다
+const stripHtml = htmlToPreviewText;
 
 export function PostList({ 
   posts, 
@@ -185,6 +190,7 @@ export function PostList({
 }: PostListProps) {
   const router = useRouter();
   const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'super_admin';
   const deletePostMutation = useDeletePost(slug || '');
 
   const [isNoticeExpanded, setIsNoticeExpanded] = useState(false);
@@ -197,12 +203,12 @@ export function PostList({
     e.preventDefault();
     e.stopPropagation();
     
-    if (viewMode === 'feed' || viewMode === 'lounge') {
-      const targetPost = posts.find(p => p.id === postId);
-      if (targetPost) {
-        setEditingPost(targetPost);
-        setIsEditModalOpen(true);
-      }
+    // 피드형 수정 창은 글자 + 이미지만 다루므로, 그 모양으로 쓴 글만 연다.
+    // 레이아웃은 나중에 바뀔 수 있어, 일반 편집기로 쓴 글이나 수집한 글은 피드/라운지에서도 일반 편집기로 고친다
+    const targetPost = viewMode === 'feed' || viewMode === 'lounge' ? posts.find(p => p.id === postId) : undefined;
+    if (targetPost && isFeedEditableContent(targetPost.content)) {
+      setEditingPost(targetPost);
+      setIsEditModalOpen(true);
     } else {
       router.push(`/board/${postSlug}/${postId}/edit`);
     }
@@ -239,6 +245,12 @@ export function PostList({
   
   const displayedNotices = isNoticeExpanded ? notices : notices.slice(0, COLLAPSED_NOTICE_COUNT);
   
+  // 여러 게시판 글을 모은 목록(전체/베스트, 검색, 스크랩 등)이면 맨 앞에 게시판 칸을 두고 누르면 그 게시판으로 간다
+  const showBoardColumn = !slug;
+  const listGridCols = showBoardColumn
+    ? 'md:grid-cols-[96px_1fr_100px_60px_60px_70px]'
+    : 'md:grid-cols-[1fr_100px_60px_60px_70px]';
+
   const renderPost = (post: ApiPost & { _isBestBlock?: boolean }) => {
     const likeCount = post.likeCount || 0;
     const commentCount = post.commentCount || 0;
@@ -246,29 +258,46 @@ export function PostList({
     const isNotice = post.isNotice || false;
     const hasImage = post.hasImage || false; 
     
-    const effectiveSlug = slug || (post as any).board?.slug;
+    const postBoard = (post as any).board as { slug?: string; name?: string } | undefined;
+    const effectiveSlug = slug || postBoard?.slug;
     const postHref = effectiveSlug ? `/board/${effectiveSlug}/${post.id}` : '#';
+    const boardHref = postBoard?.slug ? `/board/${postBoard.slug}` : undefined;
+    // 게시판 이름 링크는 글 링크 안에 넣을 수 없어(링크 안의 링크) 한 줄을 [게시판 링크][글 링크]로 나눈다.
+    // 데스크톱에서는 글 링크를 display: contents로 풀어 두 링크의 칸이 한 줄의 표 칸으로 나란히 놓인다
+    const boardLink = showBoardColumn && postBoard?.name && boardHref ? (
+      <Link
+        href={boardHref}
+        onClick={(e) => markPendingNavigation(e, boardHref)}
+        className="truncate text-xs md:text-[13px] text-muted-foreground hover:text-primary hover:underline md:text-center md:self-center"
+        title={`${postBoard.name} 게시판으로`}
+      >
+        {postBoard.name}
+      </Link>
+    ) : showBoardColumn ? <span className="hidden md:block" /> : null;
 
     return (
-      <Link
+      <div
         key={`${post.id}${post._isBestBlock ? '-best' : ''}`}
-        href={postHref}
         className={cn(
-          'flex flex-col md:grid md:grid-cols-[1fr_100px_60px_60px_70px] md:gap-4 px-4 py-4 md:py-3 transition-colors cursor-pointer group',
+          'flex flex-col md:grid md:gap-4 px-4 py-4 md:py-3 transition-colors group',
+          listGridCols,
           isNotice ? 'bg-blue-500/10 dark:bg-blue-500/10 hover:bg-blue-500/20 dark:hover:bg-blue-500/20' :
           post._isBestBlock ? 'bg-orange-500/10 dark:bg-orange-500/10 hover:bg-orange-500/20 dark:hover:bg-orange-500/20' :
           isPinned ? 'bg-muted dark:bg-muted/50 hover:bg-muted/80 dark:hover:bg-muted/70' : 'hover:bg-muted/50',
+        )}
+      >
+      {boardLink && <div className="mb-1 md:mb-0 md:contents">{boardLink}</div>}
+      <Link
+        href={postHref}
+        onClick={(e) => markPendingNavigation(e, postHref)}
+        className={cn(
+          'flex flex-col md:contents cursor-pointer',
           '[&:visited_.post-title]:!text-muted-foreground [&:visited_.post-title]:!font-normal [&:visited_.post-title]:opacity-70 [&:visited_.comment-count]:!text-muted-foreground [&:visited_.comment-count]:!font-normal [&:visited_.comment-count]:opacity-60'
         )}
       >
         <div className="flex items-start justify-between gap-4 min-w-0">
           <div className="flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1 min-w-0">
-              {!slug && (post as any).board?.name && (
-                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground rounded-sm">
-                  {(post as any).board.name}
-                </span>
-              )}
               {isNotice && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] md:text-xs font-bold bg-destructive text-white rounded-sm">
                   공지
@@ -287,6 +316,16 @@ export function PostList({
                   [{post.category}]
                 </span>
               )}
+              {post.hiddenAt && <HiddenBadge className="text-[10px] md:text-xs" />}
+              {isSuperAdmin && post.isBot && (
+                <span
+                  className="shrink-0 px-1.5 py-0.5 text-[10px] md:text-xs font-semibold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-sm inline-flex items-center gap-0.5"
+                  title={`Super Admin 전용: 크롤러 봇에 의해 등록된 게시글${post.botSource?.targetName ? ` (수집 카드: ${post.botSource.targetName}${post.botSource.galleryId ? ` / 디시 ID: ${post.botSource.galleryId}` : ' / 삭제된 카드'})` : ''}`}
+                >
+                  <Bot className="h-3 w-3" /> 봇{post.botSource?.targetName && ` · ${post.botSource.targetName}`}
+                </span>
+              )}
+              {isSuperAdmin && post.isBot && <BotSourceButton postId={post.id} />}
               <span className={cn(
                 "truncate text-[15px] md:text-sm md:font-normal transition-colors duration-200",
                 "group-hover:text-primary",
@@ -314,9 +353,7 @@ export function PostList({
               </span>
               <span className="text-[10px] opacity-30 select-none">|</span>
               <span>
-                {post.createdAt && (isToday(new Date(post.createdAt))
-                  ? format(new Date(post.createdAt), 'HH:mm')
-                  : format(new Date(post.createdAt), 'MM.dd'))}
+                {post.createdAt && formatSiteDate(post.createdAt, isSiteToday(post.createdAt) ? 'HH:mm' : 'MM.dd')}
               </span>
               <span className="text-[10px] opacity-30 select-none">|</span>
               <div className="flex items-center gap-1">
@@ -349,11 +386,10 @@ export function PostList({
         </div>
 
         <div className="hidden md:block text-center text-sm text-muted-foreground">
-          {post.createdAt && (isToday(new Date(post.createdAt))
-            ? format(new Date(post.createdAt), 'HH:mm')
-            : format(new Date(post.createdAt), 'MM.dd'))}
+          {post.createdAt && formatSiteDate(post.createdAt, isSiteToday(post.createdAt) ? 'HH:mm' : 'MM.dd')}
         </div>
       </Link>
+      </div>
     );
   };
 
@@ -373,6 +409,8 @@ function FeedPostCard({
   handleDelete: (e: React.MouseEvent, id: string) => void;
 }) {
   const router = useRouter();
+  // 이동이 늦으면 AppLayout이 스켈레톤을 보여주도록 이동 중인 주소를 알린다
+  const setPendingPath = useLayoutStore((state) => state.setPendingPath);
   const toggleReactionMutation = useTogglePostReaction(post.id);
 
   const effectiveSlug = slug || (post as any).board?.slug;
@@ -401,6 +439,7 @@ function FeedPostCard({
   const handleCommentClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setPendingPath(postHref);
     router.push(`/board/${effectiveSlug}/${post.id}?focusComment=true`);
   };
 
@@ -409,6 +448,7 @@ function FeedPostCard({
   return (
     <Link
       href={postHref}
+      onClick={(e) => markPendingNavigation(e, postHref)}
       className={cn(
         "bg-card text-card-foreground border border-border rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col gap-3 group hover:-translate-y-0.5",
         post.isNotice ? "bg-blue-500/5 dark:bg-blue-500/10 border-blue-500/10 dark:border-blue-500/20" :
@@ -453,8 +493,18 @@ function FeedPostCard({
 
       {/* Title & Body Preview */}
       <div className="space-y-1.5">
-        <h3 className="text-lg font-bold text-foreground leading-snug group-hover:text-primary transition-colors">
-          {post.title}
+        <h3 className="text-lg font-bold text-foreground leading-snug group-hover:text-primary transition-colors flex items-center gap-2">
+          {post.hiddenAt && <HiddenBadge className="text-xs" />}
+          {user?.role === 'super_admin' && post.isBot && (
+            <span
+              className="shrink-0 px-1.5 py-0.5 text-xs font-semibold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded inline-flex items-center gap-1"
+              title={`Super Admin 전용: 크롤러 봇에 의해 등록된 게시글${post.botSource?.targetName ? ` (수집 카드: ${post.botSource.targetName}${post.botSource.galleryId ? ` / 디시 ID: ${post.botSource.galleryId}` : ' / 삭제된 카드'})` : ''}`}
+            >
+              <Bot className="h-3 w-3" /> 봇{post.botSource?.targetName && ` · ${post.botSource.targetName}`}
+            </span>
+          )}
+          {user?.role === 'super_admin' && post.isBot && <BotSourceButton postId={post.id} />}
+          <span>{post.title}</span>
         </h3>
         {previewText && (
           <p className="text-sm text-muted-foreground/80 line-clamp-3 leading-relaxed whitespace-pre-line">
@@ -584,7 +634,8 @@ function FeedPostCard({
 
   return (
     <div className="w-full border-t border-border/50">
-      <div className="hidden md:grid grid-cols-[1fr_100px_60px_60px_70px] gap-4 px-4 py-3 text-sm font-medium text-muted-foreground border-b border-border/50">
+      <div className={cn('hidden md:grid gap-4 px-4 py-3 text-sm font-medium text-muted-foreground border-b border-border/50', listGridCols)}>
+        {showBoardColumn && <div className="text-center">게시판</div>}
         <div>제목</div>
         <div className="text-center">작성자</div>
         <div className="text-center">조회</div>
@@ -618,7 +669,7 @@ function FeedPostCard({
 // Instagram View Support Components
 // ----------------------------------------------------
 
-function InstagramImageSlider({ images, className }: { images: string[]; className?: string }) {
+function InstagramImageSlider({ images, className }: { images: ContentImage[]; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -679,14 +730,9 @@ function InstagramImageSlider({ images, className }: { images: string[]; classNa
           msOverflowStyle: 'none'
         }}
       >
-        {images.map((src, i) => (
+        {images.map((image, i) => (
           <div key={i} className="min-w-full h-full snap-start relative flex items-center justify-center bg-zinc-950">
-            <img 
-              src={src} 
-              alt={`slide-${i}`} 
-              className="w-full h-full object-contain"
-              loading="lazy"
-            />
+            <FeedImage image={image} sizes={FEED_FULL_SIZES} alt={`slide-${i}`} className="w-full h-full object-contain" />
           </div>
         ))}
       </div>
@@ -751,12 +797,13 @@ function InstagramCommentModal({ isOpen, onOpenChange, post, slug }: InstagramCo
   const authorAvatar = (post.user as any)?.image || post.user?.picture || (post.user as any)?.profileImage || '';
   const allImages = extractAllImages(post.content);
   const cleanBody = stripHtml(post.content);
+  const hasImages = allImages.length > 0;
 
   return (
     <MediaDetailModal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      images={allImages}
+      images={allImages.map((image) => image.src)}
       authorName={authorName}
       authorAvatar={authorAvatar}
       createdAt={post.createdAt}
@@ -830,12 +877,24 @@ function InstagramFeedCard({
           <div className="flex flex-col text-xs leading-tight min-w-0">
             <div className="flex items-center gap-1.5 truncate">
               <span className="font-bold text-sm text-foreground truncate">{authorName}</span>
+              {post.hiddenAt && <HiddenBadge className="text-[10px]" />}
+              {user?.role === 'super_admin' && post.isBot && (
+                <span
+                  className="px-1.5 py-0.5 text-[10px] font-semibold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded shrink-0 inline-flex items-center gap-0.5"
+                  title={`Super Admin 전용: 크롤러 봇에 의해 등록된 게시글${post.botSource?.targetName ? ` (수집 카드: ${post.botSource.targetName}${post.botSource.galleryId ? ` / 디시 ID: ${post.botSource.galleryId}` : ' / 삭제된 카드'})` : ''}`}
+                >
+                  <Bot className="w-2.5 h-2.5" /> 봇{post.botSource?.targetName && ` · ${post.botSource.targetName}`}
+                </span>
+              )}
+              {user?.role === 'super_admin' && post.isBot && <BotSourceButton postId={post.id} />}
               {post.isNotice && (
                 <span className="px-1.5 py-0.5 text-[10px] font-bold bg-destructive text-white rounded shrink-0">공지</span>
               )}
             </div>
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 truncate">
               <span>{getRelativeTimeStr(post.createdAt)}</span>
+              <span>·</span>
+              <span className="text-muted-foreground/80 font-medium truncate">{boardName}에 남긴 글</span>
             </div>
           </div>
         </div>

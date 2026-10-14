@@ -2,26 +2,40 @@
 
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/stores/auth.store';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { cn } from '@/lib/utils/cn';
 import { API_URL } from '@/lib/api-client';
 import { LayoutTemplate } from 'lucide-react';
 
+/**
+ * 쿼리는 effect 안에서 window.location으로 읽는다 (브라우저에서만 실행).
+ * useSearchParams를 쓰면 정적 페이지인 로그인 화면 전체가 서버 HTML에 없고(Loading...만 보임) 브라우저에서만 그려진다.
+ * 로그인 화면의 쿼리(redirect, OAuth 콜백의 user)는 페이지에 들어올 때 정해지므로 처음 한 번 읽으면 된다.
+ */
+function getQueryParam(name: string) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+/** 로그인 뒤 돌아갈 곳: 우리 사이트 안의 경로만 (다른 사이트 주소로 보내는 데 악용되지 않게) */
+function safeRedirect(path: string | null): string | null {
+  if (!path || !path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) return null;
+  return path;
+}
+
 function LoginFormContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { setAuth, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    const redirect = searchParams.get('redirect');
+    const redirect = getQueryParam('redirect');
     if (redirect) {
       sessionStorage.setItem('redirect_url', redirect);
     }
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
-    const userStr = searchParams.get('user');
+    const userStr = getQueryParam('user');
 
     if (userStr) {
       try {
@@ -36,7 +50,7 @@ function LoginFormContent() {
           return;
         }
 
-        const redirect = searchParams.get('redirect') || sessionStorage.getItem('redirect_url');
+        const redirect = safeRedirect(getQueryParam('redirect') || sessionStorage.getItem('redirect_url'));
         sessionStorage.removeItem('redirect_url');
         
         setTimeout(() => {
@@ -46,11 +60,11 @@ function LoginFormContent() {
         console.error('Failed to parse user data:', error);
       }
     }
-  }, [searchParams, setAuth, router]);
+  }, [setAuth, router]);
 
   useEffect(() => {
-    if (isAuthenticated && !searchParams.get('token')) {
-      const redirect = searchParams.get('redirect') || sessionStorage.getItem('redirect_url');
+    if (isAuthenticated && !getQueryParam('token')) {
+      const redirect = safeRedirect(getQueryParam('redirect') || sessionStorage.getItem('redirect_url'));
       if (redirect) {
         sessionStorage.removeItem('redirect_url');
         router.push(redirect);
@@ -58,7 +72,7 @@ function LoginFormContent() {
         router.push('/');
       }
     }
-  }, [isAuthenticated, router, searchParams]);
+  }, [isAuthenticated, router]);
 
   const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
     window.location.href = `${API_URL}/auth/${provider}`;
@@ -122,9 +136,5 @@ function LoginFormContent() {
 }
 
 export function LoginForm() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <LoginFormContent />
-    </Suspense>
-  );
+  return <LoginFormContent />;
 }

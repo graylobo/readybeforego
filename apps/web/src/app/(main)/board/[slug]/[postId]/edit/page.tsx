@@ -16,7 +16,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import { cn } from '@/lib/utils/cn';
 import { ArrowLeft, Loader2, Lock, Save } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 function EditPostContent() {
@@ -31,15 +31,13 @@ function EditPostContent() {
 
   const updatePostMutation = useUpdatePost(slug, postId);
 
-  const searchParams = useSearchParams();
-  const pw = searchParams.get('pw') || '';
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [isNotice, setIsNotice] = useState(false);
   const [isBest, setIsBest] = useState(false);
-  const [guestPw, setGuestPw] = useState(searchParams.get('pw') || '');
+  const [guestPw, setGuestPw] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [allowComments, setAllowComments] = useState(true);
@@ -49,7 +47,7 @@ function EditPostContent() {
   useEffect(() => {
     if (post) {
       setTitle(post.title);
-      setContent(post.content);
+      setContent(post.content ?? "");
       setIsPinned(post.isPinned || false);
       setIsNotice(post.isNotice || false);
       setIsBest((post as any).isBest || false);

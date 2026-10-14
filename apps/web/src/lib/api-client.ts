@@ -11,7 +11,7 @@ declare module 'axios' {
 }
 
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -45,11 +45,20 @@ apiClient.interceptors.response.use(
     // _skipToast가 명시적으로 지정되지 않은 경우, GET 요청은 기본적으로 토스트를 건너뜁니다.
     const skipToast = error.config?._skipToast !== undefined ? error.config._skipToast : isGetMethod;
 
+    // 알림(toast)은 브라우저에서만 띄운다. 서버 렌더링 중에 부르면(sonner는 브라우저 전용) 그 호출이 오류를 내며
+    // 원래 API 오류를 덮어써서, 페이지가 404 등을 알아채지 못한다 (없는 글/게시판이 404 대신 빈 화면 200으로 응답됨)
+    if (typeof window === 'undefined') {
+      return Promise.reject(error);
+    }
+
     if (serverError && serverError.success === false) {
       const errorCode = serverError.errorCode as ErrorCode;
-      // 백엔드가 전달한 구체적인 상세 에러 메시지가 존재하면 최우선 사용 🎯
-      const detailedMessage = (serverError.message && serverError.message !== 'Validation failed') ? serverError.message : undefined;
-      const message = detailedMessage || ErrorMessages[errorCode] || serverError.message || '요청 처리 중 오류가 발생했습니다.';
+      // 서버가 구체적인 이유를 한국어로 보냈으면 그대로 보여준다 (예: "이 게시판은 익명 작성을 허용하지 않습니다.").
+      // 입력값 검사 기본 문구처럼 영어로 온 경우에는 오류 코드별 기본 문구를 쓴다
+      const serverMessage = typeof serverError.message === 'string' && /[가-힣]/.test(serverError.message)
+        ? serverError.message
+        : undefined;
+      const message = serverMessage || ErrorMessages[errorCode] || '요청 처리 중 오류가 발생했습니다.';
       
       if (!skipToast) {
         toast.error(message);

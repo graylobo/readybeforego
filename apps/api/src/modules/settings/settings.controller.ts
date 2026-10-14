@@ -1,6 +1,7 @@
 import { USER_ROLES } from '@community/shared-types';
 import { Body, Controller, Get, Patch, UseGuards, UsePipes, UseInterceptors } from '@nestjs/common';
 import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
+import { ClearCacheInterceptor } from '../../common/interceptors/clear-cache.interceptor';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -23,6 +24,8 @@ export class SettingsController {
   }
 
   @Patch()
+  // 바꾼 설정이 바로 보이도록 조회 응답 캐시를 지운다 (예전에는 지우지 않아 최대 60초 옛 설정이 보였다)
+  @UseInterceptors(ClearCacheInterceptor('/settings'))
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN)
   @UsePipes(new ZodValidationPipe(UpdateSiteSettingsZodDto))

@@ -41,28 +41,7 @@ export class PointsService implements OnModuleInit {
 
       // 2. Transaction: Update Points + Create History
       await this.pointsRepo.transaction(async (tx) => {
-          // Update User Points
-          const existing = await this.pointsRepo.findUserPoints(userId, tx);
-          
-          if (existing) {
-              const newAccPoints = existing.accumulatedPoints + policy.experiencePoints;
-              const newAvailablePoints = existing.availablePoints + policy.availablePoints;
-              const newLevel = this.calculateLevel(newAccPoints);
-
-              await this.pointsRepo.updateUserPoints(userId, {
-                  accumulatedPoints: newAccPoints,
-                  availablePoints: newAvailablePoints,
-                  level: newLevel,
-              }, tx);
-          } else {
-              const newLevel = this.calculateLevel(policy.experiencePoints);
-              await this.pointsRepo.insertUserPoints({
-                  userId,
-                  accumulatedPoints: policy.experiencePoints,
-                  availablePoints: policy.availablePoints,
-                  level: newLevel,
-              }, tx);
-          }
+          await this.pointsRepo.applyPointsDelta(userId, policy.experiencePoints, policy.availablePoints, tx);
 
           // Create History
           await this.pointsRepo.insertPointHistory({
@@ -74,33 +53,37 @@ export class PointsService implements OnModuleInit {
           }, tx);
       });
   }
+
+  /**
+   * 글/댓글로 받은 포인트를 되돌린다. 지급 기록이 있고 아직 회수하지 않았을 때 한 번만.
+   * 이미 써버린 포인트는 남은 만큼만 빼고 0 아래로 내리지 않는다 (금액은 현재 정책 기준)
+   */
+  async revokePoints(userId: string, actionType: PointActionType, relatedId: string, relatedType: string) {
+      const policy = await this.pointsRepo.findPointPolicy(actionType);
+      if (!policy || (policy.experiencePoints === 0 && policy.availablePoints === 0)) return;
+
+      await this.pointsRepo.transaction(async (tx) => {
+          const history = await this.pointsRepo.findHistoryByRelated(userId, relatedId, relatedType, tx);
+          const awarded = history.some((h: { points: number }) => h.points > 0);
+          const revoked = history.some((h: { points: number }) => h.points < 0);
+          if (!awarded || revoked) return;
+
+          await this.pointsRepo.applyPointsDelta(userId, -policy.experiencePoints, -policy.availablePoints, tx);
+          await this.pointsRepo.insertPointHistory({
+              userId,
+              points: -(policy.availablePoints || policy.experiencePoints),
+              reason: `${policy.description || actionType} 회수 (삭제)`,
+              relatedId,
+              relatedType,
+          }, tx);
+      });
+  }
+
   async addPoints(userId: string, amount: number, reason: string, relatedId?: string, relatedType?: string, tx?: any) {
       if (amount <= 0) return;
 
-      const db = tx ?? this.pointsRepo;
-
-      // Update User Points
-      const existing = await this.pointsRepo.findUserPoints(userId, tx);
-      
-      if (existing) {
-          const newAvailablePoints = existing.availablePoints + amount;
-          const newAccPoints = existing.accumulatedPoints + amount; // Typically selling also counts towards exp
-          const newLevel = this.calculateLevel(newAccPoints);
-
-          await this.pointsRepo.updateUserPoints(userId, {
-              accumulatedPoints: newAccPoints,
-              availablePoints: newAvailablePoints,
-              level: newLevel,
-          }, tx);
-      } else {
-          const newLevel = this.calculateLevel(amount);
-          await this.pointsRepo.insertUserPoints({
-              userId,
-              accumulatedPoints: amount,
-              availablePoints: amount,
-              level: newLevel,
-          }, tx);
-      }
+      // Typically selling also counts towards exp
+      await this.pointsRepo.applyPointsDelta(userId, amount, amount, tx);
 
       // Create History
       await this.pointsRepo.insertPointHistory({
@@ -116,16 +99,10 @@ export class PointsService implements OnModuleInit {
       if (amount <= 0) return true;
 
       const process = async (transaction: any) => {
-          const existing = await this.pointsRepo.findUserPoints(userId, transaction);
-          if (!existing || existing.availablePoints < amount) {
+          // 잔액 확인과 차감을 한 번에 (동시에 두 번 구매해도 잔액 이상 쓰지 못함)
+          if (!(await this.pointsRepo.deductAvailablePoints(userId, amount, transaction))) {
               return false; // Not enough points
           }
-
-          const newAvailablePoints = existing.availablePoints - amount;
-
-          await this.pointsRepo.updateUserPoints(userId, {
-              availablePoints: newAvailablePoints,
-          }, transaction);
 
           await this.pointsRepo.insertPointHistory({
               userId,

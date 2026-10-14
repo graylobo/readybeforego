@@ -18,9 +18,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { UserActivityLog } from './user-activity-log';
+import { ChatGuestProfileGate } from '@/components/chat';
 import { uploadsApi } from '@/lib/api/uploads';
 import { toast } from '@/lib/toast';
-import { ChatGuestProfileGate } from '@/components/chat';
 
 const nicknameSchema = z.string()
   .min(2, '닉네임은 2자 이상이어야 합니다.')

@@ -27,7 +27,7 @@ export function TopNav() {
 
   return (
     <nav className={cn(
-      "hidden md:flex items-center gap-1 lg:gap-2 transition-all duration-500",
+      "layout-top-nav hidden md:flex items-center gap-1 lg:gap-2 transition-all duration-500",
       layoutMode === 'top' ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none w-0"
     )}>
       {headerItems.map((item) => (

@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useCommentsBehavior } from '@/hooks/use-comments-behavior';
-import { CommentTargetType } from '@/lib/api/comments';
+import { CommentListData, CommentTargetType } from '@/lib/api/comments';
 import { MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { CommentForm } from './comment-form';
 import CommentItem from './comment-item';
+import { CommentModerationContext } from './comment-moderation-context';
 
 /**
  * 공통 댓글 컴포넌트
@@ -20,6 +21,14 @@ type CommentsProps = {
   onMutationSuccess?: () => void; 
   allowAnonymous?: boolean; 
   deleteMode?: 'soft' | 'hard';
+  /** 서버 렌더링에서 받은 첫 페이지 댓글 */
+  initialData?: CommentListData;
+  /** initialData가 방문자(비회원) IP 기준으로 조회된 값인지 */
+  initialIsForVisitor?: boolean;
+  /** 게시판 관리자·사이트 관리자: 남의 댓글도 지울 수 있음 */
+  canModerate?: boolean;
+  /** 읽기 전용 게시판: 새 댓글·답글을 받지 않음 */
+  readOnly?: boolean;
 };
 
 const generateRandomId = () => {
@@ -36,6 +45,10 @@ export function Comments({
   onMutationSuccess,
   allowAnonymous = false,
   deleteMode = 'soft',
+  initialData,
+  initialIsForVisitor = false,
+  canModerate = false,
+  readOnly = false,
 }: CommentsProps) {
   const {
     user,
@@ -56,7 +69,7 @@ export function Comments({
     updatePending,
     handleCreateComment,
     commentRefs,
-  } = useCommentsBehavior({ targetType, targetId, defaultRepliesVisible, onMutationSuccess, deleteMode });
+  } = useCommentsBehavior({ targetType, targetId, defaultRepliesVisible, onMutationSuccess, deleteMode, initialData, initialIsForVisitor, canModerate });
 
   if (loading && !isPlaceholderData) {
     return (
@@ -75,6 +88,7 @@ export function Comments({
   }
 
   return (
+    <CommentModerationContext.Provider value={{ canModerate, readOnly }}>
     <div className="mt-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold flex items-center gap-2">
@@ -115,7 +129,11 @@ export function Comments({
         </div>
       )}
 
-      {(!user && !allowAnonymous) ? (
+      {readOnly ? (
+        <div className="mb-8 p-4 bg-muted/30 rounded-xl text-center text-sm text-muted-foreground">
+          읽기 전용 게시판이라 새 댓글을 달 수 없습니다.
+        </div>
+      ) : (!user && !allowAnonymous) ? (
         <div className="mb-8 p-6 bg-muted/50 rounded-xl text-center border-2 border-dashed">
           <p className="text-muted-foreground mb-3">로그인한 사용자만 댓글을 작성할 수 있습니다.</p>
           <Button asChild>
@@ -181,5 +199,6 @@ export function Comments({
 
 
     </div>
+    </CommentModerationContext.Provider>
   );
 }
