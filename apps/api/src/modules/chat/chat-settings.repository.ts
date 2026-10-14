@@ -17,11 +17,11 @@ export class ChatSettingsRepository {
       const [created] = await this.db
         .insert(chatSettings)
         .values({
-          enabled: true,
+          enabled: false,
           persistEnabled: true,
           showOnlineCount: false,
           showMessageTime: false,
-          defaultOpen: true,
+          defaultOpen: false,
         })
         .returning();
       settings = created;

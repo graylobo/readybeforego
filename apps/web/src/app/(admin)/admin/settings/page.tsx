@@ -52,11 +52,11 @@ export default function AdminSettingsPage() {
   const chatForm = useForm<z.infer<typeof chatFormSchema>>({
     resolver: zodResolver(chatFormSchema),
     defaultValues: {
-      enabled: true,
+      enabled: false,
       persistEnabled: true,
       showOnlineCount: false,
       showMessageTime: false,
-      defaultOpen: true,
+      defaultOpen: false,
     },
   });
 

@@ -237,3 +237,10 @@ html[data-layout="top"] .layout-sidebar-toggle {
   pointer-events: none;
   width: 0;
 }
+
+/* 모바일 하단 내비게이션(app-layout, h-16 · md 미만에서만 보임)에 채팅 버튼이 가리지 않도록 그 높이만큼 올린다 */
+@media (max-width: 767.98px) {
+  :root {
+    --chat-fab-bottom-offset: 4rem;
+  }
+}

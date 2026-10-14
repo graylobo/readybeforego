@@ -622,11 +622,11 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
 // 채팅 전용 설정. site_settings 계약을 깨지 않기 위해 분리한다.
 export const chatSettings = pgTable('chat_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
-  enabled: boolean('enabled').default(true).notNull(),
+  enabled: boolean('enabled').default(false).notNull(),
   persistEnabled: boolean('persist_enabled').default(true).notNull(),
   showOnlineCount: boolean('show_online_count').default(false).notNull(),
   showMessageTime: boolean('show_message_time').default(false).notNull(),
-  defaultOpen: boolean('default_open').default(true).notNull(),
+  defaultOpen: boolean('default_open').default(false).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 

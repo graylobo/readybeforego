@@ -19,7 +19,7 @@ const ChatFeatureContext = createContext<ChatFeatureValue>({
   ready: true,
   showOnlineCount: false,
   showMessageTime: false,
-  defaultOpen: true,
+  defaultOpen: false,
 });
 
 export function useChatFeature() {
@@ -56,7 +56,7 @@ export function ChatFeatureProvider({ children }: { children: ReactNode }) {
   const ready = !isLoading;
   const showOnlineCount = enabled && (data?.showOnlineCount ?? false);
   const showMessageTime = enabled && (data?.showMessageTime ?? false);
-  const defaultOpen = enabled && (data?.defaultOpen ?? true);
+  const defaultOpen = enabled && (data?.defaultOpen ?? false);
 
   return (
     <ChatFeatureContext.Provider value={{ enabled, ready, showOnlineCount, showMessageTime, defaultOpen }}>
