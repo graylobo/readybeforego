@@ -134,6 +134,13 @@
       "when": 1793941652968,
       "tag": "0018_boilerplate_sync_5197bbd",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793948015178,
+      "tag": "0019_clean_seed_scams",
+      "breakpoints": true
     }
   ]
 }
