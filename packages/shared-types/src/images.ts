@@ -16,3 +16,6 @@ export function isCommentImagePath(pathOrUrl: string): boolean {
 export function commentImageThumbnailUrl(url: string): string | null {
   return isCommentImagePath(url) ? imageVariantPath(url, COMMENT_IMAGE_THUMBNAIL_WIDTH) : null;
 }
+
+/** 제보 하나에 첨부할 수 있는 사진 수 */
+export const SCAM_MAX_IMAGE_COUNT = 5;

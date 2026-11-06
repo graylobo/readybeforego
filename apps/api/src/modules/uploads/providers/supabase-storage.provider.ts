@@ -35,12 +35,8 @@ export class SupabaseStorageProvider implements StorageProvider {
       throw new Error(`Failed to upload file to Supabase: ${error.message}`);
     }
 
-    const { data: { publicUrl } } = this.supabase.storage
-      .from(this.bucketName)
-      .getPublicUrl(data.path);
-
     return {
-      url: publicUrl,
+      url: this.getPublicUrl(data.path),
       path: data.path,
     };
   }
@@ -103,6 +99,10 @@ export class SupabaseStorageProvider implements StorageProvider {
       }
       if (filesToDelete.length < DELETE_DIRECTORY_PAGE_SIZE) return;
     }
+  }
+
+  getPublicUrl(filePath: string): string {
+    return this.supabase.storage.from(this.bucketName).getPublicUrl(filePath).data.publicUrl;
   }
 
   extractPathFromUrl(url: string): string | null {

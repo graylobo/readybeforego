@@ -204,6 +204,17 @@ export class UploadsService {
     return this.storageProvider.extractPathFromUrl(url);
   }
 
+  /**
+   * 이 사용자가 해당 폴더에 올린 우리 저장소의 이미지 경로. 아니면 null.
+   * 주소의 경로만 보면 다른 사이트의 같은 경로도 통과하므로, 실제 공개 주소와 같은지까지 확인한다.
+   */
+  ownedImagePath(url: string, folder: string, ownerId: string | null | undefined): string | null {
+    if (!ownerId) return null;
+    const path = this.extractPathFromUrl(url);
+    if (!path || path.includes('..') || !path.startsWith(`${folder}/${ownerId}/`)) return null;
+    return this.storageProvider.getPublicUrl(path) === url ? path : null;
+  }
+
   /** 댓글 첨부 이미지의 저장소 경로. 댓글 이미지 폴더(comments/)의 파일이 아니면 null (다른 파일을 지우지 않도록) */
   extractCommentImagePath(url: string | null | undefined): string | null {
     const path = url ? this.extractPathFromUrl(url) : null;

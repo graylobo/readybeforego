@@ -26,7 +26,7 @@ import { UPLOAD_LIMITS, ErrorCode, isAdmin } from '@community/shared-types';
  * - 그 외 폴더(signatures 등)는 서버 내부 작업 전용이다.
  * - 파생 프로젝트에서 전용 폴더가 필요하면 이 목록에 추가한다.
  */
-const CLIENT_UPLOAD_FOLDERS = ['temp', 'comments', 'profiles'];
+const CLIENT_UPLOAD_FOLDERS = ['temp', 'comments', 'profiles', 'scams'];
 
 @ApiTags('uploads')
 @Controller('uploads')

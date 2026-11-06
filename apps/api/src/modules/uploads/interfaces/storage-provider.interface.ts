@@ -26,6 +26,11 @@ export interface StorageProvider {
   extractPathFromUrl(url: string): string | null;
 
   /**
+   * 내부 path의 공개 주소를 돌려줍니다. upload()가 돌려주는 주소와 같습니다.
+   */
+  getPublicUrl(path: string): string;
+
+  /**
    * 임시 폴더에서 특정 시간 이전의 파일들을 모두 정리합니다.
    */
   cleanupTempFiles(olderThan: Date): Promise<void>;

@@ -245,6 +245,8 @@ export class MapboxProvider implements GeocodingProvider {
   }
 }
 
+const SCAM_IMAGE_FOLDER = 'scams';
+
 @Injectable()
 export class ScamsService {
   private readonly logger = new Logger(ScamsService.name);
@@ -263,7 +265,31 @@ export class ScamsService {
     }
   }
 
+  // 제보 사진은 본인이 올린 파일만 받는다. 수정할 때 이미 붙어 있던 사진은 그대로 둘 수 있다 (관리자가 다른 사람 제보를 고치는 경우)
+  private assertAttachableImages(urls: string[] | null | undefined, userId: string | undefined, existing: string[] = []) {
+    for (const url of urls ?? []) {
+      if (!existing.includes(url) && !this.uploadsService.ownedImagePath(url, SCAM_IMAGE_FOLDER, userId)) {
+        throw new BadRequestException('제보에는 직접 올린 사진만 첨부할 수 있습니다.');
+      }
+    }
+  }
+
+  // 저장소에서 지워도 되는 제보 사진. 제보 작성자가 올린 파일만 지워, 주소가 잘못 들어가도 다른 파일이 지워지지 않게 한다
+  private async deleteOwnedScamImages(urls: string[], ownerId: string | null | undefined) {
+    for (const url of urls) {
+      const path = this.uploadsService.ownedImagePath(url, SCAM_IMAGE_FOLDER, ownerId);
+      if (!path) continue;
+      try {
+        await this.uploadsService.deleteImage(path);
+        this.logger.log(`Deleted scam image from storage: ${path}`);
+      } catch (err) {
+        this.logger.error(`Failed to delete scam image from storage: ${path}`, err);
+      }
+    }
+  }
+
   async create(createDto: CreateScamInfoZodDto, userId?: string) {
+    this.assertAttachableImages(createDto.imageUrls, userId);
     return this.scamsRepository.transaction(async (tx) => {
       let regionId: string | null = createDto.regionId ?? null;
       let cityId: string | null = createDto.cityId ?? null;
@@ -442,6 +468,9 @@ export class ScamsService {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
 
+    const existingImageUrls = (Array.isArray(scam.imageUrls) ? scam.imageUrls : []) as string[];
+    this.assertAttachableImages(updateDto.imageUrls, userId, existingImageUrls);
+
     const payload = { ...updateDto };
     if (payload.sourceUrl !== undefined) {
       payload.sourceUrl = formatExternalUrl(payload.sourceUrl);
@@ -473,24 +502,13 @@ export class ScamsService {
 
     // 이미지 리스트가 수정 요청에 포함되어 있는 경우 (undefined가 아닌 경우)
     if (updateDto.imageUrls !== undefined) {
-      const oldImageUrls = (scam.imageUrls || []) as string[];
       const newImageUrls = (updateDto.imageUrls || []) as string[];
 
       // 기존 리스트에는 있었으나 새 리스트에는 없는 이미지 파일 찾아 삭제
-      const removedUrls = oldImageUrls.filter(url => !newImageUrls.includes(url));
-      if (removedUrls.length > 0) {
-        for (const url of removedUrls) {
-          try {
-            const imagePath = this.uploadsService.extractPathFromUrl(url);
-            if (imagePath) {
-              await this.uploadsService.deleteImage(imagePath);
-              this.logger.log(`Successfully deleted removed scam image from storage: ${url}`);
-            }
-          } catch (err) {
-            this.logger.error(`Failed to delete removed scam image from storage: ${url}`, err);
-          }
-        }
-      }
+      await this.deleteOwnedScamImages(
+        existingImageUrls.filter((url) => !newImageUrls.includes(url)),
+        scam.userId,
+      );
     }
 
     return updateResult;
@@ -515,26 +533,15 @@ export class ScamsService {
     const deleteResult = await this.scamsRepository.update(id, { deletedAt: new Date() });
 
     // 제보 본문 이미지 삭제
-    if (scam.imageUrls && Array.isArray(scam.imageUrls)) {
-      const urls = scam.imageUrls as string[];
-      for (const url of urls) {
-        try {
-          const imagePath = this.uploadsService.extractPathFromUrl(url);
-          if (imagePath) {
-            await this.uploadsService.deleteImage(imagePath);
-            this.logger.log(`Successfully deleted scam image from storage: ${url}`);
-          }
-        } catch (err) {
-          this.logger.error(`Failed to delete scam image from storage: ${url}`, err);
-        }
-      }
+    if (Array.isArray(scam.imageUrls)) {
+      await this.deleteOwnedScamImages(scam.imageUrls as string[], scam.userId);
     }
 
     // 제보 관련 댓글 이미지 개별 스토리지 클린업
     for (const url of commentImages) {
       if (url) {
         try {
-          const imagePath = this.uploadsService.extractPathFromUrl(url);
+          const imagePath = this.uploadsService.extractCommentImagePath(url);
           if (imagePath) {
             await this.uploadsService.deleteImage(imagePath);
             this.logger.log(`Successfully deleted comment image for deleted scam ${id}: ${url}`);
@@ -692,7 +699,7 @@ export class ScamsService {
     }
 
     // 연관 이미지 스토리지 삭제
-    await this.deleteScamImagesFromStorage(scam.imageUrls);
+    await this.deleteScamImagesFromStorage(scam.imageUrls, scam.userId);
 
     return this.scamsRepository.deleteAdminScam(id);
   }
@@ -706,13 +713,13 @@ export class ScamsService {
 
     const scams = await this.scamsRepository.findByIds(ids);
     for (const scam of scams) {
-      await this.deleteScamImagesFromStorage(scam.imageUrls);
+      await this.deleteScamImagesFromStorage(scam.imageUrls, scam.userId);
     }
 
     return this.scamsRepository.deleteAdminScamsBulk(ids);
   }
 
-  private async deleteScamImagesFromStorage(imageUrls: any) {
+  private async deleteScamImagesFromStorage(imageUrls: any, ownerId: string | null | undefined) {
     if (!imageUrls) return;
     let urls: string[] = [];
     if (Array.isArray(imageUrls)) {
@@ -726,18 +733,7 @@ export class ScamsService {
         urls = [imageUrls];
       }
     }
-
-    for (const url of urls) {
-      try {
-        const path = this.uploadsService.extractPathFromUrl(url);
-        if (path) {
-          await this.uploadsService.deleteImage(path);
-          this.logger.log(`Deleted scam image file from storage: ${path}`);
-        }
-      } catch (err) {
-        this.logger.error(`Failed to delete scam image file from storage: ${url}`, err);
-      }
-    }
+    await this.deleteOwnedScamImages(urls, ownerId);
   }
 
   async bulkImportAdminScams(items: any[]) {

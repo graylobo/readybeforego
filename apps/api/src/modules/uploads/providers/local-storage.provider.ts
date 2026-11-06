@@ -24,11 +24,8 @@ export class LocalStorageProvider implements StorageProvider {
 
     fs.writeFileSync(fullPath, file);
 
-    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4001';
-    const url = `${apiUrl}/uploads/${filePath}`;
-
     return {
-      url,
+      url: this.getPublicUrl(filePath),
       path: filePath,
     };
   }
@@ -67,6 +64,11 @@ export class LocalStorageProvider implements StorageProvider {
     if (fs.existsSync(fullPath)) {
       fs.rmSync(fullPath, { recursive: true, force: true });
     }
+  }
+
+  getPublicUrl(filePath: string): string {
+    const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:4001';
+    return `${apiUrl}/uploads/${filePath}`;
   }
 
   extractPathFromUrl(url: string): string | null {

@@ -1,5 +1,6 @@
 import { createZodDto } from '@anatine/zod-nestjs';
 import { z } from 'zod';
+import { SCAM_MAX_IMAGE_COUNT } from '@community/shared-types';
 
 export const CreateScamInfoBaseSchema = z.object({
   regionId: z.string().optional(),
@@ -32,7 +33,7 @@ export const CreateScamInfoBaseSchema = z.object({
       { message: '대상 국적은 ISO 코드 최대 3개까지 선택할 수 있습니다.' }
     ),
   sourceUrl: z.string().url('유효한 URL 형식이 아닙니다.').or(z.literal('')).nullable().optional(),
-  imageUrls: z.array(z.string().url()).nullable().optional(),
+  imageUrls: z.array(z.string().url()).max(SCAM_MAX_IMAGE_COUNT, `사진은 최대 ${SCAM_MAX_IMAGE_COUNT}장까지 첨부할 수 있습니다.`).nullable().optional(),
 });
 
 const hasOtherCategory = (scamCategory?: string) =>
