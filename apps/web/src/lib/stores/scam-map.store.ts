@@ -7,6 +7,11 @@ export interface NearbySearch {
   kind: "gps" | "place";
 }
 
+export interface SightingPick {
+  scamId: string;
+  title: string;
+}
+
 interface ScamMapStore {
   selectedCountryCode: string | null;
   selectedCityId: string | null;
@@ -14,6 +19,8 @@ interface ScamMapStore {
   selectedRegion: Region | null;
   nearby: NearbySearch | null;
   highlightedRegionId: string | null;
+  focusedScamId: string | null;
+  sightingPick: SightingPick | null;
   mapCenter: [number, number];
   mapZoom: number;
   isReportMode: boolean;
@@ -45,6 +52,8 @@ interface ScamMapStore {
   setSelectedRegion: (region: Region | null) => void;
   setNearby: (nearby: NearbySearch | null) => void;
   setHighlightedRegionId: (id: string | null) => void;
+  setFocusedScamId: (id: string | null) => void;
+  setSightingPick: (pick: SightingPick | null) => void;
   setMapCenter: (center: [number, number]) => void;
   setMapZoom: (zoom: number) => void;
   setIsReportMode: (val: boolean) => void;
@@ -72,6 +81,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   selectedRegion: null,
   nearby: null,
   highlightedRegionId: null,
+  focusedScamId: null,
+  sightingPick: null,
   mapCenter: [13.7563, 100.5018],
   mapZoom: 5,
   isReportMode: false,
@@ -97,6 +108,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     ? { nearby, selectedCountryCode: null, selectedCityId: null, selectedRegionId: null, selectedRegion: null, highlightedRegionId: null }
     : { nearby: null, highlightedRegionId: null }),
   setHighlightedRegionId: (id) => set({ highlightedRegionId: id }),
+  setFocusedScamId: (id) => set({ focusedScamId: id }),
+  setSightingPick: (pick) => set({ sightingPick: pick }),
   setMapCenter: (center) => set({ mapCenter: center }),
   setMapZoom: (zoom) => set({ mapZoom: zoom }),
   setIsReportMode: (val) => set({ isReportMode: val }),
@@ -114,6 +127,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
   setIsFilterModalOpen: (val) => set({ isFilterModalOpen: val }),
   resetSelections: () => set({
+    focusedScamId: null,
+    sightingPick: null,
     nearby: null,
     highlightedRegionId: null,
     selectedCountryCode: null,
@@ -134,6 +149,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isFilterModalOpen: false,
   }),
   resetFeedSelections: () => set({
+    focusedScamId: null,
+    sightingPick: null,
     nearby: null,
     highlightedRegionId: null,
     selectedCountryCode: null,

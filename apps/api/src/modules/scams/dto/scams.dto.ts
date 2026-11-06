@@ -100,6 +100,13 @@ export const ToggleScamReactionSchema = z.object({
 });
 export class ToggleScamReactionZodDto extends createZodDto(ToggleScamReactionSchema) {}
 
+export const SaveScamSightingSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  seenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜 형식이 올바르지 않습니다.'),
+});
+export class SaveScamSightingZodDto extends createZodDto(SaveScamSightingSchema) {}
+
 export const BulkImportScamsSchema = z.object({
   items: z.array(z.object({
     countryCode: z.string().min(2),

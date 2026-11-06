@@ -100,6 +100,9 @@ export default function Home() {
     nearby,
     setNearby,
     setHighlightedRegionId,
+    setFocusedScamId,
+    sightingPick,
+    setSightingPick,
     filterReportType,
     mapCenter,
     setMapCenter,
@@ -157,7 +160,8 @@ export default function Home() {
   useEffect(() => {
     setFeedScopeFilter('all');
     setExpandedScamIds(new Set());
-  }, [selectedCountryCode, selectedCityId, selectedRegionId, nearby]);
+    setFocusedScamId(null);
+  }, [selectedCountryCode, selectedCityId, selectedRegionId, nearby, setFocusedScamId]);
 
   // 휴대폰에서는 무언가 선택되면 지도를 가리지 않는 높이로 목록을 연다
   const isFeedActive = !!(selectedCountryCode || selectedCityId || selectedRegionId || nearby);
@@ -344,6 +348,8 @@ export default function Home() {
           fresh.upvoteCount !== ds.upvoteCount || 
           fresh.downvoteCount !== ds.downvoteCount || 
           fresh.commentCount !== ds.commentCount || 
+          fresh.sightingCount !== ds.sightingCount || 
+          fresh.sightedByMe !== ds.sightedByMe || 
           fresh.updatedAt !== ds.updatedAt
         )) {
           changed = true;
@@ -582,6 +588,8 @@ export default function Home() {
 
   // 제보 카드를 누르면 내용을 펼치고, 해당 위치의 마커를 지도에서 강조한다
   const handleCardClick = (scam: ScamInfo) => {
+    // 펼친 제보를 겪은 사람들의 위치를 지도에 점으로 보여 준다
+    setFocusedScamId(expandedScamIds.has(scam.id) ? null : scam.id);
     setExpandedScamIds((prev) => {
       const next = new Set(prev);
       if (next.has(scam.id)) next.delete(scam.id);
@@ -594,6 +602,39 @@ export default function Home() {
       setMapCenter([region.latitude, region.longitude]);
       setMapZoom(Math.max(mapZoom, 15));
     }
+  };
+
+  const cancelSightingMutation = useMutation({
+    mutationFn: (scamId: string) => scamsApi.deleteSighting(scamId),
+    onSuccess: (_data, scamId) => {
+      toast.success("겪은 위치 기록을 취소했습니다.");
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
+      queryClient.invalidateQueries({ queryKey: ["scam-sightings", scamId] });
+    },
+    onError: () => {
+      toast.error("기록을 취소하지 못했습니다. 다시 시도해 주세요.");
+    },
+  });
+
+  const handleSightingClick = (scam: ScamInfo) => {
+    if (!isAuthenticated) {
+      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+        router.push("/login");
+      }
+      return;
+    }
+    if (scam.sightedByMe) {
+      cancelSightingMutation.mutate(scam.id);
+      return;
+    }
+    setFocusedScamId(scam.id);
+    setExpandedScamIds((prev) => new Set(prev).add(scam.id));
+    const region = allRegions.find((r) => r.id === scam.regionId);
+    if (region) {
+      setMapCenter([region.latitude, region.longitude]);
+      setMapZoom(Math.max(mapZoom, 16));
+    }
+    setSightingPick({ scamId: scam.id, title: scam.title });
   };
 
   const selectRegionFromFeed = (region: Region) => {
@@ -1020,13 +1061,41 @@ export default function Home() {
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      className="text-xs font-semibold text-blue-700 dark:text-blue-400 cursor-pointer"
-                    >
-                      {isExpanded ? "접기" : "자세히 보기"}
-                    </button>
+                    {isExpanded && !!scam.sightingCount && (
+                      <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                        {scam.sightingCount}명이 겪었어요. 지도의 빨간 점이 겪은 위치입니다.
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        className="text-xs font-semibold text-blue-700 dark:text-blue-400 cursor-pointer"
+                      >
+                        {isExpanded ? "접기" : "자세히 보기"}
+                      </button>
+
+                      {scam.reportType !== "TIP" && (
+                        <button
+                          type="button"
+                          disabled={cancelSightingMutation.isPending}
+                          aria-pressed={!!scam.sightedByMe}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSightingClick(scam);
+                          }}
+                          className={`flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-bold transition-colors cursor-pointer disabled:cursor-wait ${
+                            scam.sightedByMe
+                              ? "border-red-600 bg-red-600 text-white"
+                              : "border-border text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {scam.sightedByMe ? "기록 취소" : "나도 겪었어요"}
+                          {!!scam.sightingCount && <span className="font-black">{scam.sightingCount}</span>}
+                        </button>
+                      )}
+                    </div>
 
                     {/* Card Footer Actions */}
                     {isExpanded && (
@@ -1244,15 +1313,15 @@ export default function Home() {
       
       {/* Left Map Canvas (Occupies full viewport on mobile) */}
       {/* 휴대폰에서 목록이 열리면 지도를 줄여 선택한 위치가 목록에 가리지 않게 한다 */}
-      <div className={`md:flex-1 md:h-full relative z-0 ${isMobileFeedOpen && !isReportMode ? "flex-none h-[calc(52%-4rem)]" : "flex-1 h-[calc(100vh-8rem)]"}`}>
+      <div className={`md:flex-1 md:h-full relative z-0 ${isMobileFeedOpen && !isReportMode && !sightingPick ? "flex-none h-[calc(52%-4rem)]" : "flex-1 h-[calc(100vh-8rem)]"}`}>
         <ReadyBeforeGoMap />
 
         {/* 플로팅 컨트롤 그룹 (여행지 검색 + 제보하기 버튼). 제보 위치를 고르는 동안에는 안내 배너에 자리를 내준다 */}
         <div className={`absolute top-2.5 right-2.5 flex items-center justify-end gap-2 ${isReportMode ? "z-10" : "left-2.5 z-[1100]"}`}>
-          {!isReportMode && <PlaceSearch regions={allRegions} />}
+          {!isReportMode && !sightingPick && <PlaceSearch regions={allRegions} />}
 
           {/* 맵 직접 제보하기 플로팅 버튼 */}
-          <Button
+          {!sightingPick && <Button
             size="sm"
             variant={isReportMode ? "destructive" : "default"}
             className={`font-bold text-xs h-10 px-3.5 rounded-full shrink-0 shadow-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border ${
@@ -1275,7 +1344,7 @@ export default function Home() {
             }}
           >
             {isReportMode ? t("common.report_cancel_btn") : t("common.report_direct_btn")}
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -1292,7 +1361,7 @@ export default function Home() {
       )}
 
       {/* 휴대폰 하단 목록 시트. 지도를 계속 보고 만질 수 있도록 모달로 띄우지 않는다 */}
-      {isMobileFeedOpen && !isReportMode && (
+      {isMobileFeedOpen && !isReportMode && !sightingPick && (
         <div
           className={`md:hidden absolute inset-x-0 bottom-16 z-20 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-card shadow-[0_-8px_30px_rgba(0,0,0,0.2)] transition-[height] duration-200 ${
             isSheetExpanded ? "h-[calc(100%-5rem)]" : "h-[48%]"

@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { AnyPgColumn, bigint, boolean, doublePrecision, index, integer, json, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { AnyPgColumn, bigint, boolean, date, doublePrecision, index, integer, json, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['user', 'moderator', 'admin', 'super_admin']);
@@ -748,6 +748,25 @@ export const scamInfoReactions = pgTable('scam_info_reactions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   scamUserIdx: index('scam_info_reactions_idx').on(table.scamInfoId, table.userId, table.ipAddress),
+}));
+
+// 사용자가 주의사항을 실제로 겪은 위치와 날짜. 공개되는 위치이므로 좌표는 약 100m 단위로 낮춰 저장한다
+export const scamSightings = pgTable('scam_sightings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  scamInfoId: uuid('scam_info_id')
+    .notNull()
+    .references(() => scamInfos.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  seenOn: date('seen_on').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  scamUserUnique: uniqueIndex('scam_sightings_scam_user_unique').on(table.scamInfoId, table.userId),
+  scamSeenIdx: index('scam_sightings_scam_seen_idx').on(table.scamInfoId, table.seenOn),
 }));
 
 // Relations

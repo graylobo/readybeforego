@@ -37,6 +37,12 @@ export interface Region {
   updatedAt: string;
 }
 
+export interface ScamSighting {
+  latitude: number;
+  longitude: number;
+  seenOn: string;
+}
+
 export interface ScamInfo {
   id: string;
   regionId?: string | null;
@@ -61,6 +67,8 @@ export interface ScamInfo {
   reactions?: Array<{ id: string; type: 'like' | 'dislike' }>;
   imageUrls?: string[] | null;
   commentCount?: number;
+  sightingCount?: number;
+  sightedByMe?: boolean;
   userId?: string | null;
   guestName?: string | null;
   user?: {
@@ -105,6 +113,21 @@ export const scamsApi = {
 
   getScamsByCountry: async (countryCode: string): Promise<ScamInfo[]> => {
     const response = await apiClient.get(`/scams/country/${countryCode}`);
+    return response.data;
+  },
+
+  getSightings: async (scamId: string): Promise<ScamSighting[]> => {
+    const response = await apiClient.get(`/scams/${scamId}/sightings`);
+    return response.data;
+  },
+
+  saveSighting: async (scamId: string, data: ScamSighting): Promise<ScamSighting[]> => {
+    const response = await apiClient.post(`/scams/${scamId}/sightings`, data);
+    return response.data;
+  },
+
+  deleteSighting: async (scamId: string): Promise<ScamSighting[]> => {
+    const response = await apiClient.delete(`/scams/${scamId}/sightings`);
     return response.data;
   },
 

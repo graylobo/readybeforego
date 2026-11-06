@@ -3,17 +3,17 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "@/hooks/use-translation";
-import { Region, scamsApi } from "@/lib/api/scams";
+import { Region, ScamSighting, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { findNearbyRegions, REGION_AREA_RADIUS_M, topCategoryIcons } from "@/lib/nearby";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { CheckCircle2, Loader2, Locate, MapPin, Navigation, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { Circle, CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { toast } from "sonner";
 
 // Webpack marker-icon path fixes for Next.js bundle
@@ -181,6 +181,25 @@ function MapResizeHandler() {
   return null;
 }
 
+// 지도에 보이지 않는 겪은 위치가 있으면 모두 보이도록 지도를 옮긴다
+function SightingsFitHandler({ sightings, onFit }: { sightings: ScamSighting[]; onFit: (center: [number, number], zoom: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    if (sightings.length === 0) return;
+    const bounds = L.latLngBounds(sightings.map((s) => [s.latitude, s.longitude] as [number, number]));
+    if (map.getBounds().contains(bounds)) return;
+    const center = bounds.getCenter();
+    onFit([center.lat, center.lng], Math.min(map.getBoundsZoom(bounds.pad(0.3)), 16));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sightings, map]);
+  return null;
+}
+
+const todayLocalDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+
 // 제보 모드 커서 제어 핸들러 (확대 전: 돋보기+, 확대 완료: 핀 아이콘)
 function MapCursorHandler({ active }: { active: boolean }) {
   const map = useMap();
@@ -232,7 +251,7 @@ function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
       // 사용자가 마커를 고른 뒤 지도를 축소하면 피드를 닫음. 검색·내 주변 이동으로 줌이 바뀐 경우와 내 주변 목록은 유지한다
       const state = useScamMapStore.getState();
       const isUserZoom = z !== state.mapZoom;
-      if (isUserZoom && prevZoomRef.current !== null && z < prevZoomRef.current && state.selectedRegionId && !state.nearby) {
+      if (isUserZoom && prevZoomRef.current !== null && z < prevZoomRef.current && state.selectedRegionId && !state.nearby && !state.sightingPick) {
         resetFeedSelections();
         setIsMobileFeedOpen(false);
       }
@@ -263,6 +282,9 @@ export default function ReadyBeforeGoMap() {
     nearby,
     setNearby,
     highlightedRegionId,
+    focusedScamId,
+    sightingPick,
+    setSightingPick,
     setSelectedRegionId,
     setSelectedRegion,
     setSelectedCityId,
@@ -296,6 +318,59 @@ export default function ReadyBeforeGoMap() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
   const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
+  const [sightingCoords, setSightingCoords] = useState<[number, number] | null>(null);
+  const [sightingDate, setSightingDate] = useState(todayLocalDate);
+  const queryClient = useQueryClient();
+
+  const { data: sightings = [] } = useQuery<ScamSighting[]>({
+    queryKey: ["scam-sightings", focusedScamId],
+    queryFn: () => scamsApi.getSightings(focusedScamId!),
+    enabled: !!focusedScamId,
+  });
+
+  const saveSightingMutation = useMutation({
+    mutationFn: (data: { scamId: string; sighting: ScamSighting }) => scamsApi.saveSighting(data.scamId, data.sighting),
+    onSuccess: (_result, { scamId }) => {
+      toast.success("겪은 위치를 기록했습니다. 다른 여행자에게 도움이 됩니다.");
+      queryClient.invalidateQueries({ queryKey: ["scams"] });
+      queryClient.invalidateQueries({ queryKey: ["scam-sightings", scamId] });
+      setSightingPick(null);
+    },
+    onError: (error: any) => {
+      console.error("Save sighting error:", error);
+    },
+  });
+
+  // 새로 기록을 시작하면 이전에 고른 위치와 날짜를 비운다
+  useEffect(() => {
+    setSightingCoords(null);
+    setSightingDate(todayLocalDate());
+  }, [sightingPick]);
+
+  useEffect(() => {
+    if (!sightingPick) return;
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSightingPick(null);
+    };
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [sightingPick, setSightingPick]);
+
+  const pickCurrentLocationForSighting = () => {
+    if (!navigator.geolocation) {
+      toast.error("이 브라우저에서는 현재 위치 기능을 지원하지 않습니다.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setSightingCoords([coords.latitude, coords.longitude]);
+        setMapCenter([coords.latitude, coords.longitude]);
+        setMapZoom(16);
+      },
+      () => toast.error("현재 위치를 찾지 못했습니다. 지도에서 직접 눌러 주세요."),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  };
   const [isLegendOpen, setIsLegendOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 640;
@@ -586,6 +661,10 @@ export default function ReadyBeforeGoMap() {
 
   // 동적 클러스터 마커 클릭 핸들러
   const handleDynamicClusterClick = (cluster: any) => {
+    if (sightingPick) {
+      setSightingCoords([cluster.latitude, cluster.longitude]);
+      return;
+    }
     if (isReportMode) {
       if (cluster.isCluster) {
         if (currentZoom < 18 && cluster.hasMultipleLocations) {
@@ -649,6 +728,10 @@ export default function ReadyBeforeGoMap() {
 
   // 제보 모드 상태에서의 지도 클릭 핸들러
   const handleMapClick = (lat: number, lng: number, zoomVal: number) => {
+    if (sightingPick) {
+      setSightingCoords([lat, lng]);
+      return;
+    }
     if (isReportMode) {
       if (zoomVal < 18) {
         setMapCenter([lat, lng]);
@@ -1050,6 +1133,26 @@ export default function ReadyBeforeGoMap() {
           </Marker>
         )}
 
+        {/* 고르는 중인 겪은 위치 */}
+        {sightingPick && sightingCoords && (
+          <Marker position={sightingCoords} icon={createTempReportIcon()} interactive={false} zIndexOffset={3000} />
+        )}
+
+        {/* 펼친 주의사항을 겪은 사람들의 위치 */}
+        {focusedScamId && !sightingPick && <SightingsFitHandler sightings={sightings} onFit={(center, zoom) => {
+          setMapCenter(center);
+          setMapZoom(zoom);
+        }} />}
+        {focusedScamId && sightings.map((sighting, index) => (
+          <CircleMarker
+            key={`sighting-${sighting.latitude}-${sighting.longitude}-${index}`}
+            center={[sighting.latitude, sighting.longitude]}
+            radius={7}
+            interactive={false}
+            pathOptions={{ color: "#ffffff", weight: 2, fillColor: "#dc2626", fillOpacity: 0.85 }}
+          />
+        ))}
+
         {/* 사용자 현재 위치 마커 (이벤트 클릭 투과 & 하위 zIndex 레이어 설정 🛡️) */}
         {userLocation && (
           <Marker 
@@ -1149,8 +1252,59 @@ export default function ReadyBeforeGoMap() {
         </button>
       )}
 
+      {/* 겪은 위치 기록 안내 */}
+      {sightingPick && (
+        <div className="absolute inset-x-2.5 top-2.5 z-[1200] mx-auto max-w-md space-y-2.5 rounded-2xl border border-border bg-card p-3.5 text-card-foreground shadow-2xl">
+          <div>
+            <p className="text-sm font-bold">
+              {sightingCoords ? "이 위치가 맞나요? 다른 곳을 눌러 바꿀 수 있어요" : "이 일을 겪은 위치를 지도에서 눌러 주세요"}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{sightingPick.title}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold">
+              겪은 날
+              <input
+                type="date"
+                value={sightingDate}
+                max={todayLocalDate()}
+                onChange={(event) => setSightingDate(event.target.value)}
+                className="h-8 rounded-lg border border-border bg-background px-2 text-base md:text-xs"
+              />
+            </label>
+            <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer text-xs" onClick={pickCurrentLocationForSighting}>
+              <Locate className="h-3.5 w-3.5" aria-hidden="true" />
+              현재 위치
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">약 100m 단위의 위치와 날짜만 공개됩니다.</p>
+            <div className="flex shrink-0 gap-1.5">
+              <Button type="button" variant="ghost" size="sm" className="h-8 cursor-pointer text-xs" onClick={() => setSightingPick(null)}>
+                취소
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!sightingCoords || !sightingDate || saveSightingMutation.isPending}
+                className="h-8 cursor-pointer bg-red-600 text-xs font-bold text-white hover:bg-red-700"
+                onClick={() => {
+                  if (!sightingCoords) return;
+                  saveSightingMutation.mutate({
+                    scamId: sightingPick.scamId,
+                    sighting: { latitude: sightingCoords[0], longitude: sightingCoords[1], seenOn: sightingDate },
+                  });
+                }}
+              >
+                기록하기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 현지에서 내 주변 주의사항을 바로 확인하는 버튼 */}
-      {!isReportMode && (
+      {!isReportMode && !sightingPick && (
         <button
           type="button"
           onClick={handleLocateUser}
@@ -1162,7 +1316,7 @@ export default function ReadyBeforeGoMap() {
       )}
 
       {/* 지도 상단 퀵 필터 토글 칩 오버레이 🧭 */}
-      <div className={`absolute top-[60px] left-[10px] z-[1000] items-center gap-1.5 bg-slate-900/90 ${isReportMode ? "hidden" : "flex"} backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg text-xs`}>
+      <div className={`absolute top-[60px] left-[10px] z-[1000] items-center gap-1.5 bg-slate-900/90 ${isReportMode || sightingPick ? "hidden" : "flex"} backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg text-xs`}>
         <button
           type="button"
           onClick={() => setFilterReportType("ALL")}
@@ -1323,6 +1477,10 @@ export default function ReadyBeforeGoMap() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-purple-500/25 border border-dashed border-fuchsia-400 shrink-0"></div>
                 <span className="font-semibold text-slate-200">자주 나타나는 구역</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 flex items-center justify-center shrink-0"><div className="w-3 h-3 rounded-full bg-red-600 border border-white"></div></div>
+                <span className="font-semibold text-slate-200">겪은 위치</span>
               </div>
             </div>
           </div>

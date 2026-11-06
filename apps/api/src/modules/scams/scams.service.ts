@@ -247,6 +247,21 @@ export class MapboxProvider implements GeocodingProvider {
 
 const SCAM_IMAGE_FOLDER = 'scams';
 
+const SIGHTING_FUTURE_MARGIN_MS = 24 * 60 * 60 * 1000;
+const SIGHTING_MAX_DISTANCE_FROM_REGION_M = 5000;
+const SIGHTING_MAX_DISTANCE_FROM_CITY_M = 50000;
+
+// 약 100m 단위. 공개되는 위치에서 개인의 정확한 동선이 드러나지 않게 한다
+const roundForPrivacy = (value: number) => Math.round(value * 1000) / 1000;
+
+function distanceInMeters(a: [number, number], b: [number, number]) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
 @Injectable()
 export class ScamsService {
   private readonly logger = new Logger(ScamsService.name);
@@ -573,6 +588,66 @@ export class ScamsService {
 
   async getScamsByCountry(countryCode: string, userId?: string, ipAddress?: string) {
     return this.scamsRepository.findByCountry(countryCode, userId, ipAddress);
+  }
+
+  async getSightings(scamInfoId: string) {
+    return this.scamsRepository.findSightings(scamInfoId);
+  }
+
+  async saveSighting(
+    scamInfoId: string,
+    userId: string,
+    data: { latitude: number; longitude: number; seenOn: string },
+  ) {
+    const scam = await this.scamsRepository.findById(scamInfoId);
+    if (!scam || scam.deletedAt) {
+      throw new NotFoundException('해당 주의사항을 찾을 수 없습니다.');
+    }
+    if (scam.reportType === 'TIP') {
+      throw new BadRequestException('꿀팁에는 겪은 위치를 기록할 수 없습니다.');
+    }
+
+    // 사용자 시간대가 서버보다 앞설 수 있어 하루의 여유를 둔다
+    const seenAt = new Date(`${data.seenOn}T00:00:00Z`);
+    if (Number.isNaN(seenAt.getTime()) || seenAt.getTime() > Date.now() + SIGHTING_FUTURE_MARGIN_MS) {
+      throw new BadRequestException('겪은 날짜를 다시 확인해 주세요.');
+    }
+
+    const anchor = await this.findSightingAnchor(scam);
+    if (anchor && distanceInMeters(anchor.point, [data.latitude, data.longitude]) > anchor.maxDistanceM) {
+      throw new BadRequestException('이 주의사항의 지역에서 너무 먼 위치입니다. 겪은 위치를 다시 골라 주세요.');
+    }
+
+    await this.scamsRepository.upsertSighting({
+      scamInfoId,
+      userId,
+      latitude: roundForPrivacy(data.latitude),
+      longitude: roundForPrivacy(data.longitude),
+      seenOn: data.seenOn,
+    });
+    return this.scamsRepository.findSightings(scamInfoId);
+  }
+
+  async deleteSighting(scamInfoId: string, userId: string) {
+    await this.scamsRepository.deleteSighting(scamInfoId, userId);
+    return this.scamsRepository.findSightings(scamInfoId);
+  }
+
+  // 엉뚱한 나라에 찍힌 기록을 막기 위한 기준점. 나라 전체 주의사항은 범위를 제한하지 않는다
+  private async findSightingAnchor(scam: { regionId?: string | null; cityId?: string | null }) {
+    if (scam.regionId) {
+      const region = await this.scamsRepository.findRegionById(scam.regionId);
+      if (region) {
+        return { point: [region.latitude, region.longitude] as [number, number], maxDistanceM: SIGHTING_MAX_DISTANCE_FROM_REGION_M };
+      }
+    }
+    if (scam.cityId) {
+      const city = await this.scamsRepository.findCityById(scam.cityId);
+      if (city) {
+        return { point: [city.latitude, city.longitude] as [number, number], maxDistanceM: SIGHTING_MAX_DISTANCE_FROM_CITY_M };
+      }
+    }
+    return null;
   }
 
   async toggleReaction(

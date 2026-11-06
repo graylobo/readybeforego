@@ -8,7 +8,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { USER_ROLES } from '@community/shared-types';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { ScamsService } from './scams.service';
-import { CreateScamInfoZodDto, ToggleScamReactionZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
+import { CreateScamInfoZodDto, SaveScamSightingZodDto, ToggleScamReactionZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
 
 @ApiTags('scams')
 @Controller('scams')
@@ -197,6 +197,32 @@ export class ScamsController {
     const userId = req.user?.id;
     const userRole = req.user?.role;
     return this.scamsService.delete(id, userId, userRole);
+  }
+
+  @Get(':id/sightings')
+  @ApiOperation({ summary: '주의사항을 겪은 위치 목록 조회 (작성자 정보 없음)' })
+  async getSightings(@Param('id') id: string) {
+    return this.scamsService.getSightings(id);
+  }
+
+  @Post(':id/sightings')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '내가 겪은 위치 기록 (주의사항당 1건, 다시 보내면 수정)' })
+  @UsePipes(new ZodValidationPipe(SaveScamSightingZodDto))
+  @ApiBody({ type: SaveScamSightingZodDto })
+  async saveSighting(
+    @Param('id') id: string,
+    @Body() body: SaveScamSightingZodDto,
+    @Req() req: any
+  ) {
+    return this.scamsService.saveSighting(id, req.user.id, body);
+  }
+
+  @Delete(':id/sightings')
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @ApiOperation({ summary: '내가 겪은 위치 기록 취소' })
+  async deleteSighting(@Param('id') id: string, @Req() req: any) {
+    return this.scamsService.deleteSighting(id, req.user.id);
   }
 
   @Post(':id/reaction')

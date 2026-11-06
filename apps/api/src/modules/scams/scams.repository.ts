@@ -89,9 +89,22 @@ export class ScamsRepository {
     };
   }
 
-  private async attachCommentCounts(scams: any[], db: any) {
+  private async attachCommentCounts(scams: any[], db: any, userId?: string) {
     if (scams.length === 0) return [];
     const scamIds = scams.map(s => s.id);
+    const sightingCounts = await db.select({
+      scamInfoId: schema.scamSightings.scamInfoId,
+      count: sql<number>`count(*)::int`,
+      mine: userId
+        ? sql<boolean>`coalesce(bool_or(${schema.scamSightings.userId} = ${userId}), false)`
+        : sql<boolean>`false`,
+    })
+    .from(schema.scamSightings)
+    .where(inArray(schema.scamSightings.scamInfoId, scamIds))
+    .groupBy(schema.scamSightings.scamInfoId);
+    const sightingsMap = new Map<string, { count: number; mine: boolean }>(
+      sightingCounts.map((c: any) => [c.scamInfoId, { count: c.count, mine: c.mine }])
+    );
     const commentCounts = await db.select({
       targetId: schema.comments.targetId,
       count: sql<number>`count(${schema.comments.id})::int`,
@@ -108,7 +121,45 @@ export class ScamsRepository {
     return scams.map(s => ({
       ...s,
       commentCount: countsMap.get(s.id) || 0,
+      sightingCount: sightingsMap.get(s.id)?.count || 0,
+      sightedByMe: sightingsMap.get(s.id)?.mine || false,
     }));
+  }
+
+  async findSightings(scamInfoId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select({
+      latitude: schema.scamSightings.latitude,
+      longitude: schema.scamSightings.longitude,
+      seenOn: schema.scamSightings.seenOn,
+    })
+    .from(schema.scamSightings)
+    .where(eq(schema.scamSightings.scamInfoId, scamInfoId))
+    .orderBy(desc(schema.scamSightings.seenOn))
+    .limit(500);
+  }
+
+  async upsertSighting(data: typeof schema.scamSightings.$inferInsert, tx?: Transaction) {
+    const db = tx ?? this.db;
+    await db.insert(schema.scamSightings)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [schema.scamSightings.scamInfoId, schema.scamSightings.userId],
+        set: {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          seenOn: data.seenOn,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async deleteSighting(scamInfoId: string, userId: string, tx?: Transaction) {
+    const db = tx ?? this.db;
+    await db.delete(schema.scamSightings).where(and(
+      eq(schema.scamSightings.scamInfoId, scamInfoId),
+      eq(schema.scamSightings.userId, userId),
+    ));
   }
 
   async findByRegion(
@@ -158,7 +209,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
-    return this.attachCommentCounts(scams, db);
+    return this.attachCommentCounts(scams, db, userId);
   }
 
   async findByCity(
@@ -206,7 +257,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
-    return this.attachCommentCounts(scams, db);
+    return this.attachCommentCounts(scams, db, userId);
   }
 
   async findByCountry(
@@ -252,7 +303,7 @@ export class ScamsRepository {
           : undefined,
       },
     });
-    return this.attachCommentCounts(scams, db);
+    return this.attachCommentCounts(scams, db, userId);
   }
 
   async findReaction(
