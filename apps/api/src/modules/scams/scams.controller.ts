@@ -3,6 +3,9 @@ import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UserStatusGuard } from '../../common/guards/user-status.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { USER_ROLES } from '@community/shared-types';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { ScamsService } from './scams.service';
 import { CreateScamInfoZodDto, ToggleScamReactionZodDto, UpdateScamInfoZodDto } from './dto/scams.dto';
@@ -28,7 +31,8 @@ export class ScamsController {
   // --- Static Routes (Must be declared before wildcard routes to prevent masking) ---
 
   @Get('admin/all')
-  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '어드민용 사기 경고 정보 목록 조회 (페이징 & 검색)' })
   async getAdminScams(
     @Query('page') page?: string,
@@ -51,28 +55,32 @@ export class ScamsController {
   }
 
   @Delete('admin/:id')
-  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '어드민용 사기 경고 정보 삭제' })
   async deleteAdminScam(@Param('id') id: string) {
     return this.scamsService.deleteAdminScam(id);
   }
 
   @Patch('admin/:id/restore')
-  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '어드민용 삭제된 사기 경고 정보 복구' })
   async restoreAdminScam(@Param('id') id: string) {
     return this.scamsService.restoreAdminScam(id);
   }
 
   @Post('admin/bulk-delete')
-  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '어드민용 사기 경고 정보 다중 선택 일괄 삭제' })
   async deleteAdminScamsBulk(@Body('ids') ids: string[]) {
     return this.scamsService.deleteAdminScamsBulk(ids);
   }
 
   @Post('admin/bulk-import')
-  @UseGuards(JwtAuthGuard, UserStatusGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '어드민용 JSON 데이터 기반 사기 경고 정보 일괄 등록' })
   async bulkImportAdminScams(@Body('items') items: any[]) {
     return this.scamsService.bulkImportAdminScams(items);

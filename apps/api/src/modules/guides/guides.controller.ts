@@ -2,6 +2,9 @@ import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards, Us
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GuidesService } from './guides.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { USER_ROLES } from '@community/shared-types';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CreateGuideZodDto, UpdateGuideZodDto } from './dto/guides.dto';
 
@@ -29,7 +32,8 @@ export class GuidesController {
 
   // --- Admin Endpoints ---
   @Post('admin')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @UsePipes(new ZodValidationPipe(CreateGuideZodDto))
   @ApiBody({ type: CreateGuideZodDto })
   @ApiOperation({ summary: '[어드민] 신규 가이드/준비물 항목 생성' })
@@ -38,7 +42,8 @@ export class GuidesController {
   }
 
   @Patch('admin/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @UsePipes(new ZodValidationPipe(UpdateGuideZodDto))
   @ApiBody({ type: UpdateGuideZodDto })
   @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 수정' })
@@ -47,14 +52,16 @@ export class GuidesController {
   }
 
   @Post('admin/bulk-delete')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 다중 일괄 삭제' })
   async deleteGuides(@Body() body: { ids: string[] }) {
     return this.guidesService.deleteGuides(body.ids || []);
   }
 
   @Post('admin/bulk-import')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '[어드민] JSON 기반 가이드/준비물 항목 일괄 등록' })
   async bulkImportAdminGuides(@Body('items') items: any[], @Body() body: any) {
     const targetItems = items || (Array.isArray(body) ? body : []);
@@ -64,7 +71,8 @@ export class GuidesController {
   }
 
   @Delete('admin/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: '[어드민] 가이드/준비물 항목 삭제' })
   async deleteGuide(@Param('id') id: string) {
     return this.guidesService.deleteGuide(id);
