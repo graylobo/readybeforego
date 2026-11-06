@@ -100,7 +100,8 @@ export class ScamsController {
 
   @Get('regions/all')
   @ApiOperation({ summary: '전체 세부 지역 목록 조회 (지도 마커 로딩용)' })
-  @Header('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
+  // 제보를 올린 직후 마커가 바로 늘어나도록 매번 변경 여부를 확인한다 (바뀌지 않았으면 ETag로 304 응답)
+  @Header('Cache-Control', 'no-cache')
   async getAllRegions() {
     return this.scamsService.getAllRegions();
   }
@@ -112,6 +113,7 @@ export class ScamsController {
   }
 
   @Get('area-summaries')
+  @Header('Cache-Control', 'no-cache')
   @ApiOperation({ summary: '도시·국가 전체 주의사항 건수 (장소가 없는 지역도 지도와 검색에 보여 주기 위함)' })
   async getAreaSummaries() {
     return this.scamsService.getAreaSummaries();

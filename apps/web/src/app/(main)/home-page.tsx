@@ -157,6 +157,7 @@ export default function Home() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const sheetDragStartY = useRef<number | null>(null);
   const isInitialUrlParsed = useRef(false);
+  const isClosingModalHistory = useRef(false);
 
   // 장소를 새로 고르면 그곳에 해당하는 주의사항을 범위 구분 없이 모두 보여 준다
   useEffect(() => {
@@ -192,6 +193,8 @@ export default function Home() {
     } else {
       // 모달이 전부 닫혔는데 가상 상태가 남아있다면 히스토리백 처리하여 정리
       if (typeof window !== "undefined" && window.history.state?.modalActive === true) {
+        // 창이 닫혀 쌓아 둔 기록을 정리하는 것뿐이므로 사용자의 뒤로가기처럼 선택을 지우면 안 된다
+        isClosingModalHistory.current = true;
         window.history.back();
       }
     }
@@ -208,6 +211,10 @@ export default function Home() {
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
+      if (isClosingModalHistory.current) {
+        isClosingModalHistory.current = false;
+        return;
+      }
       // 뒤로가기를 눌러 modalActive 가 없는 상태가 감지되면 모든 오버레이 닫기
       if (!e.state || e.state.modalActive !== true) {
         setIsMobileFeedOpen(false);
