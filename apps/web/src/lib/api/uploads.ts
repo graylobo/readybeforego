@@ -7,6 +7,36 @@ interface UploadImageOptions {
   /** 'emoticon'이면 서버가 이모티콘 크기(최대 480px)로 줄여 저장한다 */
   purpose?: 'emoticon';
   onProgress?: (progress: number, loaded: number, total: number) => void;
+  /** 실패 안내를 호출한 쪽에서 직접 띄울 때 공통 오류 알림을 끈다 */
+  skipToast?: boolean;
+  timeoutMs?: number;
+}
+
+// 느린 모바일 회선에서 멈춘 요청을 끝없이 기다리지 않도록 한 장당 제한을 둔다
+const UPLOAD_TIMEOUT_MS = 120_000;
+const UPLOAD_MAX_ATTEMPTS = 3;
+
+let webpEncodable: boolean | undefined;
+
+// iOS Safari는 WebP로 저장하지 못하고 PNG를 돌려준다. 그러면 사진이 오히려 커지므로 JPEG로 압축한다
+function canEncodeWebp(): boolean {
+  if (webpEncodable === undefined) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    webpEncodable = canvas.toDataURL('image/webp').startsWith('data:image/webp');
+  }
+  return webpEncodable;
+}
+
+// 휴대폰에서 고른 파일은 나중에 읽으려 하면 실패할 수 있어(임시 파일 만료 등) 고른 시점에 메모리로 읽어 둔다
+async function readIntoMemory(file: File): Promise<File> {
+  try {
+    return new File([await file.arrayBuffer()], file.name, { type: file.type, lastModified: file.lastModified });
+  } catch (error) {
+    console.error('Image read failed:', error);
+    return file;
+  }
 }
 
 async function uploadImageRequest(
@@ -36,6 +66,8 @@ async function uploadImageRequest(
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    _skipToast: options.skipToast,
+    timeout: options.timeoutMs,
     onUploadProgress: (progressEvent) => {
       if (options.onProgress && progressEvent.total) {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -62,30 +94,31 @@ export const uploadsApi = {
 
     // GIF는 압축 시 애니메이션이 깨질 수 있으므로 제외
     if (file.type === 'image/gif') {
-      return file;
+      return readIntoMemory(file);
     }
 
     // WebP도 animated WebP 보호를 위해 압축하지 않음
     // (browser-image-compression이 애니메이션을 정적 이미지로 변환함)
     if (file.type === 'image/webp') {
-      return file;
+      return readIntoMemory(file);
     }
 
+    const outputType = canEncodeWebp() ? 'image/webp' : 'image/jpeg';
     const options = {
       maxSizeMB: 2, // 최대 2MB
       maxWidthOrHeight: 1920, // 최대 너비/높이 1920px
       useWebWorker: true,
-      fileType: 'image/webp', // WebP로 변환
+      fileType: outputType,
     };
 
     try {
       const compressedBlob = await imageCompression(file, options);
       
-      // 압축된 Blob을 File 객체로 변환 (확장자 .webp로 변경)
+      // 압축된 Blob을 File 객체로 변환 (확장자도 결과 형식에 맞춘다)
       const compressedFile = new File(
         [compressedBlob],
-        file.name.replace(/\.[^/.]+$/, '.webp'),
-        { type: 'image/webp', lastModified: new Date().getTime() }
+        file.name.replace(/\.[^/.]+$/, outputType === 'image/webp' ? '.webp' : '.jpg'),
+        { type: outputType, lastModified: new Date().getTime() }
       );
 
       console.log(
@@ -98,7 +131,7 @@ export const uploadsApi = {
       return compressedFile;
     } catch (error) {
       console.error('Image compression failed:', error);
-      return file; // 압축 실패 시 원본 반환
+      return readIntoMemory(file); // 압축 실패 시 원본 반환
     }
   },
 
@@ -111,6 +144,29 @@ export const uploadsApi = {
   uploadImage: async (file: File, options: UploadImageOptions = { compress: true }): Promise<string> => {
     const data = await uploadImageRequest(file, options);
     return data.url;
+  },
+
+  /**
+   * 끊기기 쉬운 모바일 회선용 업로드. 연결 오류와 서버 오류만 다시 시도하고, 실패 안내는 호출한 쪽에서 한 번만 띄운다
+   * (uploadFailureMessage 참고)
+   */
+  uploadImageWithRetry: async (file: File, options: UploadImageOptions): Promise<string> => {
+    const target = options.compress ? await uploadsApi.compressImage(file) : file;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await uploadsApi.uploadImage(target, {
+          ...options,
+          compress: false,
+          skipToast: true,
+          timeoutMs: UPLOAD_TIMEOUT_MS,
+        });
+      } catch (error) {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        if (attempt >= UPLOAD_MAX_ATTEMPTS || (status && status < 500)) throw error;
+        console.warn(`[Image Upload Retry ${attempt}/${UPLOAD_MAX_ATTEMPTS}]`, error);
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
   },
 
   /**
@@ -143,3 +199,19 @@ export const uploadsApi = {
     }
   },
 };
+
+/** 업로드 실패 안내 문구. position은 몇 번째 사진인지 (1부터) */
+export function uploadFailureMessage(error: unknown, position: number): string {
+  const response = (error as { response?: { status?: number; data?: { message?: unknown } } })?.response;
+  const status = response?.status;
+  if (status === 401) return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
+
+  const serverMessage = response?.data?.message;
+  if (status && status < 500 && typeof serverMessage === 'string' && /[가-힣]/.test(serverMessage)) {
+    return `${position}번째 사진: ${serverMessage}`;
+  }
+  if (status) {
+    return `${position}번째 사진을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요. (오류 ${status})`;
+  }
+  return `${position}번째 사진을 올리지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요. 작성한 내용은 그대로 있습니다.`;
+}

@@ -8,7 +8,7 @@ import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
 import { AreaSummaries, scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
-import { uploadsApi } from "@/lib/api/uploads";
+import { uploadFailureMessage, uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
@@ -582,7 +582,7 @@ export default function Home() {
     try {
       for (const file of editImageFiles) {
         const isAnimated = file.type === "image/gif" || file.type === "image/webp";
-        uploadedUrls.push(await uploadsApi.uploadImage(file, {
+        uploadedUrls.push(await uploadsApi.uploadImageWithRetry(file, {
           compress: !isAnimated,
           folder: "scams",
         }));
@@ -604,7 +604,7 @@ export default function Home() {
         }
       });
     } catch (err) {
-      toast.error("이미지 업로드에 실패했습니다.");
+      toast.error(uploadFailureMessage(err, uploadedUrls.length + 1));
       uploadedUrls.forEach((url) => uploadsApi.deleteImage(url));
     } finally {
       setIsUploading(false);
@@ -1045,7 +1045,34 @@ export default function Home() {
                         )}
                       </div>
                     </div>
-                    <CardTitle className="text-sm font-bold leading-snug">{scam.title}</CardTitle>
+                    <div className="flex items-start justify-between gap-3">
+                      <CardTitle className="min-w-0 text-sm font-bold leading-snug">{scam.title}</CardTitle>
+                      {/* 접힌 카드에서도 사진이 있는지 바로 알 수 있게 첫 사진과 장수를 보여 준다 */}
+                      {!isExpanded && !!scam.imageUrls?.length && (
+                        <button
+                          type="button"
+                          aria-label={`첨부 사진 ${scam.imageUrls.length}장 보기`}
+                          className="relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-border transition-opacity hover:opacity-90"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMediaScam(scam);
+                            setActiveMediaIndex(0);
+                          }}
+                        >
+                          <SmartImage
+                            src={scamImageThumbnailUrl(scam.imageUrls[0]) ?? scam.imageUrls[0]}
+                            fallbackSrc={scam.imageUrls[0]}
+                            alt=""
+                            showErrorText={false}
+                            className="h-full w-full object-cover"
+                          />
+                          <span className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded bg-black/75 px-1 py-px text-[10px] font-bold text-white">
+                            <ImageIcon className="h-2.5 w-2.5" aria-hidden="true" />
+                            {scam.imageUrls.length}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                   </CardHeader>
                   
                   <CardContent className="p-4 pt-0 pb-3 space-y-3">

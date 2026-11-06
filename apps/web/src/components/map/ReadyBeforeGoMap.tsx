@@ -867,7 +867,8 @@ export default function ReadyBeforeGoMap() {
   };
 
   // 사용자 현재 위치 GPS 탐색 함수 (고정밀 실패 시 저정밀 Fallback 적용 🛡️)
-  const handleLocateUser = () => {
+  // moveOnly: 지도만 내 위치로 옮긴다. 아니면 내 주변 주의사항 목록까지 연다
+  const handleLocateUser = ({ moveOnly = false }: { moveOnly?: boolean } = {}) => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("이 브라우저에서는 현재 위치 기능을 지원하지 않습니다.");
       return;
@@ -881,7 +882,7 @@ export default function ReadyBeforeGoMap() {
           const { latitude, longitude } = position.coords;
           setUserLocation([latitude, longitude]);
           setMapCenter([latitude, longitude]);
-          if (isReportMode) {
+          if (moveOnly) {
             setMapZoom(16);
             toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
           } else {
@@ -1338,12 +1339,14 @@ export default function ReadyBeforeGoMap() {
           })}
       </MapContainer>
 
-      {/* 제보 위치를 고를 때 쓰는 현재 위치 이동 버튼 */}
-      {isReportMode && (
+      {/* 현재 위치 이동 버튼. 줌 버튼 바로 아래에 둔다. 겪은 위치 기록 중에는 안내 패널의 버튼을 쓴다 */}
+      {!sightingPick && (
         <button
-          onClick={handleLocateUser}
-          className="absolute top-[76px] left-[10px] z-[1000] w-[34px] h-[34px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[4px] shadow flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
+          type="button"
+          onClick={() => handleLocateUser({ moveOnly: true })}
+          className="absolute top-[198px] left-[10px] z-[1000] w-[34px] h-[34px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[4px] shadow flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
           title="현재 위치로 이동"
+          aria-label="현재 위치로 이동"
         >
           <Locate className="w-4.5 h-4.5" />
         </button>
@@ -1443,7 +1446,7 @@ export default function ReadyBeforeGoMap() {
       {!isReportMode && !sightingPick && (
         <button
           type="button"
-          onClick={handleLocateUser}
+          onClick={() => handleLocateUser()}
           className={`absolute bottom-[84px] md:bottom-6 left-1/2 -translate-x-1/2 z-[1000] h-11 md:flex ${isMobileFeedOpen ? "hidden" : "flex"} items-center gap-2 whitespace-nowrap rounded-full bg-blue-600 px-5 text-sm font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95 cursor-pointer`}
         >
           <Navigation className="h-4 w-4" aria-hidden="true" />

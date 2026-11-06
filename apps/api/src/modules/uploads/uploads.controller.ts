@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Delete,
@@ -62,7 +63,7 @@ export class UploadsController {
     },
     fileFilter: (req, file, callback) => {
       if (!UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-        return callback(new Error('허용되지 않는 파일 형식입니다.'), false);
+        return callback(new BadRequestException('허용되지 않는 파일 형식입니다. JPG, PNG, WEBP, GIF 사진을 올려 주세요.'), false);
       }
       callback(null, true);
     }

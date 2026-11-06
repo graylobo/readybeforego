@@ -1,13 +1,13 @@
 "use client";
 
-import { SCAM_MAX_IMAGE_COUNT, scamImageThumbnailUrl } from "@community/shared-types";
+import { SCAM_MAX_IMAGE_COUNT, UPLOAD_LIMITS, scamImageThumbnailUrl } from "@community/shared-types";
 import { SmartImage } from "@/components/common/smart-image";
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useTranslation } from "@/hooks/use-translation";
 import { scamsApi, Country, City, Region, ScamInfo } from "@/lib/api/scams";
-import { uploadsApi } from "@/lib/api/uploads";
+import { uploadFailureMessage, uploadsApi } from "@/lib/api/uploads";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -108,6 +108,7 @@ export function ScamReportModal() {
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const attachmentsRef = useRef<ImageAttachment[]>([]);
   attachmentsRef.current = attachments;
+  const compressionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const clearAttachments = useCallback(() => {
     attachmentsRef.current.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
     setAttachments([]);
@@ -333,12 +334,18 @@ export function ScamReportModal() {
       setUploading(false);
       // 등록하지 못한 제보의 사진은 저장소에 남기지 않는다. 다시 제출하면 새로 올린다
       (variables.imageUrls || []).forEach((url) => uploadsApi.deleteImage(url));
-      const serverMsg = err.response?.data?.message || err.message;
-      if (serverMsg && serverMsg !== "Validation failed" && serverMsg !== "Error") {
-        toast.error(serverMsg);
+      // 오류 안내는 공통 API 처리에서 띄운다. 로그인 만료(401)만 공통 처리에서 빠지므로 여기서 알린다
+      if (err.response?.status === 401) {
+        toast.error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
       }
     },
   });
+
+  const removeAttachment = useCallback((id: string) => {
+    const target = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (target) URL.revokeObjectURL(target.previewUrl);
+    setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -360,19 +367,23 @@ export function ScamReportModal() {
     }));
     setAttachments((prev) => [...prev, ...added]);
 
-    added.forEach(async ({ id, file }) => {
-      const compressed = await uploadsApi.compressImage(file);
-      setAttachments((prev) =>
-        prev.map((attachment) => (attachment.id === id ? { ...attachment, file: compressed, isCompressed: true } : attachment))
-      );
+    // 고해상도 사진 여러 장을 동시에 펼치면 휴대폰 메모리가 모자라 압축이 실패하므로 한 장씩 처리한다
+    added.forEach(({ id, file }) => {
+      compressionQueueRef.current = compressionQueueRef.current.then(async () => {
+        if (!attachmentsRef.current.some((attachment) => attachment.id === id)) return;
+        const compressed = await uploadsApi.compressImage(file);
+        // HEIC처럼 브라우저가 변환하지 못한 형식은 제출할 때 실패하므로 미리 알려 준다
+        if (!UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES.includes(compressed.type)) {
+          removeAttachment(id);
+          toast.error(`${file.name}은(는) 올릴 수 없는 형식입니다. JPG, PNG, WEBP, GIF 사진을 골라 주세요.`);
+          return;
+        }
+        setAttachments((prev) =>
+          prev.map((attachment) => (attachment.id === id ? { ...attachment, file: compressed, isCompressed: true } : attachment))
+        );
+      });
     });
   };
-
-  const removeAttachment = useCallback((id: string) => {
-    const target = attachmentsRef.current.find((attachment) => attachment.id === id);
-    if (target) URL.revokeObjectURL(target.previewUrl);
-    setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -453,29 +464,8 @@ export function ScamReportModal() {
 
         // 해외/모바일 느린 데이터 환경에서 대역폭 고갈 및 Socket Timeout을 원천 방지하기 위한 순차 업로드 🛡️
         for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i];
           setUploadProgressText(`사진 업로드 중... (${i + 1}/${imageFiles.length})`);
-          
-          let attempts = 0;
-          let uploadedUrl = "";
-
-          while (attempts < 2) {
-            try {
-              uploadedUrl = await uploadsApi.uploadImage(file, { compress: false, folder: "scams" });
-              break;
-            } catch (err) {
-              attempts++;
-              console.warn(`[Image Upload Retry ${attempts}/2]`, err);
-              // 잘못된 요청은 다시 보내도 같은 결과이므로 네트워크·서버 오류만 재시도한다
-              const status = (err as any)?.response?.status;
-              if (attempts >= 2 || (status && status < 500)) throw err;
-              await new Promise((res) => setTimeout(res, 1000));
-            }
-          }
-
-          if (uploadedUrl) {
-            urls.push(uploadedUrl);
-          }
+          urls.push(await uploadsApi.uploadImageWithRetry(imageFiles[i], { compress: false, folder: "scams" }));
         }
       }
 
@@ -523,10 +513,7 @@ export function ScamReportModal() {
       }
     } catch (error: any) {
       console.error("Image Upload Failed:", error);
-      // 오류 안내는 공통 API 처리에서 띄운다. 로그인 만료(401)만 공통 처리에서 빠지므로 여기서 알린다
-      if (error?.response?.status === 401) {
-        toast.error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
-      }
+      toast.error(uploadFailureMessage(error, urls.length + 1));
       urls.forEach((url) => uploadsApi.deleteImage(url));
       setUploading(false);
       setUploadProgressText("");

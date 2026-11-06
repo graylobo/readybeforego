@@ -13,6 +13,9 @@ import {
   SCAM_IMAGE_THUMBNAIL_WIDTH,
 } from '@community/shared-types';
 
+// 같은 사진을 다시 처리하지 않으므로 캐시로 메모리를 쓰지 않는다 (Cloud Run 메모리 초과 예방)
+sharp.cache(false);
+
 /** 본문 이미지 작은 버전 너비 (원본보다 작은 것만 만든다) */
 const IMAGE_RESPONSIVE_WIDTHS = [720, 1280];
 
