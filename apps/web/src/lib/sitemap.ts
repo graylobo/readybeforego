@@ -1,5 +1,6 @@
 import { boardApi } from '@/lib/api/board';
 import { SITE_CONFIG } from '@/lib/constants';
+import { DESTINATIONS, destinationPath } from '@/lib/destinations';
 
 /**
  * 사이트맵: /sitemap.xml(목차) → /sitemap/pages.xml(고정 페이지·게시판) + /sitemap/posts-N.xml(사람이 쓴 글, 조각당 최대 5만 개).
@@ -58,6 +59,7 @@ export async function getPageEntries(): Promise<SitemapEntry[]> {
     { url: `${baseUrl}/board/all`, changeFrequency: 'hourly', priority: 0.8 },
     { url: `${baseUrl}/boards`, changeFrequency: 'daily', priority: 0.6 },
     { url: `${baseUrl}/points`, changeFrequency: 'daily', priority: 0.5 },
+    ...DESTINATIONS.map((destination): SitemapEntry => ({ url: `${baseUrl}${destinationPath(destination)}`, changeFrequency: 'weekly', priority: 0.9 })),
   ];
   const boards = await boardApi.getBoards();
   const boardPages = boards
