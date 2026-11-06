@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { parseExcludeKeywords } from '@community/shared-types';
 import { crawlerApi, CrawlerTarget, CrawlerLog, CrawlResult } from '@/lib/api/crawler';
 import { boardApi } from '@/lib/api/board';
@@ -29,6 +29,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CommonPagination } from '@/components/common/common-pagination';
 import {
   Bot,
   Play,
@@ -48,6 +49,7 @@ import {
   Image as ImageIcon,
   UserCheck,
   Square,
+  Ban,
 } from 'lucide-react';
 import { TargetTimerControl, TargetCountdownBadge, formatCrawlInterval } from './components/target-timer-control';
 import {
@@ -57,6 +59,7 @@ import {
   toTimeJitterValue,
 } from './components/time-jitter-field';
 import { CommonPreservedTermsDialog } from './components/common-preserved-terms-dialog';
+import { CommonExcludeKeywordsDialog } from './components/common-exclude-keywords-dialog';
 import { PreservedTermsField } from './components/preserved-terms-field';
 import { OnlyNewPostsField } from './components/only-new-posts-field';
 import { ExcludeKeywordsField } from './components/exclude-keywords-field';
@@ -75,6 +78,9 @@ function formatSkipMessage(result: CrawlResult): string {
   }
   if ((result.skipDetails.keywordFiltered ?? 0) > 0) {
     reasons.push(`제외 키워드 ${result.skipDetails.keywordFiltered}건`);
+  }
+  if ((result.skipDetails.ipMentionFiltered ?? 0) > 0) {
+    reasons.push(`아이피 언급 ${result.skipDetails.ipMentionFiltered}건`);
   }
   if (result.skipDetails.fetchFailed > 0) {
     reasons.push(`삭제/조회 실패 ${result.skipDetails.fetchFailed}건`);
@@ -104,6 +110,7 @@ export default function AdminCrawlerPage() {
     minRecommendCount: 10,
     collectLimit: 5,
     promptTone: '자연스러운 커뮤니티 구어체',
+    commentPromptTone: '',
     preservedTerms: '',
     excludeKeywords: '',
     // 등록 후 [시작]을 눌러야 자동 수집이 시작된다
@@ -115,6 +122,7 @@ export default function AdminCrawlerPage() {
     viewCountMin: 5,
     viewCountMax: 15,
     includeImages: true,
+    excludeIpMentions: true,
     authorMainKeywords: '',
     authorSubKeywords: '',
     authorUseSub: false,
@@ -138,6 +146,7 @@ export default function AdminCrawlerPage() {
     minRecommendCount: 10,
     collectLimit: 5,
     promptTone: '자연스러운 커뮤니티 구어체',
+    commentPromptTone: '',
     preservedTerms: '',
     excludeKeywords: '',
     enableComments: true,
@@ -147,6 +156,7 @@ export default function AdminCrawlerPage() {
     viewCountMin: 5,
     viewCountMax: 15,
     includeImages: true,
+    excludeIpMentions: true,
     authorMainKeywords: '',
     authorSubKeywords: '',
     authorUseSub: false,
@@ -157,8 +167,6 @@ export default function AdminCrawlerPage() {
     crawlDirection: 'newest' as CrawlDirection,
     pageMin: 1,
     pageMax: 3,
-    crawlIntervalMinutes: 10,
-    autoStopMinutes: 0,
   });
 
   // 등록 시간 분산 (실시간 토글 + 범위)
@@ -181,15 +189,27 @@ export default function AdminCrawlerPage() {
     queryFn: () => crawlerApi.getTargets(),
   });
 
-  // 수집 로그 조회
+  // 수집 로그 조회 (서버 페이지네이션)
+  const [logsPage, setLogsPage] = useState(1);
+  const [logsPerPage, setLogsPerPage] = useState(30);
   const {
-    data: logs = [],
+    data: logsData,
     isLoading: isLoadingLogs,
+    isFetching: isFetchingLogs,
     refetch: refetchLogs,
   } = useQuery({
-    queryKey: ['crawler-logs'],
-    queryFn: () => crawlerApi.getLogs(),
+    queryKey: ['crawler-logs', logsPage, logsPerPage],
+    queryFn: () => crawlerApi.getLogs(logsPage, logsPerPage),
+    placeholderData: keepPreviousData,
   });
+  const logs = logsData?.items ?? [];
+  const logsTotal = logsData?.total ?? 0;
+  const logsTotalPages = Math.max(1, Math.ceil(logsTotal / logsPerPage));
+
+  // 삭제로 마지막 페이지가 비면 남은 마지막 페이지로
+  useEffect(() => {
+    if (logsData && logsPage > logsTotalPages) setLogsPage(logsTotalPages);
+  }, [logsData, logsPage, logsTotalPages]);
 
   // 진행 중인 수집 작업 상태 조회 (서버 기준이므로 새로고침해도 유지됨, 진행 중일 때만 폴링)
   const { data: runStatus } = useQuery({
@@ -282,6 +302,7 @@ export default function AdminCrawlerPage() {
         minRecommendCount: 10,
         collectLimit: 5,
         promptTone: '자연스러운 커뮤니티 구어체',
+        commentPromptTone: '',
         preservedTerms: '',
         excludeKeywords: '',
         isActive: false,
@@ -292,6 +313,7 @@ export default function AdminCrawlerPage() {
         viewCountMin: 5,
         viewCountMax: 15,
         includeImages: true,
+        excludeIpMentions: true,
         authorMainKeywords: '',
         authorSubKeywords: '',
         authorUseSub: false,
@@ -337,6 +359,7 @@ export default function AdminCrawlerPage() {
       minRecommendCount: target.minRecommendCount,
       collectLimit: target.collectLimit,
       promptTone: target.promptTone || '자연스러운 커뮤니티 구어체',
+      commentPromptTone: target.commentPromptTone || '',
       preservedTerms: target.preservedTerms || '',
       excludeKeywords: target.excludeKeywords || '',
       enableComments: target.enableComments ?? true,
@@ -346,6 +369,7 @@ export default function AdminCrawlerPage() {
       viewCountMin: target.viewCountMin ?? 5,
       viewCountMax: target.viewCountMax ?? 15,
       includeImages: target.includeImages ?? true,
+      excludeIpMentions: target.excludeIpMentions ?? true,
       authorMainKeywords: target.authorMainKeywords || '',
       authorSubKeywords: target.authorSubKeywords || '',
       authorUseSub: target.authorUseSub ?? false,
@@ -356,17 +380,34 @@ export default function AdminCrawlerPage() {
       crawlDirection: (target.crawlDirection === 'oldest' ? 'oldest' : 'newest') as CrawlDirection,
       pageMin: target.pageMin ?? 1,
       pageMax: target.pageMax ?? 3,
-      crawlIntervalMinutes: target.crawlIntervalMinutes ?? 10,
-      autoStopMinutes: target.autoStopMinutes ?? 0,
     });
     setEditJitter(toTimeJitterValue(target.timeJitterMinMinutes, target.timeJitterMaxMinutes, target.postOrderMode));
   };
 
+  // 수정 중에도 카드 상태(수집 중 여부·실행 중인 수집)는 최신 값으로 본다
+  const liveEditingTarget = editingTarget ? (targets.find((t) => t.id === editingTarget.id) ?? editingTarget) : null;
+  const editingRunningJob = editingTarget
+    ? runStatus?.running.find((job) => job.targetId === editingTarget.id)
+    : undefined;
+  const [galleryChangeConfirmOpen, setGalleryChangeConfirmOpen] = useState(false);
+
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTarget) return;
+    if (!toTimeJitterPayload(editJitter)) return;
+    // 수집 중에 갤러리를 바꾸면 다른 갤러리 글이 올라가기 시작하므로 한 번 더 확인한다
+    if (liveEditingTarget?.isActive && editFormData.galleryId.trim() !== editingTarget.galleryId) {
+      setGalleryChangeConfirmOpen(true);
+      return;
+    }
+    submitEdit();
+  };
+
+  const submitEdit = () => {
+    if (!editingTarget) return;
     const jitter = toTimeJitterPayload(editJitter);
     if (!jitter) return;
+    // 수집 주기·작동 시간은 보내지 않는다 (타이머 컨트롤에서만 바꾸며, 수정 창을 연 사이 바뀐 타이머를 되돌리지 않도록)
     updateMutation.mutate({
       id: editingTarget.id,
       data: {
@@ -381,8 +422,6 @@ export default function AdminCrawlerPage() {
         ...jitter,
         pageMin: Number(editFormData.pageMin),
         pageMax: Number(editFormData.pageMax),
-        crawlIntervalMinutes: editingTarget.crawlIntervalMinutes ?? 10,
-        autoStopMinutes: editingTarget.autoStopMinutes ?? 0,
       },
     });
   };
@@ -500,6 +539,12 @@ export default function AdminCrawlerPage() {
     }
   };
 
+  // 선택은 지금 보이는 페이지 기준 (안 보이는 글이 삭제 대상에 남지 않도록 페이지를 옮기면 비운다)
+  const handleLogsPageChange = (page: number) => {
+    setLogsPage(page);
+    setSelectedLogIds([]);
+  };
+
   const handleToggleSelectAllLogs = () => {
     if (selectedLogIds.length === logs.length) {
       setSelectedLogIds([]);
@@ -578,6 +623,7 @@ export default function AdminCrawlerPage() {
           )}
 
           <CommonPreservedTermsDialog />
+          <CommonExcludeKeywordsDialog />
 
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
@@ -689,7 +735,7 @@ export default function AdminCrawlerPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="promptTone">리라이팅 톤앤매너</Label>
+                  <Label htmlFor="promptTone">리라이팅 톤앤매너 (게시글)</Label>
                   <Input
                     id="promptTone"
                     placeholder="예: 자연스러운 커뮤니티 구어체"
@@ -699,7 +745,7 @@ export default function AdminCrawlerPage() {
                     }
                   />
                   <span className="text-[11px] text-muted-foreground">
-                    비속어와 은어는 유지되며, 제목과 문장 배치가 자연스럽게 재작성됩니다.
+                    비속어와 은어는 유지되며, 제목과 문장 배치가 자연스럽게 재작성됩니다. 댓글 말투는 댓글 설정의 댓글 지시문에서 정합니다.
                   </span>
                 </div>
 
@@ -707,7 +753,25 @@ export default function AdminCrawlerPage() {
                   id="excludeKeywords"
                   value={formData.excludeKeywords}
                   onChange={(v) => setFormData({ ...formData, excludeKeywords: v })}
+                  scopeHint={<>이 카드에만 적용됩니다. 모든 카드에서 거를 단어는 상단 <b>공통 제외 키워드</b>에 적으세요.</>}
                 />
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-muted/40 border border-border">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="excludeIpMentions" className="text-xs font-medium flex items-center gap-1.5 cursor-pointer">
+                      <Ban className="h-3.5 w-3.5 text-rose-500" /> 아이피 언급 글 제외
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      목록에 보인 작성자 아이피(예: 41.63)를 제목이나 본문에서 지칭하는 글은 수집하지 않습니다.
+                    </p>
+                  </div>
+                  <Switch
+                    id="excludeIpMentions"
+                    checked={formData.excludeIpMentions}
+                    onCheckedChange={(checked) => setFormData({ ...formData, excludeIpMentions: checked })}
+                    className="cursor-pointer"
+                  />
+                </div>
 
                 <PreservedTermsField
                   id="preservedTerms"
@@ -871,6 +935,17 @@ export default function AdminCrawlerPage() {
                             />
                           </div>
                         </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="commentPromptTone" className="text-[11px] text-muted-foreground">댓글 지시문 (댓글에만 적용)</Label>
+                          <Textarea
+                            id="commentPromptTone"
+                            rows={2}
+                            placeholder="예: 반말로 한 줄씩 짧게, 작성자를 놀리는 댓글과 공감하는 댓글을 섞어서"
+                            value={formData.commentPromptTone}
+                            onChange={(e) => setFormData({ ...formData, commentPromptTone: e.target.value })}
+                          />
+                          <span className="text-[10px] text-muted-foreground">비워 두면 기본 커뮤니티 댓글 문체로 작성합니다. 리라이팅 톤앤매너는 댓글에 적용되지 않습니다.</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1020,7 +1095,7 @@ export default function AdminCrawlerPage() {
           </TabsTrigger>
           <TabsTrigger value="logs" className="cursor-pointer">
             <Clock className="h-4 w-4 mr-2" />
-            수집 이력 로그 ({logs.length})
+            수집 이력 로그 ({logsTotal.toLocaleString()})
           </TabsTrigger>
         </TabsList>
 
@@ -1149,6 +1224,11 @@ export default function AdminCrawlerPage() {
                             title={`제외 키워드: ${parseExcludeKeywords(target.excludeKeywords).join(', ')}`}
                           >
                             제외 키워드 {parseExcludeKeywords(target.excludeKeywords).length}개
+                          </Badge>
+                        )}
+                        {target.excludeIpMentions && (
+                          <Badge variant="outline" className="text-rose-500 border-rose-500/30">
+                            아이피 언급 제외
                           </Badge>
                         )}
                         {target.authorMainKeywords && (
@@ -1296,7 +1376,7 @@ export default function AdminCrawlerPage() {
             <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <CardTitle className="text-base font-bold">
-                  최근 수집 이력 (최대 100건)
+                  수집 이력 (총 {logsTotal.toLocaleString()}건)
                 </CardTitle>
                 <CardDescription className="text-xs">
                   디시인사이드 원본 글과 사이트에 등록된 글의 매핑 내역입니다. (이력 삭제 시 연관 게시글·댓글·이미지 일괄 정리)
@@ -1321,7 +1401,7 @@ export default function AdminCrawlerPage() {
                   onClick={() => refetchLogs()}
                   className="cursor-pointer"
                 >
-                  <RefreshCw className="h-3.5 w-3.5 mr-1" /> 새로고침
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isFetchingLogs ? 'animate-spin' : ''}`} /> 새로고침
                 </Button>
               </div>
             </CardHeader>
@@ -1464,6 +1544,14 @@ export default function AdminCrawlerPage() {
                   </table>
                 </div>
               )}
+              <CommonPagination
+                className="mt-4"
+                currentPage={logsPage}
+                totalPages={logsTotalPages}
+                onPageChange={handleLogsPageChange}
+                itemsPerPage={logsPerPage}
+                onItemsPerPageChange={setLogsPerPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1561,6 +1649,25 @@ export default function AdminCrawlerPage() {
 
           <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 overflow-hidden">
             <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+            {(liveEditingTarget?.isActive || editingRunningJob) && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs space-y-1 text-amber-800 dark:text-amber-200">
+                {liveEditingTarget?.isActive && (
+                  <p className="flex items-start gap-1.5">
+                    <Timer className="h-3.5 w-3.5 mt-px shrink-0 text-amber-500" />
+                    <span>
+                      <b>자동 수집 중입니다</b> ({formatCrawlInterval(liveEditingTarget)}마다). 저장한 설정은 다음 수집부터
+                      적용되며, 수집 일정은 그대로입니다.
+                    </span>
+                  </p>
+                )}
+                {editingRunningJob && (
+                  <p className="flex items-start gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 mt-px shrink-0 text-amber-500 animate-spin" />
+                    <span>지금 수집이 진행 중입니다. 진행 중인 수집은 이전 설정으로 끝납니다.</span>
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="edit-name">타겟 식별 이름 *</Label>
               <Input
@@ -1648,7 +1755,7 @@ export default function AdminCrawlerPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="edit-promptTone">리라이팅 톤앤매너</Label>
+              <Label htmlFor="edit-promptTone">리라이팅 톤앤매너 (게시글)</Label>
               <Input
                 id="edit-promptTone"
                 value={editFormData.promptTone}
@@ -1662,7 +1769,25 @@ export default function AdminCrawlerPage() {
               id="edit-excludeKeywords"
               value={editFormData.excludeKeywords}
               onChange={(v) => setEditFormData({ ...editFormData, excludeKeywords: v })}
+              scopeHint={<>이 카드에만 적용됩니다. 모든 카드에서 거를 단어는 상단 <b>공통 제외 키워드</b>에 적으세요.</>}
             />
+
+            <div className="flex items-center justify-between p-2 rounded-md bg-muted/40 border border-border">
+              <div className="space-y-0.5">
+                <Label htmlFor="edit-excludeIpMentions" className="text-xs font-medium flex items-center gap-1.5 cursor-pointer">
+                  <Ban className="h-3.5 w-3.5 text-rose-500" /> 아이피 언급 글 제외
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  목록에 보인 작성자 아이피(예: 41.63)를 제목이나 본문에서 지칭하는 글은 수집하지 않습니다.
+                </p>
+              </div>
+              <Switch
+                id="edit-excludeIpMentions"
+                checked={editFormData.excludeIpMentions}
+                onCheckedChange={(checked) => setEditFormData({ ...editFormData, excludeIpMentions: checked })}
+                className="cursor-pointer"
+              />
+            </div>
 
             <PreservedTermsField
               id="edit-preservedTerms"
@@ -1828,6 +1953,17 @@ export default function AdminCrawlerPage() {
                         />
                       </div>
                     </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-commentPromptTone" className="text-[11px] text-muted-foreground">댓글 지시문 (댓글에만 적용)</Label>
+                      <Textarea
+                        id="edit-commentPromptTone"
+                        rows={2}
+                        placeholder="예: 반말로 한 줄씩 짧게, 작성자를 놀리는 댓글과 공감하는 댓글을 섞어서"
+                        value={editFormData.commentPromptTone}
+                        onChange={(e) => setEditFormData({ ...editFormData, commentPromptTone: e.target.value })}
+                      />
+                      <span className="text-[10px] text-muted-foreground">비워 두면 기본 커뮤니티 댓글 문체로 작성합니다. 리라이팅 톤앤매너는 댓글에 적용되지 않습니다.</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1945,6 +2081,49 @@ export default function AdminCrawlerPage() {
           </DialogFooter>
         </form>
       </DialogContent>
+      </Dialog>
+
+      {/* 수집 중 갤러리 변경 확인 */}
+      <Dialog open={galleryChangeConfirmOpen} onOpenChange={setGalleryChangeConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              수집 대상 갤러리를 바꿀까요?
+            </DialogTitle>
+            <DialogDescription>
+              [{editingTarget?.name}]은(는) 지금 자동 수집 중입니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground shrink-0">갤러리 ID</span>
+              <span className="text-right font-mono">
+                <span className="text-muted-foreground line-through mr-1.5">{editingTarget?.galleryId}</span>
+                <b>{editFormData.galleryId.trim()}</b>
+              </span>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            다음 수집부터 새 갤러리의 글을 가져옵니다. ‘켠 이후 올라온 글만’을 쓰고 있다면 기준이 지금으로 다시 잡혀, 새
+            갤러리의 지금 이후 글부터 수집합니다.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" className="cursor-pointer" onClick={() => setGalleryChangeConfirmOpen(false)}>
+              다시 수정
+            </Button>
+            <Button
+              className="cursor-pointer"
+              disabled={updateMutation.isPending}
+              onClick={() => {
+                setGalleryChangeConfirmOpen(false);
+                submitEdit();
+              }}
+            >
+              바꾸고 저장
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

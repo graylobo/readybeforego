@@ -45,6 +45,7 @@ export function CrawlerSettingsGuidePanel() {
           </li>
           <li>
             <Strong>제외 키워드</Strong>: 제목이나 본문에 이 단어가 있는 글은 건너뛰고 다음 글을 가져옵니다 (1회 수집 개수에 세지 않음).
+            모든 카드에서 거를 단어는 상단 <Strong>공통 제외 키워드</Strong>에 적으면 카드의 제외 키워드와 함께 적용됩니다.
           </li>
         </ul>
       </section>

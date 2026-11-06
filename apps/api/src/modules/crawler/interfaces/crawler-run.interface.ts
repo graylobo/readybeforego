@@ -8,6 +8,8 @@ export interface CrawlResult {
     imageFiltered: number;
     /** 제목이나 본문에 제외 키워드가 있는 글 */
     keywordFiltered: number;
+    /** 제목이나 본문에서 목록에 보인 작성자 아이피를 지칭하는 글 */
+    ipMentionFiltered: number;
     fetchFailed: number;
     /** '켠 이후 올라온 글만'일 때 켜기 전에 올라와 있던 글 */
     beforeStart: number;
@@ -29,7 +31,7 @@ export const emptyCrawlResult = (cancelled = false): CrawlResult => ({
   skipped: 0,
   errors: 0,
   cancelled,
-  skipDetails: { alreadyCollected: 0, imageFiltered: 0, keywordFiltered: 0, fetchFailed: 0, beforeStart: 0, retryExhausted: 0 },
+  skipDetails: { alreadyCollected: 0, imageFiltered: 0, keywordFiltered: 0, ipMentionFiltered: 0, fetchFailed: 0, beforeStart: 0, retryExhausted: 0 },
 });
 
 /**

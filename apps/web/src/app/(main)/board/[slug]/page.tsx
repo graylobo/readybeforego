@@ -36,9 +36,12 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const initialParams = await getInitialParams(searchParams);
   try {
     const { board } = await getBoardPage(slug, JSON.stringify(initialParams));
+    // 대표 주소: 게시판 주소 (2쪽부터는 그 쪽 주소, 검색 결과는 게시판 주소)
+    const path = `/board/${slug}${(initialParams.page ?? 1) > 1 && !initialParams.searchQuery ? `?page=${initialParams.page}` : ''}`;
     return {
       title: board.name,
       description: board.description || `${board.name} 게시판`,
+      alternates: { canonical: path },
     };
   } catch {
     return { title: '게시판을 찾을 수 없습니다' };

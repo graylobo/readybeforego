@@ -1,13 +1,56 @@
 import { apiClient } from '../api-client';
 import { UserRole } from '@community/shared-types';
 
-export interface AdminDashboardStats {
-    users: { total: number; today: number };
-    boards: number;
-    posts: { total: number; today: number };
-    comments: { total: number; today: number };
+export type DashboardRangeDays = 1 | 7 | 30;
+
+export interface DashboardMetric {
+    total: number;
+    /** 이번 기간에 새로 생긴 수 */
+    current: number;
+    /** 지난 기간(같은 길이, 같은 시점까지)에 새로 생긴 수 */
+    previous: number;
+    /** 날짜별 새로 생긴 수 (range.seriesDates 순서) */
+    series: number[];
+}
+
+export type DashboardSystemState = 'ok' | 'warning' | 'error' | 'idle';
+
+export interface DashboardSystem {
+    key: string;
+    state: DashboardSystemState;
+    message: string;
+    checkedAt: string | null;
+}
+
+export interface DashboardModerationLog {
+    id: string;
+    type: string;
+    reason: string;
+    durationDays: number | null;
+    createdAt: string;
+    user: { id: string; name: string } | null;
+    admin: { id: string; name: string } | null;
+}
+
+/** 관리자 대시보드 지표 (글·댓글은 봇이 등록한 것을 뺀 수) */
+export interface AdminDashboard {
+    range: { days: DashboardRangeDays; start: string; seriesDates: string[] };
+    metrics: {
+        users: DashboardMetric;
+        posts: DashboardMetric;
+        comments: DashboardMetric;
+        boards: { total: number; active: number; current: number };
+    };
     topBoards: Array<{ id: string; name: string; slug: string; postCount: number }>;
-    recentModerationLogs: any[];
+    recentModerationLogs: DashboardModerationLog[];
+    systems: DashboardSystem[];
+}
+
+/** 관리자가 처리할 일 */
+export interface DashboardTask {
+    key: string;
+    count: number;
+    oldestAt: string | null;
 }
 
 export interface AdminUser {
@@ -47,8 +90,13 @@ export interface PointPolicy {
 }
 
 export const adminApi = {
-    getDashboard: async (): Promise<AdminDashboardStats> => {
-        const response = await apiClient.get('/admin/dashboard');
+    getDashboard: async (days: DashboardRangeDays): Promise<AdminDashboard> => {
+        const response = await apiClient.get('/admin/dashboard', { params: { days } });
+        return response.data;
+    },
+
+    getDashboardTasks: async (): Promise<DashboardTask[]> => {
+        const response = await apiClient.get('/admin/dashboard/tasks');
         return response.data;
     },
 
@@ -67,6 +115,12 @@ export const adminApi = {
     updateUserRole: async (id: string, role: UserRole): Promise<AdminUser> => {
         const response = await apiClient.patch(`/admin/users/${id}/role`, { role });
         return response.data;
+    },
+
+    /** 시스템 관리자가 회원에게 포인트 지급 (사용 가능 포인트) */
+    grantPoints: async (id: string, amount: number, reason: string) => {
+        const response = await apiClient.post(`/admin/users/${id}/points`, { amount, reason });
+        return response.data as { availablePoints: number };
     },
 
     warnUser: async (id: string, reason: string): Promise<AdminUser> => {

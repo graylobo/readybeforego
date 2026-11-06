@@ -60,6 +60,7 @@ describe('PostsService', () => {
       softDeleteCommentsByPost: jest.fn(),
       findCommentImagesByPost: jest.fn().mockResolvedValue([]),
       findAuthorCommentIds: jest.fn().mockResolvedValue([]),
+      findPostIds: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -329,6 +330,18 @@ describe('PostsService', () => {
       postsRepository.countPosts.mockResolvedValue(1);
     });
 
+    it('비회원은 IP로 누른 반응을 목록에 붙여야 한다 (상세 화면과 같은 기준)', async () => {
+      postsRepository.getUserReactionsForPosts.mockResolvedValue([{ postId: 'main', type: 'like' }] as any);
+
+      const result = await service.getBoardPage('free', { page: 1 }, { ipAddress: '1.2.3.4' });
+
+      expect(result.posts.items[0]).toMatchObject({ id: 'main', userReaction: 'like' });
+      expect(postsRepository.getUserReactionsForPosts).toHaveBeenCalledWith(
+        expect.arrayContaining(['main']),
+        { ipAddress: '1.2.3.4' },
+      );
+    });
+
     it('첫 페이지면 공지/인기글/목록을 함께 주고, 내 반응은 한 번에 조회해야 한다', async () => {
       postsRepository.getUserReactionsForPosts.mockResolvedValue([{ postId: 'best', type: 'like' }] as any);
 
@@ -339,7 +352,7 @@ describe('PostsService', () => {
       expect(result.best[0]).toMatchObject({ id: 'best', userReaction: 'like' });
       expect(result.posts).toMatchObject({ total: 1, items: [expect.objectContaining({ id: 'main' })] });
       expect(postsRepository.getUserReactionsForPosts).toHaveBeenCalledTimes(1);
-      expect(postsRepository.getUserReactionsForPosts).toHaveBeenCalledWith(expect.arrayContaining(['notice', 'best', 'main']), 'u1');
+      expect(postsRepository.getUserReactionsForPosts).toHaveBeenCalledWith(expect.arrayContaining(['notice', 'best', 'main']), expect.objectContaining({ userId: 'u1' }));
       // 목록형 게시판은 본문을 읽지 않는다
       postsRepository.searchPosts.mock.calls.forEach((call) => expect(call[3]).toBe(false));
     });
@@ -370,6 +383,68 @@ describe('PostsService', () => {
       const result = await service.getBoardPage('inquiry', { page: 1 });
       expect(result.posts).toEqual({ items: [], total: 0 });
       expect(postsRepository.searchPosts).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bulkRemove - 일괄 삭제 (Super Admin, DB에서 완전 삭제)', () => {
+    const superAdmin = { userId: 'sa', role: 'super_admin' };
+    const repo = () => postsRepository as unknown as Record<string, jest.Mock>;
+
+    beforeEach(() => {
+      Object.assign(postsRepository, {
+        findPostsForPurge: jest.fn(async (ids: string[]) =>
+          ids.filter((id) => id !== 'gone').map((id) => ({ id, userId: 'author', title: id, isBot: id === 'bot', content: id === 'bot' ? '<img src="https://cdn/crawled/a.webp">' : null })),
+        ),
+        findCommentsForPurge: jest.fn(async () => [
+          { id: 'c1', targetId: 'p1', userId: 'author', imageUrl: 'https://cdn/comments/author/x.webp', deletedAt: null },
+          { id: 'c2', targetId: 'p1', userId: 'other', imageUrl: null, deletedAt: null },
+          // 이미 지운 답글의 이미지도 정리 대상
+          { id: 'c3', targetId: 'p2', userId: 'other', imageUrl: 'https://cdn/comments/other/y.webp', deletedAt: new Date() },
+        ]),
+        purgePosts: jest.fn(async (postIds: string[]) => postIds.length),
+      });
+      (uploadsService as any).extractCommentImagePath = jest.fn((url: string) => url.replace('https://cdn/', ''));
+    });
+
+    it('Super Admin이 아니면 거절한다 (관리자도 불가)', async () => {
+      await expect(service.bulkRemove({ ids: ['p1'] }, { userId: 'a', role: 'admin' })).rejects.toMatchObject({ status: 403 });
+      expect(repo().purgePosts).not.toHaveBeenCalled();
+    });
+
+    it('검색 결과 전체 삭제는 검색어나 작성자가 없으면 거절한다 (모든 글이 대상이 되지 않게)', async () => {
+      await expect(service.bulkRemove({ search: { searchType: 'title', searchQuery: '  ' } }, superAdmin)).rejects.toMatchObject({ status: 400 });
+      expect(repo().findPostIds).not.toHaveBeenCalled();
+    });
+
+    it('글·댓글·답글을 DB에서 지우고, 글 이미지와 (이미 지운 답글 포함) 댓글 첨부 이미지를 저장소에서 지운다', async () => {
+      repo().findPostIds.mockResolvedValue(['p1', 'p2', 'bot', 'gone']);
+
+      const result = await service.bulkRemove({ search: { searchType: 'title', searchQuery: '광고' } }, superAdmin);
+
+      expect(result).toEqual({ deleted: 3, failed: 1 });
+      expect(repo().findPostIds).toHaveBeenCalledWith(expect.anything(), 500);
+      expect(repo().purgePosts).toHaveBeenCalledWith(['p1', 'p2', 'bot'], ['c1', 'c2', 'c3'], expect.anything());
+      expect(postsRepository.softDeletePost).not.toHaveBeenCalled();
+      for (const id of ['p1', 'p2', 'bot']) expect(uploadsService.deleteDirectory).toHaveBeenCalledWith(`posts/${id}`);
+      expect(uploadsService.deleteImage).toHaveBeenCalledWith('crawled/a.webp');
+      expect(uploadsService.deleteImage).toHaveBeenCalledWith('comments/author/x.webp');
+      expect(uploadsService.deleteImage).toHaveBeenCalledWith('comments/other/y.webp');
+    });
+
+    it('글쓴이의 글 포인트와 글쓴이가 단 댓글 포인트만 회수한다 (다른 사람 댓글 포인트는 그대로)', async () => {
+      await service.bulkRemove({ ids: ['p1'] }, superAdmin);
+      const revoked = eventEmitter.emit.mock.calls.filter(([name]) => name === 'points.revoke').map(([, e]: any[]) => `${e.userId}:${e.relatedId}`);
+      expect(revoked.some((r) => r.startsWith('author:p1'))).toBe(true);
+      expect(revoked.some((r) => r.startsWith('author:c1'))).toBe(true);
+      expect(revoked.some((r) => r.startsWith('other:'))).toBe(false);
+    });
+
+    it('500개를 넘으면 100개씩 나눠 지운다', async () => {
+      const ids = Array.from({ length: 250 }, (_, i) => `p${i}`);
+      repo().findCommentsForPurge.mockResolvedValue([]);
+      const result = await service.bulkRemove({ ids }, superAdmin);
+      expect(result.deleted).toBe(250);
+      expect(repo().purgePosts).toHaveBeenCalledTimes(3);
     });
   });
 

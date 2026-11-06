@@ -3,7 +3,10 @@
  *
  * 1. pg_trgm 확장: 게시글 검색(부분 일치) 인덱스(gin_trgm_ops)에 필요
  * 2. 중복 반응/스크랩 정리: 고유 인덱스를 만들기 전에 같은 사람의 중복 행을 하나만 남긴다
+ * 3. Supabase Realtime 채널 권한 (supabase-realtime.sql, Supabase가 아니면 아무 일도 하지 않음)
  */
+const fs = require('fs');
+const path = require('path');
 const { Client } = require('pg');
 
 try {
@@ -47,7 +50,8 @@ async function main() {
     if (await tableExists(client, 'post_reactions')) {
       for (const sql of DEDUPE_SQL) await client.query(sql);
     }
-    console.log('[db-prepare] pg_trgm 확장 확인 및 중복 반응/스크랩 정리 완료');
+    await client.query(fs.readFileSync(path.join(__dirname, 'supabase-realtime.sql'), 'utf8'));
+    console.log('[db-prepare] pg_trgm 확장 확인, 중복 반응/스크랩 정리, Realtime 채널 권한 확인 완료');
   } finally {
     await client.end();
   }

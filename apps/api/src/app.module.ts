@@ -34,6 +34,7 @@ import { ScamsModule } from './modules/scams/scams.module';
 import { GuidesModule } from './modules/guides/guides.module';
 import { CountriesModule } from './modules/countries/countries.module';
 import { ChatModule } from './modules/chat';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { CrawlerModule } from './modules/crawler/crawler.module';
 
 @Module({
@@ -114,6 +115,7 @@ import { CrawlerModule } from './modules/crawler/crawler.module';
     ScamsModule,
     GuidesModule,
     CountriesModule,
+    RealtimeModule,
     ChatModule,
     CrawlerModule,
   ],

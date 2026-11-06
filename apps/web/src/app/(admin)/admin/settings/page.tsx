@@ -8,7 +8,9 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useSiteSettings, useUpdateSiteSettings } from '@/hooks/queries/use-site-queries';
@@ -23,6 +25,9 @@ const siteFormSchema = z.object({
   showSidebarAds: z.boolean(),
   showAllBoardMenu: z.boolean(),
   showBoardDirectoryMenu: z.boolean(),
+  allBoardName: z.string().trim().min(1, '이름을 입력해주세요.').max(50),
+  allBoardDescription: z.string().trim().max(200),
+  allBoardViewMode: z.enum(['list', 'lounge', 'feed']),
 });
 
 const chatFormSchema = z.object({
@@ -46,6 +51,9 @@ export default function AdminSettingsPage() {
       showSidebarAds: true,
       showAllBoardMenu: true,
       showBoardDirectoryMenu: true,
+      allBoardName: '전체 게시판',
+      allBoardDescription: '모든 게시판의 최신 글',
+      allBoardViewMode: 'list',
     },
   });
 
@@ -66,6 +74,9 @@ export default function AdminSettingsPage() {
         showSidebarAds: settings.showSidebarAds,
         showAllBoardMenu: settings.showAllBoardMenu ?? true,
         showBoardDirectoryMenu: settings.showBoardDirectoryMenu ?? true,
+        allBoardName: settings.allBoardName ?? '전체 게시판',
+        allBoardDescription: settings.allBoardDescription ?? '',
+        allBoardViewMode: settings.allBoardViewMode ?? 'list',
       });
     }
   }, [settings, siteForm]);
@@ -194,6 +205,60 @@ export default function AdminSettingsPage() {
                 </FormItem>
               )}
             />
+
+            {/* 전체 게시판은 DB 게시판이 아니라 게시판 관리 화면에 없으므로, 일반 게시판처럼 이름·설명·화면 형식을 여기서 바꾼다 */}
+            <div className="rounded-lg border p-4 shadow-sm bg-muted/20 space-y-4">
+              <div className="space-y-0.5">
+                <div className="text-base font-medium">전체 게시판 (/board/all)</div>
+                <p className="text-sm text-muted-foreground">모든 공개 게시판의 글을 모아 보여주는 화면입니다. 사이드바 메뉴와 화면 제목에 이 이름이 쓰입니다.</p>
+              </div>
+              <FormField
+                control={siteForm.control}
+                name="allBoardName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>이름</FormLabel>
+                    <FormControl>
+                      <Input {...field} maxLength={50} disabled={updateSettings.isPending} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={siteForm.control}
+                name="allBoardDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>설명</FormLabel>
+                    <FormControl>
+                      <Input {...field} maxLength={200} disabled={updateSettings.isPending} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={siteForm.control}
+                name="allBoardViewMode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>뷰 레이아웃</FormLabel>
+                    <FormControl>
+                      <select
+                        value={field.value}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        disabled={updateSettings.isPending}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <option value="list">일반 리스트형</option>
+                        <option value="lounge">라운지형 (Lounge)</option>
+                        <option value="feed">피드형 (Instagram)</option>
+                      </select>
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={siteForm.control}
               name="showBoardDirectoryMenu"

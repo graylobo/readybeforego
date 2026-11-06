@@ -39,13 +39,12 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL(SITE_CONFIG.url),
-  alternates: {
-    canonical: '/',
-  },
+  // canonical(대표 주소)과 og:url은 여기에 두지 않는다. 레이아웃 값은 모든 하위 페이지가 물려받아서,
+  // 여기에 '/'를 두면 모든 페이지가 "내 대표 주소는 홈"이라고 알려 검색엔진이 각 페이지를 홈의 사본으로 보고 순위에서 뺀다.
+  // 페이지마다 자기 주소를 지정하고(홈은 page.tsx), 지정하지 않은 페이지는 검색엔진이 그 페이지 주소를 대표로 쓴다
   openGraph: {
     title: SITE_CONFIG.name,
     description: SITE_CONFIG.description,
-    url: './',
     siteName: SITE_CONFIG.name,
     locale: SITE_CONFIG.locale,
     type: "website",

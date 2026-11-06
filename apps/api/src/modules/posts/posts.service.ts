@@ -73,6 +73,18 @@ function clampLimit(limit: number | undefined, fallback: number): number {
 
 /** 크롤러가 가져온 이미지 폴더 (crawler 서비스의 업로드 폴더와 같아야 함) */
 const CRAWLED_FOLDER = 'crawled';
+/** 일괄 삭제 한 번에 지우는 최대 글 수 (넘으면 최신 글부터 이만큼 지우고, 다시 누르면 나머지를 지운다) */
+export const BULK_DELETE_LIMIT = 500;
+/** 일괄 삭제를 한 트랜잭션으로 처리하는 글 수 */
+const BULK_DELETE_BATCH_SIZE = 100;
+/** 일괄 삭제 때 저장소 이미지를 동시에 정리하는 글 수 */
+const BULK_DELETE_CONCURRENCY = 5;
+
+/** 일괄 삭제 대상: 화면에서 고른 글, 또는 검색 결과 전체 (검색 화면과 같은 조건) */
+export interface BulkDeleteInput {
+  ids?: string[];
+  search?: Pick<PostListQuery, 'searchType' | 'searchQuery' | 'authorId'>;
+}
 
 @Injectable()
 export class PostsService {
@@ -226,9 +238,7 @@ export class PostsService {
       const postIds = [...new Set(allPosts.map((p) => p.id))];
 
       const [userReactions, botSources] = await Promise.all([
-          viewer.userId && postIds.length > 0
-              ? this.postsRepo.getUserReactionsForPosts(postIds, viewer.userId)
-              : Promise.resolve([]),
+          this.postsRepo.getUserReactionsForPosts(postIds, viewer),
           this.getBotSources(allPosts, showBotFlag),
       ]);
       const userReactionMap = new Map(userReactions.map((r) => [r.postId, r.type]));
@@ -583,6 +593,86 @@ export class PostsService {
       }
 
       return { success: true };
+  }
+
+  /**
+   * 게시글 일괄 삭제 (Super Admin). 검색 결과를 정리하는 용도라 DB에서 완전히 지운다:
+   * 글, 댓글·답글(이미 지운 댓글 포함), 글·댓글 추천과 스크랩, 글·댓글을 가리키는 알림, 그리고 저장소의 글 이미지·댓글 첨부 이미지.
+   * 포인트는 한 개 삭제와 같이 글쓴이가 받은 글·댓글 포인트를 회수한다.
+   * 검색 결과 전체를 지울 때는 검색어나 작성자가 꼭 있어야 한다 (조건 없이 보내면 모든 글이 대상이 되므로)
+   */
+  async bulkRemove(input: BulkDeleteInput, viewer: Viewer, userAgent?: string) {
+      const role = await this.resolveRole(viewer);
+      if (role !== USER_ROLES.SUPER_ADMIN) throw new ApiException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
+
+      let ids: string[];
+      if (input.search) {
+          const { searchQuery, authorId } = input.search;
+          if (!searchQuery?.trim() && !authorId) {
+              throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST, '검색어나 작성자 조건이 있어야 일괄 삭제할 수 있습니다.');
+          }
+          const scope = await this.resolveListScope(undefined, viewer, role);
+          ids = await this.postsRepo.findPostIds(this.buildListWhere(scope!, input.search), BULK_DELETE_LIMIT);
+      } else {
+          ids = [...new Set(input.ids ?? [])];
+          if (ids.length === 0 || ids.length > BULK_DELETE_LIMIT) {
+              throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST, `한 번에 1~${BULK_DELETE_LIMIT}개까지 삭제할 수 있습니다.`);
+          }
+      }
+
+      let deleted = 0;
+      for (let i = 0; i < ids.length; i += BULK_DELETE_BATCH_SIZE) {
+          deleted += await this.purgePostBatch(ids.slice(i, i + BULK_DELETE_BATCH_SIZE), viewer, userAgent);
+      }
+      // 고른 글 중 그 사이 다른 곳에서 지워진 글은 건너뛴다
+      return { deleted, failed: ids.length - deleted };
+  }
+
+  /** 글 묶음을 한 트랜잭션으로 완전 삭제한 뒤, 저장소 이미지를 정리하고 포인트를 회수한다 */
+  private async purgePostBatch(postIds: string[], viewer: Viewer, userAgent?: string) {
+      const [postRows, commentRows] = await Promise.all([
+          this.postsRepo.findPostsForPurge(postIds),
+          this.postsRepo.findCommentsForPurge(postIds),
+      ]);
+      if (postRows.length === 0) return 0;
+      const existingIds = postRows.map((post) => post.id);
+
+      const deleted = await this.postsRepo.transaction((tx) =>
+          this.postsRepo.purgePosts(existingIds, commentRows.map((comment) => comment.id), tx),
+      );
+
+      // 저장소 이미지는 DB에서 지운 뒤 정리한다. 응답 뒤로 미루면 서버가 요청을 끝낸 뒤 멈출 수 있어(Cloud Run) 끝날 때까지 기다린다
+      const commentImagesByPost = new Map<string, string[]>();
+      for (const comment of commentRows) {
+          if (!comment.imageUrl) continue;
+          commentImagesByPost.set(comment.targetId, [...(commentImagesByPost.get(comment.targetId) ?? []), comment.imageUrl]);
+      }
+      const queue = [...postRows];
+      const worker = async () => {
+          for (let post = queue.shift(); post; post = queue.shift()) {
+              const crawledImagePaths = post.isBot ? this.uploadsService.extractImagePaths(post.content ?? '', CRAWLED_FOLDER) : [];
+              await this.deletePostImages(post.id, commentImagesByPost.get(post.id) ?? [], crawledImagePaths);
+          }
+      };
+      await Promise.all(Array.from({ length: Math.min(BULK_DELETE_CONCURRENCY, postRows.length) }, worker));
+
+      // 글쓴이가 그 글로 받은 포인트와, 글쓴이가 그 글에 단 (지우지 않은) 댓글 포인트를 되돌린다 (한 개 삭제와 같음)
+      const authorById = new Map(postRows.map((post) => [post.id, post.userId]));
+      for (const post of postRows) {
+          if (post.userId) {
+              this.eventEmitter.emit('points.revoke', new PointsRevokeEvent(post.userId, PointActionType.POST_CREATED, post.id, 'post'));
+          }
+          if (viewer.userId) {
+              this.eventEmitter.emit('post.deleted', new PostDeletedEvent(viewer.userId, post.id, post.title, viewer.ipAddress, userAgent));
+          }
+      }
+      for (const comment of commentRows) {
+          const author = authorById.get(comment.targetId);
+          if (author && comment.userId === author && !comment.deletedAt) {
+              this.eventEmitter.emit('points.revoke', new PointsRevokeEvent(author, PointActionType.COMMENT_CREATED, comment.id, 'comment'));
+          }
+      }
+      return deleted;
   }
 
   private async deletePostImages(postId: string, commentImages: string[], contentImagePaths: string[] = []) {

@@ -16,6 +16,7 @@ interface SubMenuItem {
   label: string;
   icon?: ReactNode;
   href: string;
+  badge?: number;
 }
 
 interface MenuItem {
@@ -23,6 +24,7 @@ interface MenuItem {
   label: string;
   icon?: ReactNode;
   href: string;
+  badge?: number;
   subMenu?: SubMenuItem[];
 }
 
@@ -57,6 +59,19 @@ const renderMenuIcon = (
       )}
     >
       {initial}
+    </span>
+  );
+};
+
+/** 대기 건수: 펼친 사이드바에서는 숫자, 접힌 사이드바에서는 점 */
+const renderBadge = (count: number | undefined, isVisualOpen: boolean) => {
+  if (!count) return null;
+  if (!isVisualOpen) {
+    return <span className="absolute left-7 top-1.5 h-2 w-2 rounded-full bg-orange-500" aria-label={`${count}건 대기`} />;
+  }
+  return (
+    <span className="ml-2 shrink-0 rounded-full bg-orange-500/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-orange-700 dark:text-orange-400">
+      {count > 99 ? "99+" : count}
     </span>
   );
 };
@@ -148,7 +163,7 @@ export function Sidebar({ items }: SidebarProps) {
                     <button
                       onClick={(e) => toggleExpand(item.id, e)}
                       className={cn(
-                        "w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                        "relative w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                         isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
                       )}
                     >
@@ -163,6 +178,9 @@ export function Sidebar({ items }: SidebarProps) {
                       >
                         {item.label}
                       </span>
+                      {/* 하위 메뉴가 보이지 않을 때만 합계를 보인다 */}
+                      {(!isExpanded || !isVisualOpen) &&
+                        renderBadge(item.subMenu?.reduce((sum, sub) => sum + (sub.badge ?? 0), 0), isVisualOpen)}
                       <span
                         className={cn(
                           "shrink-0 transition-all duration-300",
@@ -196,7 +214,7 @@ export function Sidebar({ items }: SidebarProps) {
                               href={subItem.href}
                               onClick={(e) => handleNavigation(e, subItem.href)}
                               className={cn(
-                                "w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                                "relative w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                                 isSubActive && "bg-sidebar-accent text-sidebar-accent-foreground"
                               )}
                               title={!isVisualOpen ? subItem.label : undefined}
@@ -212,6 +230,7 @@ export function Sidebar({ items }: SidebarProps) {
                               >
                                 {subItem.label}
                               </span>
+                              {renderBadge(subItem.badge, isVisualOpen)}
                             </Link>
                           );
                         })}
@@ -223,7 +242,7 @@ export function Sidebar({ items }: SidebarProps) {
                     href={item.href}
                     onClick={(e) => handleNavigation(e, item.href)}
                     className={cn(
-                      "w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                      "relative w-full flex items-center py-2 px-3 rounded-md transition-colors duration-200 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                       isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
                     )}
                     title={!isVisualOpen ? item.label : undefined}
@@ -239,6 +258,7 @@ export function Sidebar({ items }: SidebarProps) {
                     >
                       {item.label}
                     </span>
+                    {renderBadge(item.badge, isVisualOpen)}
                   </Link>
                 )}
               </div>

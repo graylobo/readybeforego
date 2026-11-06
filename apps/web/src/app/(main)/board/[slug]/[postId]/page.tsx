@@ -4,7 +4,6 @@ import { cache } from 'react';
 import { boardApi } from '@/lib/api/board';
 import { commentsApi, COMMENT_PAGE_LIMIT } from '@/lib/api/comments';
 import { PostDetailClient } from './post-detail-client';
-import { SITE_CONFIG } from '@/lib/constants';
 import { getServerRequestConfig, isServerViewForVisitor } from '@/lib/api/server-request-config';
 import { ErrorCode } from '@community/shared-types';
 
@@ -54,16 +53,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const imgMatch = (post.content ?? '').match(/<img[^>]+src="([^">]+)"/);
     const imageUrl = imgMatch ? imgMatch[1] : undefined;
 
+    // 대표 주소: 글이 실제로 있는 게시판의 글 주소 (다른 게시판 주소·쿼리가 붙어 들어와도 하나로)
+    const path = `/board/${board.slug}/${postId}`;
     return {
       title: post.title,
       description: cleanContent || `${board.name} 게시판의 게시글입니다.`,
+      alternates: { canonical: path },
       // 크롤러가 가져온 글은 검색 결과에 넣지 않되, 글 안의 링크(다른 글·게시판)는 따라가게 한다
       ...(post.noIndex && { robots: { index: false, follow: true } }),
       openGraph: {
         title: post.title,
         description: cleanContent,
         type: 'article',
-        url: `${SITE_CONFIG.url}/board/${slug}/${postId}`,
+        url: path,
         authors: [post.user?.name || post.guestName || '익명'],
         publishedTime: post.createdAt,
         ...(imageUrl && { images: [imageUrl] }),

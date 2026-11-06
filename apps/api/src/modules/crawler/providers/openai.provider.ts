@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LlmProvider, LlmUnavailableError, RewriteInput, RewriteResult } from '../interfaces/llm-provider.interface';
 import { buildPreservationRules } from '../utils/term-protection';
+import { buildCommentsRule, buildToneRule } from '../utils/prompt-rules';
 
 @Injectable()
 export class OpenAIProvider implements LlmProvider {
@@ -20,10 +21,7 @@ export class OpenAIProvider implements LlmProvider {
     }
 
     const targetCommentCount = input.commentsCount ?? 1;
-    const commentsInstruction =
-      input.generateComments && targetCommentCount > 0
-        ? `6. [댓글 자동 생성] 이 글에 어울리는 생생한 커뮤니티 반응 댓글을 **정확히 ${targetCommentCount}개**(절대 ${targetCommentCount}개를 초과하거나 미달하지 마십시오) 서로 다른 가상 닉네임과 함께 작성하십시오. 비속어, 유행어, 공감, 반박 등 실제 커뮤니티 댓글다운 짧고 맛깔나는 문체로 작성하십시오.`
-        : '';
+    const commentsInstruction = buildCommentsRule(input);
 
     const commentExamples = Array.from(
       { length: Math.min(Math.max(targetCommentCount, 1), 3) },
@@ -52,7 +50,7 @@ ${commentExamples}
 2. 제목은 원문의 재미와 핵심을 살리되, 단어 배열이나 문장 어투를 다르게 바꿔서 원작성자 검색 시 바로 드러나지 않게 하십시오.
 3. 본문 내의 <img> 태그, <a> 태그 등 HTML 태그는 위치와 속성(src, href 등)을 절대로 누락하거나 변경하지 말고 그대로 보존하십시오.
 4. 디시인사이드 광고 문구, 서명, 앱 다운로드 링크 등 불필요한 부가 텍스트는 제거하십시오.
-5. 어조 설정: ${input.promptTone ? `지정된 톤(${input.promptTone})을 최대한 반영하십시오.` : '원본의 커뮤니티 구어체 톤을 유지하십시오.'}
+${buildToneRule(input)}
 ${commentsInstruction}
 
 ${buildPreservationRules(input.protectedTerms)}

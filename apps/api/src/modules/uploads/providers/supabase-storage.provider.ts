@@ -4,6 +4,10 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { StorageProvider, UploadResult } from '../interfaces/storage-provider.interface';
 import { SUPABASE_CLIENT } from './supabase.provider';
 
+// 폴더 삭제 때 한 번에 조회·삭제하는 파일 수와, 끝없이 반복하지 않도록 둔 최대 횟수 (1,000 × 20 = 2만 개)
+const DELETE_DIRECTORY_PAGE_SIZE = 1000;
+const DELETE_DIRECTORY_MAX_ROUNDS = 20;
+
 @Injectable()
 export class SupabaseStorageProvider implements StorageProvider {
   private readonly logger = new Logger(SupabaseStorageProvider.name);
@@ -73,24 +77,31 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 
   async deleteDirectory(dirPath: string): Promise<void> {
-    const { data: files, error } = await this.supabase.storage
-      .from(this.bucketName)
-      .list(dirPath);
+    // list는 한 번에 최대 100개(기본값)만 돌려준다. 이미지 하나가 원본·썸네일·크기별 파일 여러 개라
+    // 이미지가 많은 글은 100개를 넘어 남는 파일이 생기므로, 지운 뒤 빈 폴더가 될 때까지 다시 조회한다
+    for (let round = 0; round < DELETE_DIRECTORY_MAX_ROUNDS; round++) {
+      const { data: files, error } = await this.supabase.storage
+        .from(this.bucketName)
+        .list(dirPath, { limit: DELETE_DIRECTORY_PAGE_SIZE });
 
-    if (error) {
-      this.logger.error('Supabase list error for deleteDirectory:', error);
-      return;
-    }
+      if (error) {
+        this.logger.error('Supabase list error for deleteDirectory:', error);
+        return;
+      }
 
-    if (files && files.length > 0) {
-      const filesToDelete = files.map((file: any) => `${dirPath}/${file.name}`);
+      // id가 없는 항목은 하위 폴더 표시라 지울 파일이 아니다
+      const filesToDelete = (files ?? []).filter((file: any) => file.id).map((file: any) => `${dirPath}/${file.name}`);
+      if (filesToDelete.length === 0) return;
+
       const { error: deleteError } = await this.supabase.storage
         .from(this.bucketName)
         .remove(filesToDelete);
 
       if (deleteError) {
         this.logger.error('Supabase delete error in deleteDirectory:', deleteError);
+        return;
       }
+      if (filesToDelete.length < DELETE_DIRECTORY_PAGE_SIZE) return;
     }
   }
 

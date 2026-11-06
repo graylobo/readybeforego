@@ -105,6 +105,14 @@ export const boardApi = {
         return response.data;
     },
 
+    /** 게시글 일괄 삭제 (Super Admin): 고른 글 id들, 또는 검색 결과 전체(검색 화면과 같은 조건, 한 번에 최대 500개) */
+    bulkDeletePosts: async (
+        target: { ids: string[] } | { search: { searchType?: string; searchQuery?: string; authorId?: string } },
+    ): Promise<{ deleted: number; failed: number }> => {
+        const response = await apiClient.post('/posts/bulk-delete', target);
+        return response.data;
+    },
+
     deletePost: async (id: string, guestPassword?: string) => {
         await apiClient.delete(`/posts/${id}`, {
             data: { guestPassword }

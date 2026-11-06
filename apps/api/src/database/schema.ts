@@ -637,6 +637,10 @@ export const siteSettings = pgTable('site_settings', {
   // 사이드바 커뮤니티 메뉴의 '전체 게시판'·'게시판 목록' 표시 여부 (끄면 메뉴만 숨김, 주소로는 들어갈 수 있음)
   showAllBoardMenu: boolean('show_all_board_menu').default(true).notNull(),
   showBoardDirectoryMenu: boolean('show_board_directory_menu').default(true).notNull(),
+  // 전체 게시판(/board/all)은 DB 게시판이 아니라서(모든 공개 게시판의 글을 모아 보여주는 화면) 이름·설명·화면 형식을 여기에 둔다
+  allBoardName: text('all_board_name').default('전체 게시판').notNull(),
+  allBoardDescription: text('all_board_description').default('모든 게시판의 최신 글').notNull(),
+  allBoardViewMode: text('all_board_view_mode').default('list').notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
@@ -645,6 +649,8 @@ export const crawlerSettings = pgTable('crawler_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
   // 모든 카드에 공통으로 적용할 보존 단어 (카드별 보존 단어와 합쳐지며, 같은 단어는 카드 쪽 뜻이 우선)
   preservedTerms: text('preserved_terms'),
+  // 모든 카드에 공통으로 적용할 제외 키워드 (카드별 제외 키워드와 합쳐서, 하나라도 들어 있는 글은 수집하지 않음)
+  excludeKeywords: text('exclude_keywords'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
@@ -798,6 +804,8 @@ export const crawlerTargets = pgTable('crawler_targets', {
   minRecommendCount: integer('min_recommend_count').default(0).notNull(),
   botUserId: uuid('bot_user_id').references(() => users.id, { onDelete: 'set null' }),
   promptTone: text('prompt_tone').default('natural'),
+  // 자동 댓글에만 적용할 AI 지시 (비면 기본 댓글 문체)
+  commentPromptTone: text('comment_prompt_tone'),
   // 패러프레이징 시 그대로 유지할 단어 (쉼표/줄바꿈 구분, "단어=뜻" 형식 가능. 예: 광상=광우상사, 잉여햄)
   preservedTerms: text('preserved_terms'),
   // 제목이나 본문에 들어 있으면 수집하지 않을 단어 (쉼표/줄바꿈 구분. 대소문자·띄어쓰기 무시)
@@ -811,6 +819,8 @@ export const crawlerTargets = pgTable('crawler_targets', {
   viewCountMin: integer('view_count_min').default(5).notNull(),
   viewCountMax: integer('view_count_max').default(15).notNull(),
   includeImages: boolean('include_images').default(true).notNull(),
+  // 이번 수집 목록에 보인 작성자 아이피(예: 41.63)를 제목·본문에서 지칭하는 글은 수집하지 않는다
+  excludeIpMentions: boolean('exclude_ip_mentions').default(true).notNull(),
   authorMainKeywords: text('author_main_keywords'),
   authorSubKeywords: text('author_sub_keywords'),
   authorUseSub: boolean('author_use_sub').default(false).notNull(),

@@ -10,6 +10,8 @@ export interface CrawlerTarget {
   minRecommendCount: number;
   botUserId?: string | null;
   promptTone?: string | null;
+  // 자동 댓글에만 적용할 AI 지시 (비면 기본 댓글 문체)
+  commentPromptTone?: string | null;
   // 패러프레이징 시 그대로 유지할 단어 (쉼표/줄바꿈 구분, "단어=뜻" 형식 가능)
   preservedTerms?: string | null;
   // 제목이나 본문에 들어 있으면 수집하지 않을 단어 (쉼표/줄바꿈 구분)
@@ -23,6 +25,8 @@ export interface CrawlerTarget {
   viewCountMin: number;
   viewCountMax: number;
   includeImages: boolean;
+  // 목록에 보인 작성자 아이피(예: 41.63)를 제목·본문에서 지칭하는 글은 수집하지 않음
+  excludeIpMentions: boolean;
   authorMainKeywords?: string | null;
   authorSubKeywords?: string | null;
   authorUseSub: boolean;
@@ -56,6 +60,14 @@ export interface CrawlerTarget {
     slug: string;
     name: string;
   };
+}
+
+/** 수집 이력 한 페이지 (최신순) */
+export interface CrawlerLogPage {
+  items: CrawlerLog[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface CrawlerLog {
@@ -93,6 +105,7 @@ export interface CrawlResult {
     alreadyCollected: number;
     imageFiltered: number;
     keywordFiltered?: number;
+    ipMentionFiltered?: number;
     fetchFailed: number;
     beforeStart?: number;
     retryExhausted?: number;
@@ -129,6 +142,8 @@ export interface CrawlerSettings {
   id: string;
   // 모든 카드에 공통으로 적용되는 보존 단어 (같은 단어는 카드 쪽 뜻이 우선)
   preservedTerms: string | null;
+  // 모든 카드에 공통으로 적용되는 제외 키워드 (카드별 제외 키워드와 합쳐서 적용)
+  excludeKeywords: string | null;
   updatedAt: string;
 }
 
@@ -138,7 +153,7 @@ export const crawlerApi = {
     return response.data;
   },
 
-  updateSettings: async (data: { preservedTerms: string | null }): Promise<CrawlerSettings> => {
+  updateSettings: async (data: { preservedTerms?: string | null; excludeKeywords?: string | null }): Promise<CrawlerSettings> => {
     const response = await apiClient.patch('/admin/crawler/settings', data);
     return response.data;
   },
@@ -198,8 +213,8 @@ export const crawlerApi = {
     return response.data;
   },
 
-  getLogs: async (): Promise<CrawlerLog[]> => {
-    const response = await apiClient.get('/admin/crawler/logs');
+  getLogs: async (page: number, limit: number): Promise<CrawlerLogPage> => {
+    const response = await apiClient.get('/admin/crawler/logs', { params: { page, limit } });
     return response.data;
   },
 

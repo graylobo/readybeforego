@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UploadsService } from './uploads.service';
+import { EMOTICON_IMAGE_MAX_SIZE, UploadsService } from './uploads.service';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -73,6 +73,8 @@ export class UploadsController {
     @Body('folder') folder?: string,
     // 게시글 본문 이미지면 'true': 작은 버전을 함께 만들어 srcset을 돌려준다
     @Body('responsive') responsive?: string,
+    // 'emoticon'이면 이모티콘 크기로 줄여 저장한다
+    @Body('purpose') purpose?: string,
   ) {
     if (!file) {
       throw new ApiException(ErrorCode.INVALID_INPUT, HttpStatus.BAD_REQUEST, '파일이 없습니다.');
@@ -93,7 +95,10 @@ export class UploadsController {
       file.mimetype,
       targetFolder,
       userId,
-      { responsive: responsive === 'true' },
+      {
+        responsive: responsive === 'true',
+        maxSize: purpose === 'emoticon' ? EMOTICON_IMAGE_MAX_SIZE : undefined,
+      },
     );
     return {
         data: result,

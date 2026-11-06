@@ -2,7 +2,7 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import sharp from 'sharp';
 import { UPLOAD_LIMITS, findExcludeKeyword, parseExcludeKeywords } from '@community/shared-types';
-import { eq, and, desc, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { eq, and, desc, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
 import { DATABASE_CONNECTION } from '../../../database/database.module';
@@ -14,6 +14,7 @@ import { contentHasImage } from '../../../common/utils/content-has-image';
 import { CrawlerSettingsRepository } from '../crawler-settings.repository';
 import { mergePreservedTerms, parsePreservedTerms } from '../utils/term-protection';
 import { pickNextCrawlAt } from '../utils/crawl-schedule';
+import { pickUnusedNickname, randomBotNickname } from './bot-nickname';
 import {
   AI_UNAVAILABLE_PREFIX,
   MAX_POST_ATTEMPTS,
@@ -26,23 +27,14 @@ import {
   CrawlResult,
   emptyCrawlResult,
 } from '../interfaces/crawler-run.interface';
-import { ParsedPostItem, PostDetail } from '../interfaces/crawler.interface';
+import { ParsedGalleryList, ParsedPostItem, PostDetail } from '../interfaces/crawler.interface';
+import { findMentionedIp, parseWriterIp } from '../utils/ip-mention';
 
 const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1';
 
-const BOT_NICKNAMES = [
-  '오크트롤',
-  '입싸동기',
-  '세계의섬',
-  '니가가라',
-  'm2주작풍',
-  '투표는범죄',
-  '달리는토끼',
-  '골든핑거',
-  '달콤한초코',
-  '초록숲길',
-];
+// 이름이 겹치지 않게 확인할 같은 게시판의 최근 비회원 글 수 (목록 한두 페이지 분량)
+const RECENT_AUTHOR_NAME_LIMIT = 50;
 
 @Injectable()
 export class CrawlerService {
@@ -80,14 +72,15 @@ export class CrawlerService {
     // 마지막 수집 시각은 끝난 시각이 아니라 시작한 시각으로 남긴다 (화면 표시, 다음 수집 시각의 기준)
     const startedAt = new Date();
 
-    // 보존 단어 = 전체 공통 + 이 카드 (실행 시작 시 한 번만 읽는다)
-    const { preservedTerms: commonPreservedTerms } =
+    // 보존 단어·제외 키워드 = 전체 공통 + 이 카드 (실행 시작 시 한 번만 읽는다)
+    const { preservedTerms: commonPreservedTerms, excludeKeywords: commonExcludeKeywords } =
       await this.crawlerSettings.getSettings();
     const preservedTerms = mergePreservedTerms(
       parsePreservedTerms(commonPreservedTerms),
       parsePreservedTerms(target.preservedTerms),
     );
-    const excludeKeywords = parseExcludeKeywords(target.excludeKeywords);
+    // 같은 단어가 양쪽에 있으면 한 번만 (parseExcludeKeywords가 중복을 거른다)
+    const excludeKeywords = parseExcludeKeywords([commonExcludeKeywords, target.excludeKeywords].filter(Boolean).join('\n'));
 
     let collected = 0;
     let skipped = 0;
@@ -96,6 +89,7 @@ export class CrawlerService {
       alreadyCollected: 0,
       imageFiltered: 0,
       keywordFiltered: 0,
+      ipMentionFiltered: 0,
       fetchFailed: 0,
       beforeStart: 0,
       retryExhausted: 0,
@@ -122,6 +116,8 @@ export class CrawlerService {
       saved: boolean;
     }
     const qualifiedCandidates: ReadyCandidate[] = [];
+    // 이번 수집에서 지금까지 본 목록 페이지들의 작성자 아이피 ('아이피 언급 글 제외'에 쓴다)
+    const seenWriterIps = new Set<string>();
 
     try {
       // 수집할 페이지 범위 결정 (lowPage부터 highPage까지 순차 탐색하여 목표 수량 collectLimit 달성 시까지 수집)
@@ -148,11 +144,12 @@ export class CrawlerService {
         );
 
         // 1. 목록 가져오기 (해당 페이지의 조건 만족 글 후보군 전체 파싱)
-        const postItems = await this.fetchGalleryPostList(
+        const { items: postItems, writerIps } = await this.fetchGalleryPostList(
           target.galleryId,
           target.minRecommendCount,
           currentPage,
         );
+        writerIps.forEach((ip) => seenWriterIps.add(ip));
 
         this.logger.log(
           `Found ${postItems.length} candidate posts from gallery ${target.galleryId} (Page: ${currentPage})`,
@@ -231,6 +228,15 @@ export class CrawlerService {
             skipDetails.keywordFiltered++;
             continue;
           }
+          const titleIp = target.excludeIpMentions ? findMentionedIp(seenWriterIps, item.title) : null;
+          if (titleIp) {
+            this.logger.log(
+              `Skipping post ${item.sourcePostId}: title mentions writer IP "${titleIp}".`,
+            );
+            skipped++;
+            skipDetails.ipMentionFiltered++;
+            continue;
+          }
 
           try {
             // 2. 글 상세 조회
@@ -249,11 +255,12 @@ export class CrawlerService {
               continue;
             }
 
-            // 제외 키워드 검사 (목록의 제목이 잘려 있을 수 있어 상세 제목도 본다. 본문은 HTML 태그를 뺀 글자만)
+            // 제외 키워드·아이피 언급 검사 (목록의 제목이 잘려 있을 수 있어 상세 제목도 본다. 본문은 HTML 태그를 뺀 글자만)
+            const contentText = cheerio.load(postDetail.contentHtml).text();
             const contentKeyword = findExcludeKeyword(
               excludeKeywords,
               postDetail.title,
-              cheerio.load(postDetail.contentHtml).text(),
+              contentText,
             );
             if (contentKeyword) {
               this.logger.log(
@@ -261,6 +268,17 @@ export class CrawlerService {
               );
               skipped++;
               skipDetails.keywordFiltered++;
+              continue;
+            }
+            const contentIp = target.excludeIpMentions
+              ? findMentionedIp(seenWriterIps, postDetail.title, contentText)
+              : null;
+            if (contentIp) {
+              this.logger.log(
+                `Skipping post ${item.sourcePostId}: mentions writer IP "${contentIp}".`,
+              );
+              skipped++;
+              skipDetails.ipMentionFiltered++;
               continue;
             }
 
@@ -331,6 +349,18 @@ export class CrawlerService {
         orderFloorMs = last?.createdAt ? last.createdAt.getTime() : null;
       }
 
+      // 같은 게시판 목록에 같은 작성자 이름이 이어서 보이지 않도록, 최근 비회원 글에 쓴 이름은 다시 고르지 않는다
+      const recentAuthorNames = new Set(
+        (
+          await this.db
+            .select({ guestName: schema.posts.guestName })
+            .from(schema.posts)
+            .where(and(eq(schema.posts.boardId, target.targetBoardId), isNotNull(schema.posts.guestName)))
+            .orderBy(desc(schema.posts.createdAt))
+            .limit(RECENT_AUTHOR_NAME_LIMIT)
+        ).map((row) => row.guestName as string),
+      );
+
       for (let qIdx = 0; qIdx < executionQueue.length; qIdx++) {
         if (signal.aborted) {
           break;
@@ -360,6 +390,7 @@ export class CrawlerService {
             title: postDetail.title,
             content: processedContent,
             promptTone: target.promptTone,
+            commentPromptTone: target.commentPromptTone,
             preservedTerms,
             generateComments: shouldGenerateComments,
             commentsCount: postCommentsCount,
@@ -371,7 +402,10 @@ export class CrawlerService {
           }
 
           // 6. 작성자 닉네임 배합 (메인 + 보조 또는 기본 봇 닉네임)
-          const authorNickname = this.generateAuthorNickname(target);
+          const authorNickname = pickUnusedNickname(() => this.generateAuthorNickname(target), recentAuthorNames);
+          recentAuthorNames.add(authorNickname);
+          // 한 글의 댓글 작성자끼리, 그리고 글 작성자와 이름이 겹치지 않게
+          const usedCommentAuthors = new Set([authorNickname]);
 
           // 7-1. 초기 조회수 범위 계산
           const minView = target.viewCountMin ?? 5;
@@ -438,10 +472,14 @@ export class CrawlerService {
                   if (!cmt.content) continue;
 
                   // 댓글 작성자: 댓글 닉네임 배합 설정 적용 (없을 시 LLM 생성 닉네임 또는 봇 닉네임)
-                  const commentAuthor = this.generateCommentAuthorNickname(
-                    target,
-                    cmt.nickname,
-                  );
+                  // LLM이 만든 닉네임은 첫 후보로만 쓰고, 겹치면 봇 닉네임 조합으로 다시 고른다
+                  let llmNickname: string | undefined = cmt.nickname;
+                  const commentAuthor = pickUnusedNickname(() => {
+                    const name = this.generateCommentAuthorNickname(target, llmNickname);
+                    llmNickname = undefined;
+                    return name;
+                  }, usedCommentAuthors);
+                  usedCommentAuthors.add(commentAuthor);
 
                   // 분산 시간이 0이면(실시간 등록 모드) 등록 직후 약간의 시차 부여, 과거 분산 모드면 과거 타임라인 배치
                   let commentCreatedAt: Date;
@@ -606,7 +644,7 @@ export class CrawlerService {
     });
     if (!target) return null;
     try {
-      const items = await this.fetchGalleryPostList(target.galleryId, 0, 1);
+      const { items } = await this.fetchGalleryPostList(target.galleryId, 0, 1);
       const ids = items.map((item) => Number(item.sourcePostId)).filter(Number.isFinite);
       if (ids.length === 0) {
         this.logger.warn(`Could not read latest post number for gallery ${target.galleryId}; will retry on next crawl.`);
@@ -632,7 +670,7 @@ export class CrawlerService {
     galleryId: string,
     minRecommend: number,
     page: number = 1,
-  ): Promise<ParsedPostItem[]> {
+  ): Promise<ParsedGalleryList> {
     const queryString = page > 1 ? `?page=${page}` : '';
 
     // 1차: 일반 및 마이너 갤러리 URL 시도
@@ -673,14 +711,14 @@ export class CrawlerService {
         this.logger.warn(
           `Failed to fetch gallery list from ${targetUrl}, status: ${res.status}`,
         );
-        return [];
+        return { items: [], writerIps: [] };
       }
       html = await res.text();
     } else if (!res.ok) {
       this.logger.warn(
         `Failed to fetch gallery list from ${targetUrl}, status: ${res.status}`,
       );
-      return [];
+      return { items: [], writerIps: [] };
     }
 
     // PC 웹 목록에서 공지 및 고정글(icon_slow, icon_notice, 말머리 '고정', '공지' 등) ID 목록 추출
@@ -691,6 +729,7 @@ export class CrawlerService {
 
     const $ = cheerio.load(html);
     const results: ParsedPostItem[] = [];
+    const writerIps = new Set<string>();
 
     // 디시 모바일 게시판 항목 셀렉터
     const items = $('ul.gall-detail-lst > li, ul.gall-lst > li');
@@ -705,6 +744,10 @@ export class CrawlerService {
       ) {
         return;
       }
+
+      // 작성자 아이피는 수집 후보가 아닌 글(추천 수 부족, 고정글 등)에서도 모은다
+      const writerIp = parseWriterIp($el.find('.list-nick').first().text());
+      if (writerIp) writerIps.add(writerIp);
 
       // /board/xxx/ 또는 /mini/xxx/ 링크 탐색
       const linkEl = $el.find(`a[href*="/${galleryId}/"]`);
@@ -766,7 +809,7 @@ export class CrawlerService {
       }
     });
 
-    return results;
+    return { items: results, writerIps: [...writerIps] };
   }
 
   /**
@@ -1109,7 +1152,7 @@ export class CrawlerService {
       return selectedMain;
     }
 
-    return BOT_NICKNAMES[Math.floor(Math.random() * BOT_NICKNAMES.length)];
+    return randomBotNickname();
   }
 
   /**
@@ -1140,8 +1183,7 @@ export class CrawlerService {
     }
 
     return (
-      fallbackNickname ||
-      BOT_NICKNAMES[Math.floor(Math.random() * BOT_NICKNAMES.length)]
+      fallbackNickname || randomBotNickname()
     );
   }
 

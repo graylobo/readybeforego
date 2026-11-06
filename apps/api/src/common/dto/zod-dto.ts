@@ -23,6 +23,7 @@ import {
     UpdateUserRoleSchema,
     UpdateUserSchema,
     WarnUserSchema,
+    GrantPointsSchema,
     ClaimGuestNicknameSchema
 } from '@community/shared-types';
 
@@ -50,6 +51,7 @@ export class SuspendUserZodDto extends createZodDto(SuspendUserSchema) {}
 export class BanUserZodDto extends createZodDto(BanUserSchema) {}
 export class ReactivateUserZodDto extends createZodDto(ReactivateUserSchema) {}
 export class UpdateUserRoleZodDto extends createZodDto(UpdateUserRoleSchema) {}
+export class GrantPointsZodDto extends createZodDto(GrantPointsSchema) {}
 
 // Boards
 export class CreateBoardZodDto extends createZodDto(CreateBoardSchema) {}

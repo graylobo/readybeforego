@@ -15,8 +15,10 @@ import {
   CHAT_SOCKET_NAMESPACE,
   ErrorCode,
   ErrorMessages,
+  REALTIME_EVENTS,
 } from '@community/shared-types';
 import type {
+  ChatMessage,
   ChatDeletePayload,
   ChatErrorPayload,
   ChatJoinPayload,
@@ -30,6 +32,7 @@ import {
 } from './chat.service';
 import { PRESENCE_TOUCH_INTERVAL_MS } from './chat.constants';
 import { pickForwardedIp } from '../../common/utils/client-ip';
+import { RealtimeService } from '../realtime/realtime.service';
 
 type ChatSocket = Socket & {
   data: {
@@ -54,7 +57,10 @@ export class ChatGateway
 
   private unsubAvailability: (() => void) | null = null;
 
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   afterInit() {
     this.unsubAvailability = this.chatService.onAvailabilityChange((available) => {
@@ -168,7 +174,7 @@ export class ChatGateway
         room,
         body?.replyToId,
       );
-      this.server.to(room).emit(CHAT_EVENTS.MESSAGE, message);
+      await this.publishMessage(room, message);
     } catch (error) {
       this.handleSocketError(client, error);
     }
@@ -186,7 +192,7 @@ export class ChatGateway
       client.data.identity = identity;
 
       const result = await this.chatService.deleteMessage(identity, body?.id ?? '', room);
-      this.server.to(room).emit(CHAT_EVENTS.MESSAGE_DELETED, result);
+      await this.publishMessageDeleted(room, result);
     } catch (error) {
       this.handleSocketError(client, error);
     }
@@ -223,9 +229,23 @@ export class ChatGateway
     }
   }
 
-  broadcastHistoryClear(room: string) {
-    if (!this.server) return;
-    this.server.to(room).emit(CHAT_EVENTS.HISTORY, { room, messages: [] });
+  /*
+   * 채팅방의 모든 사람에게 알린다: 이 서버에 웹소켓으로 연결된 사람과, Supabase Realtime 채널을 듣는 사람 모두.
+   * (Supabase로 바꾸는 배포 중에는 예전 화면(웹소켓)과 새 화면(Realtime)이 섞여 있어도 서로의 메시지가 보이도록 양쪽에 보낸다)
+   */
+  async publishMessage(room: string, message: ChatMessage) {
+    this.server?.to(room).emit(CHAT_EVENTS.MESSAGE, message);
+    await this.realtime.broadcast(this.realtime.chatTopic(room), REALTIME_EVENTS.CHAT_MESSAGE, { ...message });
+  }
+
+  async publishMessageDeleted(room: string, result: { room: string; id: string }) {
+    this.server?.to(room).emit(CHAT_EVENTS.MESSAGE_DELETED, result);
+    await this.realtime.broadcast(this.realtime.chatTopic(room), REALTIME_EVENTS.CHAT_MESSAGE_DELETED, result);
+  }
+
+  async broadcastHistoryClear(room: string) {
+    this.server?.to(room).emit(CHAT_EVENTS.HISTORY, { room, messages: [] });
+    await this.realtime.broadcast(this.realtime.chatTopic(room), REALTIME_EVENTS.CHAT_HISTORY_CLEARED, { room });
   }
 
   private readGuestToken(client: Socket): string | undefined {

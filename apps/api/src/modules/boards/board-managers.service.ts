@@ -90,11 +90,12 @@ export class BoardManagersService {
   }
 
   /** 매니저가 고칠 수 있는 게시판 설정: 설명, 관리자 표시 여부 (보낸 항목만) */
-  async updateSettings(slug: string, viewer: BoardViewer, settings: { description?: string; showManagers?: boolean }) {
+  async updateSettings(slug: string, viewer: BoardViewer, settings: { description?: string | null; showManagers?: boolean }) {
     const board = await this.requireBoard(slug);
     await this.assertManager(board.id, viewer);
-    const updates: { description?: string; showManagers?: boolean } = {};
-    if (settings.description !== undefined) updates.description = settings.description.trim();
+    const updates: { description?: string | null; showManagers?: boolean } = {};
+    // null은 설명 없음
+    if (settings.description !== undefined) updates.description = settings.description?.trim() || null;
     if (settings.showManagers !== undefined) updates.showManagers = settings.showManagers;
     return this.boardsService.update(board.id, updates);
   }

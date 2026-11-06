@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CrawlerTarget } from '@/lib/api/crawler';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 import {
   Timer,
@@ -40,22 +48,44 @@ interface TargetTimerControlProps {
   isPending?: boolean;
 }
 
+const INTERVAL_PRESETS = [3, 5, 10, 30];
+const STOP_PRESETS = [
+  { label: '30분', val: 30 },
+  { label: '1시간', val: 60 },
+  { label: '2시간', val: 120 },
+];
+
+/** 작동 시간 표시: 0이면 무제한 */
+function formatStopMinutes(minutes: number) {
+  if (minutes <= 0) return '무제한 (타이머 없음)';
+  if (minutes % 60 === 0) return `${minutes / 60}시간`;
+  return minutes > 60 ? `${Math.floor(minutes / 60)}시간 ${minutes % 60}분` : `${minutes}분`;
+}
+
+/** 선택된 항목 공통 스타일 (주기·작동 시간 모두 같은 모양으로 보이게) */
+const selectedOptionClass = 'border-primary bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary';
+
+/** 숫자 인풋의 위아래 화살표를 숨겨 placeholder가 잘리지 않게 */
+const numberInputClass =
+  'h-6 text-[11px] px-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+
 export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerControlProps) {
   const [open, setOpen] = useState(false);
-  const [customStopMinutes, setCustomStopMinutes] = useState<string>(
-    target.autoStopMinutes > 0 ? String(target.autoStopMinutes) : ''
-  );
-  const [customIntervalMinutes, setCustomIntervalMinutes] = useState<string>(
-    String(target.crawlIntervalMinutes ?? 10)
-  );
-  const [customIntervalMaxMinutes, setCustomIntervalMaxMinutes] = useState<string>(
-    target.crawlIntervalMaxMinutes ? String(target.crawlIntervalMaxMinutes) : ''
-  );
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // 팝오버에서 고른 값은 [저장] → 확인 모달을 거쳐야 반영된다
+  const [draftIntervalMin, setDraftIntervalMin] = useState('');
+  const [draftIntervalMax, setDraftIntervalMax] = useState('');
+  const [draftStop, setDraftStop] = useState('');
   const [now, setNow] = useState(Date.now());
 
   const isTimerActive = target.isActive && (target.autoStopMinutes ?? 0) > 0;
   const currentInterval = formatCrawlInterval(target);
-  const isFixedInterval = !target.crawlIntervalMaxMinutes || target.crawlIntervalMaxMinutes <= target.crawlIntervalMinutes;
+  const savedIntervalMin = target.crawlIntervalMinutes ?? 10;
+  const savedIntervalMax =
+    target.crawlIntervalMaxMinutes && target.crawlIntervalMaxMinutes > savedIntervalMin
+      ? target.crawlIntervalMaxMinutes
+      : null;
+  const savedStop = target.autoStopMinutes ?? 0;
 
   // 타이머가 동작 중일 때만 1초마다 시간 갱신
   useEffect(() => {
@@ -66,20 +96,21 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
     return () => clearInterval(interval);
   }, [isTimerActive]);
 
-  // target 값 변경 시 인풋 동기화
-  useEffect(() => {
-    if (target.autoStopMinutes > 0) {
-      setCustomStopMinutes(String(target.autoStopMinutes));
-    } else {
-      setCustomStopMinutes('');
-    }
-    setCustomIntervalMinutes(String(target.crawlIntervalMinutes ?? 10));
-    setCustomIntervalMaxMinutes(target.crawlIntervalMaxMinutes ? String(target.crawlIntervalMaxMinutes) : '');
-  }, [target.autoStopMinutes, target.crawlIntervalMinutes, target.crawlIntervalMaxMinutes]);
+  // 팝오버를 열 때마다 저장된 값으로 초안을 맞춘다 (저장 안 하고 닫으면 버려짐)
+  const resetDraft = () => {
+    setDraftIntervalMin(String(savedIntervalMin));
+    setDraftIntervalMax(savedIntervalMax ? String(savedIntervalMax) : '');
+    setDraftStop(String(savedStop));
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) resetDraft();
+    setOpen(next);
+  };
 
   // 남은 시간 계산
   const activatedMs = target.activatedAt ? new Date(target.activatedAt).getTime() : now;
-  const totalMs = (target.autoStopMinutes ?? 0) * 60 * 1000;
+  const totalMs = savedStop * 60 * 1000;
   const elapsedMs = Math.max(0, now - activatedMs);
   const remainMs = Math.max(0, totalMs - elapsedMs);
 
@@ -88,61 +119,78 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
   const remainSeconds = remainTotalSeconds % 60;
   const progressPercent = totalMs > 0 ? Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100)) : 0;
 
-  /**
-   * 1. 수집 주기 변경 (얼마나 자주 가져올지)
-   */
-  const handleSetIntervalMinutes = (min: number, max: number | null = null) => {
-    onUpdate({ crawlIntervalMinutes: min, crawlIntervalMaxMinutes: max });
-    toast.success(
-      max && max > min
-        ? `[${target.name}] 자동 수집 주기가 ${min}~${max}분 사이 무작위로 설정되었습니다.`
-        : `[${target.name}] 자동 수집 주기가 ${min}분마다로 설정되었습니다.`
-    );
-  };
+  // 초안 해석: 최대가 비었거나 최소 이하면 고정 주기
+  const draftMin = parseInt(draftIntervalMin, 10);
+  const draftMaxRaw = draftIntervalMax.trim() === '' ? null : parseInt(draftIntervalMax, 10);
+  const draftMax = draftMaxRaw !== null && draftMaxRaw > draftMin ? draftMaxRaw : null;
+  const draftStopVal = draftStop.trim() === '' ? NaN : parseInt(draftStop, 10);
 
-  /**
-   * 2. 타이머 지속시간 설정 (총 몇 시간 돌릴지)
-   */
-  const handleSetTimerMinutes = (minutes: number) => {
-    if (target.isActive) {
-      onUpdate({
-        autoStopMinutes: minutes,
-        activatedAt: new Date().toISOString(),
-      });
-      toast.success(
-        minutes === 0
-          ? `[${target.name}] 무제한(상시) 수집으로 전환되었습니다.`
-          : `[${target.name}] 타이머가 지금부터 ${minutes}분 후 자동종료로 재설정되었습니다.`
-      );
-    } else {
-      onUpdate({
-        autoStopMinutes: minutes,
-      });
-      toast.success(
-        minutes === 0
-          ? `[${target.name}] 무제한(상시)으로 설정되었습니다. (수집 시작: 우측 [시작] 클릭)`
-          : `[${target.name}] ${minutes >= 60 ? `${Math.floor(minutes / 60)}시간` : `${minutes}분`} 타이머가 설정되었습니다. (수집 시작: 우측 [시작] 클릭)`
-      );
+  const isIntervalPreset = draftMax === null && INTERVAL_PRESETS.includes(draftMin);
+  const isStopPreset = draftStopVal === 0 || STOP_PRESETS.some(({ val }) => val === draftStopVal);
+  const isCustomInterval = !isIntervalPreset && !isNaN(draftMin) && draftMin > 0;
+  const isCustomStop = !isStopPreset && !isNaN(draftStopVal) && draftStopVal > 0;
+
+  const intervalChanged = draftMin !== savedIntervalMin || draftMax !== savedIntervalMax;
+  const stopChanged = draftStopVal !== savedStop;
+  const isDirty = intervalChanged || stopChanged;
+
+  const formatDraftInterval = () => (draftMax ? `${draftMin}~${draftMax}분` : `${draftMin}분`);
+
+  /** 저장 전 입력 확인 → 확인 모달 열기 */
+  const handleSaveClick = () => {
+    if (isNaN(draftMin) || draftMin < 1 || draftMin > 1440) {
+      toast.error('수집 간격은 1~1440분 사이로 입력해주세요.');
+      return;
     }
+    if (draftMaxRaw !== null && (isNaN(draftMaxRaw) || draftMaxRaw < draftMin || draftMaxRaw > 1440)) {
+      toast.error('최대는 최소 이상 1440분 이하여야 합니다 (고정 주기는 최대를 비워 두세요).');
+      return;
+    }
+    if (isNaN(draftStopVal) || draftStopVal < 0 || draftStopVal > 10080) {
+      toast.error('작동 시간은 0~10080분 사이로 입력해주세요 (0은 무제한).');
+      return;
+    }
+    // 팝오버를 닫아야 확인 모달 클릭이 팝오버 바깥 클릭으로 잡히지 않는다
+    setOpen(false);
+    setConfirmOpen(true);
+  };
+
+  /** 확인 모달에서 [저장] */
+  const handleConfirmSave = () => {
+    const data: Partial<CrawlerTarget> = {};
+    if (intervalChanged) {
+      data.crawlIntervalMinutes = draftMin;
+      data.crawlIntervalMaxMinutes = draftMax;
+    }
+    if (stopChanged) {
+      data.autoStopMinutes = draftStopVal;
+      // 수집 중이면 타이머를 지금부터 다시 센다
+      if (target.isActive) data.activatedAt = new Date().toISOString();
+    }
+    onUpdate(data);
+    setConfirmOpen(false);
+  };
+
+  /** 확인 모달에서 [다시 수정] — 고르던 값을 그대로 두고 팝오버로 돌아간다 */
+  const handleBackToEdit = () => {
+    setConfirmOpen(false);
+    setOpen(true);
   };
 
   /**
-   * 3. 수집 시작 실행 (우측 시작 버튼)
+   * 수집 시작 실행 (우측 시작 버튼)
    */
   const handleStart = () => {
     onUpdate({
       isActive: true,
       activatedAt: new Date().toISOString(),
     });
-    const timerLabel =
-      (target.autoStopMinutes ?? 0) > 0
-        ? `${target.autoStopMinutes}분 타이머`
-        : '무제한';
+    const timerLabel = savedStop > 0 ? `${savedStop}분 타이머` : '무제한';
     toast.success(`[${target.name}] ${currentInterval} 간격 · ${timerLabel} 수집을 시작합니다. (첫 수집은 1분 안에)`);
   };
 
   /**
-   * 4. 수집 중지 실행 (우측 중지 버튼)
+   * 수집 중지 실행 (우측 중지 버튼)
    */
   const handleStop = () => {
     onUpdate({
@@ -152,7 +200,7 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
   };
 
   /**
-   * 시간 연장 (현재 동작 중일 때)
+   * 시간 연장 (현재 동작 중일 때, 누르면 바로 반영)
    */
   const handleExtend = (extraMinutes: number) => {
     const newMinutes = Math.max(1, remainMinutes + extraMinutes);
@@ -161,38 +209,6 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
       activatedAt: new Date().toISOString(),
     });
     toast.success(`[${target.name}] 타이머가 ${extraMinutes}분 연장되었습니다.`);
-  };
-
-  /**
-   * 직접 수집 주기 입력 저장
-   */
-  const handleCustomIntervalSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = parseInt(customIntervalMinutes, 10);
-    if (isNaN(val) || val <= 0) {
-      toast.error('1분 이상의 올바른 숫자를 입력해주세요.');
-      return;
-    }
-    // 최대를 비우면 고정 주기
-    const maxVal = customIntervalMaxMinutes.trim() === '' ? null : parseInt(customIntervalMaxMinutes, 10);
-    if (maxVal !== null && (isNaN(maxVal) || maxVal < val)) {
-      toast.error('최대는 최소 이상이어야 합니다 (고정 주기는 최대를 비워 두세요).');
-      return;
-    }
-    handleSetIntervalMinutes(val, maxVal);
-  };
-
-  /**
-   * 직접 타이머 입력 저장
-   */
-  const handleCustomStopSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = parseInt(customStopMinutes, 10);
-    if (isNaN(val) || val < 0) {
-      toast.error('0 이상의 올바른 숫자를 입력해주세요 (0은 무제한).');
-      return;
-    }
-    handleSetTimerMinutes(val);
   };
 
   return (
@@ -205,7 +221,7 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
       )}
     >
       {/* 1. 좌측 영역: 주기 및 타이머 시간 설정 (클릭 시 팝오버 오픈) */}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -239,7 +255,7 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
               <>
                 <Timer className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span>
-                  {currentInterval} 간격 · {target.autoStopMinutes > 0 ? `${target.autoStopMinutes}분` : '무제한'}
+                  {currentInterval} 간격 · {savedStop > 0 ? `${savedStop}분` : '무제한'}
                 </span>
                 <ChevronDown className="h-3 w-3 text-muted-foreground opacity-60 ml-0.5" />
               </>
@@ -290,11 +306,11 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
               </div>
 
               <div className="text-[10px] text-muted-foreground flex justify-between">
-                <span>설정: 총 {target.autoStopMinutes}분</span>
+                <span>설정: 총 {savedStop}분</span>
                 <span>{Math.floor(elapsedMs / 60000)}분 경과</span>
               </div>
 
-              {/* 퀵 연장 버튼 */}
+              {/* 퀵 연장 버튼 (누르면 바로 반영) */}
               <div className="pt-1 flex items-center gap-1.5">
                 <Button
                   variant="outline"
@@ -326,54 +342,73 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
                 </Label>
               </div>
               <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0">
-                {currentInterval}마다
+                지금 {currentInterval}마다
               </Badge>
             </div>
 
             <div className="grid grid-cols-4 gap-1 pt-0.5">
-              {[3, 5, 10, 30].map((mins) => (
-                <Button
-                  key={mins}
-                  variant={isFixedInterval && target.crawlIntervalMinutes === mins ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-6 text-[11px] font-medium cursor-pointer px-1"
-                  onClick={() => handleSetIntervalMinutes(mins)}
-                >
-                  {mins}분마다
-                  {isFixedInterval && target.crawlIntervalMinutes === mins && <Check className="h-2.5 w-2.5 ml-0.5" />}
-                </Button>
-              ))}
+              {INTERVAL_PRESETS.map((mins) => {
+                const selected = isIntervalPreset && draftMin === mins;
+                return (
+                  <Button
+                    key={mins}
+                    variant="outline"
+                    size="sm"
+                    className={cn('h-6 text-[11px] font-medium cursor-pointer px-1', selected && selectedOptionClass)}
+                    onClick={() => {
+                      setDraftIntervalMin(String(mins));
+                      setDraftIntervalMax('');
+                    }}
+                  >
+                    {mins}분마다
+                    {selected && <Check className="h-2.5 w-2.5 ml-0.5" />}
+                  </Button>
+                );
+              })}
             </div>
 
-            <form onSubmit={handleCustomIntervalSubmit} className="flex items-center gap-1 pt-0.5">
+            {/* 직접 입력: 프리셋이 아닌 값이면 이 줄이 선택된 것으로 보인다 */}
+            <div
+              className={cn(
+                'flex items-center gap-1 rounded-md border border-transparent p-1 -mx-1',
+                isCustomInterval && 'border-primary bg-primary/10'
+              )}
+            >
+              <span
+                className={cn(
+                  'text-[10px] shrink-0 w-11 flex items-center gap-0.5',
+                  isCustomInterval ? 'text-primary font-semibold' : 'text-muted-foreground'
+                )}
+              >
+                {isCustomInterval && <Check className="h-2.5 w-2.5" />}
+                직접
+              </span>
               <Input
                 type="number"
                 min="1"
                 max="1440"
-                placeholder="최소"
+                placeholder="최소(분)"
                 aria-label="수집 주기 최소(분)"
-                value={customIntervalMinutes}
-                onChange={(e) => setCustomIntervalMinutes(e.target.value)}
-                className="h-6 text-[11px] px-2"
+                value={draftIntervalMin}
+                onChange={(e) => setDraftIntervalMin(e.target.value)}
+                className={numberInputClass}
               />
               <span className="text-muted-foreground">~</span>
               <Input
                 type="number"
                 min="1"
                 max="1440"
-                placeholder="최대 (비우면 고정)"
-                aria-label="수집 주기 최대(분)"
-                value={customIntervalMaxMinutes}
-                onChange={(e) => setCustomIntervalMaxMinutes(e.target.value)}
-                className="h-6 text-[11px] px-2"
+                placeholder="최대(선택)"
+                aria-label="수집 주기 최대(분), 비우면 고정 주기"
+                value={draftIntervalMax}
+                onChange={(e) => setDraftIntervalMax(e.target.value)}
+                className={numberInputClass}
               />
-              <Button type="submit" size="sm" variant="secondary" className="h-6 px-2.5 text-[11px] shrink-0 cursor-pointer">
-                주기 적용
-              </Button>
-            </form>
+              <span className="text-[10px] text-muted-foreground shrink-0">분</span>
+            </div>
             <p className="text-[10px] text-muted-foreground leading-snug">
-              최대를 넣으면 매번 최소~최대 사이에서 다음 수집 시각을 무작위로 정합니다 (예: 5~10분 → 7분 뒤, 5분 뒤 …). 글이 일정한
-              간격으로 올라와 자동 등록처럼 보이는 것을 줄입니다.
+              최대를 비우면 고정 주기, 넣으면 매번 최소~최대 사이에서 다음 수집 시각을 무작위로 정합니다 (예: 5~10분 → 7분
+              뒤, 5분 뒤 …). 글이 일정한 간격으로 올라와 자동 등록처럼 보이는 것을 줄입니다.
             </p>
           </div>
 
@@ -387,69 +422,151 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
                 </Label>
               </div>
               <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0">
-                {target.autoStopMinutes > 0 ? `${target.autoStopMinutes}분 후 정지` : '무제한'}
+                지금 {savedStop > 0 ? `${savedStop}분 후 정지` : '무제한'}
               </Badge>
             </div>
 
             <div className="grid grid-cols-3 gap-1 pt-0.5">
-              {[
-                { label: '30분', val: 30 },
-                { label: '1시간', val: 60 },
-                { label: '2시간', val: 120 },
-              ].map(({ label, val }) => (
-                <Button
-                  key={val}
-                  variant={target.autoStopMinutes === val ? 'default' : 'outline'}
-                  size="sm"
-                  className={cn(
-                    'h-6 text-[11px] font-medium cursor-pointer px-1',
-                    val === 60 && target.autoStopMinutes !== 60 && 'border-amber-500/40 text-amber-700 dark:text-amber-300'
-                  )}
-                  onClick={() => handleSetTimerMinutes(val)}
-                >
-                  {label}
-                  {target.autoStopMinutes === val && <Check className="h-2.5 w-2.5 ml-0.5" />}
-                </Button>
-              ))}
+              {STOP_PRESETS.map(({ label, val }) => {
+                const selected = draftStopVal === val;
+                return (
+                  <Button
+                    key={val}
+                    variant="outline"
+                    size="sm"
+                    className={cn('h-6 text-[11px] font-medium cursor-pointer px-1', selected && selectedOptionClass)}
+                    onClick={() => setDraftStop(String(val))}
+                  >
+                    {label}
+                    {selected && <Check className="h-2.5 w-2.5 ml-0.5" />}
+                  </Button>
+                );
+              })}
             </div>
 
             <Button
-              variant={target.autoStopMinutes === 0 ? 'secondary' : 'outline'}
+              variant="outline"
               size="sm"
-              className="w-full h-6 text-[11px] justify-between cursor-pointer px-2"
-              onClick={() => handleSetTimerMinutes(0)}
+              className={cn(
+                'w-full h-6 text-[11px] justify-between cursor-pointer px-2',
+                draftStopVal === 0 && selectedOptionClass
+              )}
+              onClick={() => setDraftStop('0')}
             >
               <span className="flex items-center">
-                <InfinityIcon className="h-3 w-3 mr-1 text-muted-foreground" />
+                <InfinityIcon className={cn('h-3 w-3 mr-1', draftStopVal === 0 ? 'text-primary' : 'text-muted-foreground')} />
                 무제한 상시 수집 (타이머 없이 계속 실행)
               </span>
-              {target.autoStopMinutes === 0 && <Check className="h-2.5 w-2.5" />}
+              {draftStopVal === 0 && <Check className="h-2.5 w-2.5" />}
             </Button>
 
-            <form onSubmit={handleCustomStopSubmit} className="flex gap-1 pt-0.5">
+            <div
+              className={cn(
+                'flex items-center gap-1 rounded-md border border-transparent p-1 -mx-1',
+                isCustomStop && 'border-primary bg-primary/10'
+              )}
+            >
+              <span
+                className={cn(
+                  'text-[10px] shrink-0 w-11 flex items-center gap-0.5',
+                  isCustomStop ? 'text-primary font-semibold' : 'text-muted-foreground'
+                )}
+              >
+                {isCustomStop && <Check className="h-2.5 w-2.5" />}
+                직접
+              </span>
               <Input
                 type="number"
                 min="0"
                 max="10080"
-                placeholder="직접 입력 (예: 45, 0은 무제한)"
-                value={customStopMinutes}
-                onChange={(e) => setCustomStopMinutes(e.target.value)}
-                className="h-6 text-[11px] px-2"
+                placeholder="예: 45 (0은 무제한)"
+                aria-label="작동 시간(분), 0은 무제한"
+                value={draftStop}
+                onChange={(e) => setDraftStop(e.target.value)}
+                className={numberInputClass}
               />
-              <Button type="submit" size="sm" variant="secondary" className="h-6 px-2.5 text-[11px] shrink-0 cursor-pointer">
-                타이머 적용
-              </Button>
-            </form>
+              <span className="text-[10px] text-muted-foreground shrink-0">분</span>
+            </div>
           </div>
 
-          {/* 4. 하단 안내 */}
-          <div className="pt-0.5 text-center">
-            <p className="text-[10px] text-muted-foreground">
-              👉 주기와 타이머를 설정하신 후, 바로 옆 <b>[시작] / [중지]</b> 버튼을 누르면 수집이 가동됩니다.
-            </p>
+          {/* 4. 저장 / 취소 */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 text-[11px] cursor-pointer"
+              onClick={() => setOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 flex-1 text-[11px] cursor-pointer"
+              disabled={!isDirty || isPending}
+              onClick={handleSaveClick}
+            >
+              저장
+            </Button>
           </div>
+          <p className="text-[10px] text-muted-foreground text-center">
+            {isDirty
+              ? '바뀐 설정은 [저장]을 눌러야 반영됩니다.'
+              : '👉 저장한 뒤 바로 옆 [시작] / [중지] 버튼으로 수집을 켜고 끕니다.'}
+          </p>
         </PopoverContent>
       </Popover>
+
+      {/* 저장 전 확인 모달: 바뀔 설정을 다시 보여준다 */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>수집 설정을 저장할까요?</DialogTitle>
+            <DialogDescription>[{target.name}] 수집 설정이 아래처럼 바뀝니다.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground shrink-0">수집 간격</span>
+              <span className={cn('text-right', intervalChanged && 'font-semibold')}>
+                {intervalChanged && (
+                  <span className="text-muted-foreground font-normal line-through mr-1.5">{currentInterval}</span>
+                )}
+                {formatDraftInterval()}마다{draftMax && ' (무작위)'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground shrink-0">작동 시간</span>
+              <span className={cn('text-right', stopChanged && 'font-semibold')}>
+                {stopChanged && (
+                  <span className="text-muted-foreground font-normal line-through mr-1.5">
+                    {formatStopMinutes(savedStop)}
+                  </span>
+                )}
+                {formatStopMinutes(draftStopVal)}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {target.isActive
+              ? stopChanged
+                ? draftStopVal > 0
+                  ? `지금 수집 중입니다. 저장하면 지금부터 ${formatStopMinutes(draftStopVal)} 뒤 자동으로 멈춥니다.`
+                  : '지금 수집 중입니다. 저장하면 멈추지 않고 계속 수집합니다.'
+                : '지금 수집 중입니다. 저장하면 다음 수집부터 바뀐 간격이 적용됩니다.'
+              : '지금은 수집이 꺼져 있습니다. 저장한 뒤 [시작]을 눌러야 수집을 시작합니다.'}
+          </p>
+
+          <DialogFooter>
+            <Button variant="outline" className="cursor-pointer" onClick={handleBackToEdit}>
+              다시 수정
+            </Button>
+            <Button className="cursor-pointer" disabled={isPending} onClick={handleConfirmSave}>
+              저장
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 2. 우측 영역: 시작 / 중지 실행 버튼 (일체형으로 결합) */}
       {target.isActive ? (
@@ -470,8 +587,8 @@ export function TargetTimerControl({ target, onUpdate, isPending }: TargetTimerC
           disabled={isPending}
           className="flex items-center gap-1 px-3 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer font-semibold shrink-0"
           title={
-            target.autoStopMinutes > 0
-              ? `${currentInterval} 주기 · ${target.autoStopMinutes}분 타이머로 수집 시작`
+            savedStop > 0
+              ? `${currentInterval} 주기 · ${savedStop}분 타이머로 수집 시작`
               : `${currentInterval} 주기 · 무제한 수집 시작`
           }
         >

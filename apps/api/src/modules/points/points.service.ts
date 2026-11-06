@@ -95,6 +95,32 @@ export class PointsService implements OnModuleInit {
       }, tx);
   }
 
+  /**
+   * 시스템 관리자가 포인트 지급. 사용 가능 포인트만 늘리고 레벨에 쓰는 누적 포인트는 그대로 둔다.
+   * 내역에는 지급한 관리자를 남긴다 (relatedType 'admin_grant', relatedId 관리자 id)
+   */
+  async grantByAdmin(
+    userId: string,
+    amount: number,
+    reason: string,
+    adminId: string,
+  ) {
+    return this.pointsRepo.transaction(async (tx) => {
+      const row = await this.pointsRepo.applyPointsDelta(userId, 0, amount, tx);
+      await this.pointsRepo.insertPointHistory(
+        {
+          userId,
+          points: amount,
+          reason: `관리자 지급: ${reason}`,
+          relatedId: adminId,
+          relatedType: 'admin_grant',
+        },
+        tx,
+      );
+      return row;
+    });
+  }
+
   async deductPoints(userId: string, amount: number, reason: string, relatedId?: string, relatedType?: string, tx?: any) {
       if (amount <= 0) return true;
 

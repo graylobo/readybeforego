@@ -102,4 +102,30 @@ describe('AuthService', () => {
       expect(result).toEqual({ id: '1', name: '테스터' });
     });
   });
+  describe('validateKakaoUser', () => {
+    const kakaoProfile = (account: Record<string, unknown>) => ({
+      id: 123,
+      displayName: '카카오닉',
+      _json: { kakao_account: account, properties: {} },
+    });
+
+    it('카카오가 인증·유효하다고 한 이메일만 저장한다', async () => {
+      await service.validateKakaoUser(
+        kakaoProfile({ email: 'a@kakao.com', is_email_valid: true, is_email_verified: true }),
+      );
+      expect(usersService.createOrUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'a@kakao.com', kakaoId: '123' }),
+      );
+    });
+
+    it('인증되지 않았거나 동의하지 않아 없는 이메일은 쓰지 않는다', async () => {
+      await service.validateKakaoUser(
+        kakaoProfile({ email: 'a@kakao.com', is_email_valid: true, is_email_verified: false }),
+      );
+      await service.validateKakaoUser(kakaoProfile({}));
+      for (const [data] of usersService.createOrUpdate.mock.calls) {
+        expect(data.email).toBeUndefined();
+      }
+    });
+  });
 });

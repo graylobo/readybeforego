@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { count, eq, sql, desc, and, isNull } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
 
@@ -15,96 +15,6 @@ export class AdminRepository {
 
   async transaction<T>(cb: (tx: Transaction) => Promise<T>): Promise<T> {
     return this.db.transaction(cb);
-  }
-
-  async countTotalUsers(tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db.select({ count: count() }).from(schema.users);
-      return result.count;
-  }
-
-  async countTodayUsers(today: Date, tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db
-          .select({ count: count() })
-          .from(schema.users)
-          .where(sql`${schema.users.createdAt} >= ${today}`);
-      return result.count;
-  }
-
-  async countTotalBoards(tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db.select({ count: count() }).from(schema.boards);
-      return result.count;
-  }
-
-  async countTotalPosts(tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db
-          .select({ count: count() })
-          .from(schema.posts)
-          .where(sql`${schema.posts.deletedAt} IS NULL`);
-      return result.count;
-  }
-
-  async countTodayPosts(today: Date, tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db
-          .select({ count: count() })
-          .from(schema.posts)
-          .where(and(
-              sql`${schema.posts.createdAt} >= ${today}`,
-              sql`${schema.posts.deletedAt} IS NULL`
-          ));
-      return result.count;
-  }
-
-  async countTotalComments(tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db
-          .select({ count: count() })
-          .from(schema.comments)
-          .where(sql`${schema.comments.deletedAt} IS NULL`);
-      return result.count;
-  }
-
-  async countTodayComments(today: Date, tx?: Transaction) {
-      const db = tx ?? this.db;
-      const [result] = await db
-          .select({ count: count() })
-          .from(schema.comments)
-          .where(and(
-              sql`${schema.comments.createdAt} >= ${today}`,
-              sql`${schema.comments.deletedAt} IS NULL`
-          ));
-      return result.count;
-  }
-
-  async getTopBoards(limit: number, tx?: Transaction) {
-      const db = tx ?? this.db;
-      return db.select({
-          id: schema.boards.id,
-          name: schema.boards.name,
-          slug: schema.boards.slug,
-          postCount: count(schema.posts.id),
-      })
-      .from(schema.boards)
-      .leftJoin(schema.posts, and(eq(schema.posts.boardId, schema.boards.id), isNull(schema.posts.deletedAt)))
-      .groupBy(schema.boards.id)
-      .orderBy(desc(count(schema.posts.id)))
-      .limit(limit);
-  }
-
-  async getRecentModerationLogs(limit: number, tx?: Transaction) {
-      const db = tx ?? this.db;
-      return db.query.userModerationLogs.findMany({
-          limit,
-          orderBy: [desc(schema.userModerationLogs.createdAt)],
-          with: {
-              user: { columns: { name: true } },
-              admin: { columns: { name: true } },
-          }
-      });
   }
 
   async findUserById(userId: string, tx?: Transaction) {

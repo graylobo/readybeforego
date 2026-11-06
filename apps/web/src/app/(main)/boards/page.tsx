@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBoardDirectory } from '@/hooks/queries/use-board-community-queries';
+import { useSiteSettings } from '@/hooks/queries/use-site-queries';
 import { LayoutGrid, Lock, PlusCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -16,6 +17,7 @@ export default function BoardsPage() {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const { data: boards, isLoading } = useBoardDirectory(query);
+  const { data: settings } = useSiteSettings();
 
   const systemBoards = (boards ?? []).filter((b) => b.type === 'system');
   const userBoards = (boards ?? []).filter((b) => b.type === 'user');
@@ -60,8 +62,8 @@ export default function BoardsPage() {
       ) : (
         <div className="space-y-8">
           <Link href="/board/all" className="block rounded-xl border bg-card p-4 hover:border-primary/50 transition-colors">
-            <div className="font-semibold">전체 게시판</div>
-            <div className="text-sm text-muted-foreground">모든 게시판의 최신 글을 한 곳에서 봅니다.</div>
+            <div className="font-semibold">{settings?.allBoardName ?? '전체 게시판'}</div>
+            <div className="text-sm text-muted-foreground">{settings?.allBoardDescription || '모든 게시판의 최신 글을 한 곳에서 봅니다.'}</div>
           </Link>
           {!query && <BoardSection title="기본 게시판" boards={systemBoards} />}
           <BoardSection

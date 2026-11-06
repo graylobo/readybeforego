@@ -58,7 +58,6 @@ export async function getPageEntries(): Promise<SitemapEntry[]> {
     { url: `${baseUrl}/board/all`, changeFrequency: 'hourly', priority: 0.8 },
     { url: `${baseUrl}/boards`, changeFrequency: 'daily', priority: 0.6 },
     { url: `${baseUrl}/points`, changeFrequency: 'daily', priority: 0.5 },
-    { url: `${baseUrl}/search`, changeFrequency: 'weekly', priority: 0.5 },
   ];
   const boards = await boardApi.getBoards();
   const boardPages = boards

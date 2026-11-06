@@ -5,6 +5,7 @@ import { USER_ROLES } from '@community/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { 
     BanUserZodDto, 
+    GrantPointsZodDto, 
     ReactivateUserZodDto, 
     SuspendUserZodDto, 
     UpdatePointPolicyZodDto, 
@@ -47,12 +48,6 @@ export class AdminController {
     return this.usersService.update(id, { role: data.role as any });
   }
 
-  @Get('dashboard')
-  @ApiOperation({ summary: '관리자 대시보드 통계' })
-  async getDashboard() {
-    return this.adminService.getDashboardStats();
-  }
-
   @Post('users/:id/warn')
   @ApiOperation({ summary: '사용자 경고 부여' })
   @ApiBody({ type: WarnUserZodDto })
@@ -83,6 +78,19 @@ export class AdminController {
   @UsePipes(new ZodValidationPipe(ReactivateUserZodDto))
   async reactivateUser(@Param('id') id: string, @Body() data: ReactivateUserZodDto, @Req() req: any) {
     return this.adminService.reactivateUser(req.user.id, id, data.reason);
+  }
+
+  @Post('users/:id/points')
+  @ApiOperation({ summary: '회원에게 포인트 지급 (시스템 관리자)' })
+  @ApiBody({ type: GrantPointsZodDto })
+  @Roles(USER_ROLES.SUPER_ADMIN)
+  @UsePipes(new ZodValidationPipe(GrantPointsZodDto))
+  async grantPoints(
+    @Param('id') id: string,
+    @Body() data: GrantPointsZodDto,
+    @Req() req: any,
+  ) {
+    return this.adminService.grantPoints(req.user.id, id, data.amount, data.reason);
   }
 
   @Get('points/policies')

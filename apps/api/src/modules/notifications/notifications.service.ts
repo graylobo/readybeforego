@@ -3,6 +3,8 @@ import { Subject, Observable } from 'rxjs';
 import Redis from 'ioredis';
 import { NotificationsRepository } from './notifications.repository';
 import { REDIS_PUBLISHER, REDIS_SUBSCRIBER } from '../redis/redis.constants';
+import { REALTIME_EVENTS } from '@community/shared-types';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class NotificationsService implements OnModuleDestroy {
@@ -13,6 +15,7 @@ export class NotificationsService implements OnModuleDestroy {
     private readonly notificationsRepo: NotificationsRepository,
     @Inject(REDIS_PUBLISHER) private readonly redisPublisher: Redis,
     @Inject(REDIS_SUBSCRIBER) private readonly redisSubscriber: Redis,
+    private readonly realtime: RealtimeService,
   ) {
     this.initRedisSubscription();
   }
@@ -67,6 +70,8 @@ export class NotificationsService implements OnModuleDestroy {
       // 🚀 Drizzle DB 저장 성공 시 Redis Pub/Sub을 통해 모든 분산 서버 인스턴스로 실시간 이벤트 전송!
       const channel = `notification:user:${data.userId}`;
       await this.redisPublisher.publish(channel, JSON.stringify(created[0]));
+      // Supabase Realtime을 쓰면 본인 알림 채널로 "새 알림" 신호만 보낸다 (내용은 화면이 로그인한 채로 다시 받아 감)
+      await this.realtime.broadcast(this.realtime.notificationTopic(data.userId), REALTIME_EVENTS.NOTIFICATION, {});
     }
 
     return created;

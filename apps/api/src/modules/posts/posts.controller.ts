@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, Delete, Put, UsePipes, HttpStatus } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { PostsService, Viewer } from './posts.service';
+import { BULK_DELETE_LIMIT, PostsService, Viewer } from './posts.service';
+import { z } from 'zod';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UserStatusGuard } from '../../common/guards/user-status.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -10,6 +11,18 @@ import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { ApiException } from '../../common/exceptions/api.exception';
 import { ErrorCode } from '@community/shared-types';
 import { getClientIp } from '../../common/utils/client-ip';
+
+// 일괄 삭제 대상: 고른 글 id들, 또는 검색 결과 전체(검색 화면과 같은 조건)
+const BulkDeleteSchema = z.union([
+  z.object({ ids: z.array(z.string().uuid()).min(1).max(BULK_DELETE_LIMIT) }),
+  z.object({
+    search: z.object({
+      searchType: z.string().optional(),
+      searchQuery: z.string().max(200).optional(),
+      authorId: z.string().uuid().optional(),
+    }),
+  }),
+]);
 
 // 요청한 사용자 (역할은 인증 단계에서 읽은 값을 그대로 사용해 DB를 다시 조회하지 않음)
 function toViewer(req: any): Viewer {
@@ -146,6 +159,14 @@ export class PostsController {
       @Body() body: UpdatePostZodDto
   ) {
       return this.postsService.update(id, toViewer(req), body, req.headers['user-agent']);
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: '게시글 일괄 삭제 (Super Admin): 고른 글 또는 검색 결과 전체, 한 번에 최대 500개' })
+  @UseGuards(UserStatusGuard)
+  @UsePipes(new ZodValidationPipe(BulkDeleteSchema))
+  async bulkDelete(@Body() body: z.infer<typeof BulkDeleteSchema>, @Req() req: any) {
+      return this.postsService.bulkRemove(body, toViewer(req), req.headers['user-agent']);
   }
 
   @Delete(':id')

@@ -127,6 +127,13 @@
       "when": 1791990545606,
       "tag": "0017_chat_default_off",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793941652968,
+      "tag": "0018_boilerplate_sync_5197bbd",
+      "breakpoints": true
     }
   ]
 }

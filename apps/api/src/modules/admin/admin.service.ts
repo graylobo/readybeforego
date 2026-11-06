@@ -1,49 +1,52 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpStatus, Logger } from '@nestjs/common';
 import { AdminRepository } from './admin.repository';
 import { ApiException } from '../../common/exceptions/api.exception';
 import { ErrorCode } from '@community/shared-types';
+import { PointsService } from '../points/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly adminRepo: AdminRepository,
+    private readonly pointsService: PointsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  async getDashboardStats() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  /** 시스템 관리자가 회원에게 포인트 지급 (받은 회원에게 알림) */
+  async grantPoints(
+    adminId: string,
+    userId: string,
+    amount: number,
+    reason: string,
+  ) {
+    const user = await this.adminRepo.findUserById(userId);
+    if (!user)
+      throw new ApiException(ErrorCode.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    const usersCount = await this.adminRepo.countTotalUsers();
-    const todayUsersCount = await this.adminRepo.countTodayUsers(today);
-    
-    const boardsCount = await this.adminRepo.countTotalBoards();
-    
-    const postsCount = await this.adminRepo.countTotalPosts();
-    const todayPostsCount = await this.adminRepo.countTodayPosts(today);
-    
-    const commentsCount = await this.adminRepo.countTotalComments();
-    const todayCommentsCount = await this.adminRepo.countTodayComments(today);
+    const points = await this.pointsService.grantByAdmin(
+      userId,
+      amount,
+      reason,
+      adminId,
+    );
+    this.logger.log(
+      `[Point Grant] admin=${adminId} user=${userId} amount=${amount} reason=${reason}`,
+    );
 
-    const topBoards = await this.adminRepo.getTopBoards(5);
-    const recentModerationLogs = await this.adminRepo.getRecentModerationLogs(5);
+    await this.notificationsService
+      .create({
+        userId,
+        type: 'SYSTEM',
+        content: `[포인트 지급] 관리자가 ${amount.toLocaleString()}포인트를 지급했습니다. 사유: ${reason}`,
+      })
+      .catch((error) =>
+        this.logger.warn(`[Point Grant] notification failed: ${error}`),
+      );
 
-    return {
-      users: {
-        total: usersCount,
-        today: todayUsersCount,
-      },
-      boards: boardsCount,
-      posts: {
-        total: postsCount,
-        today: todayPostsCount,
-      },
-      comments: {
-        total: commentsCount,
-        today: todayCommentsCount,
-      },
-      topBoards,
-      recentModerationLogs,
-    };
+    return points;
   }
 
   async warnUser(adminId: string, userId: string, reason: string) {

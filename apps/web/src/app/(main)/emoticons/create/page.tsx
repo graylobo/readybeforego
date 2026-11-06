@@ -219,7 +219,7 @@ export default function CreateEmoticonPage() {
       try {
         // GIF / animated WebP: compress: false to preserve animation
         const isAnimated = file.type === 'image/gif' || file.type === 'image/webp';
-        const url = await uploadsApi.uploadImage(file, { compress: !isAnimated });
+        const url = await uploadsApi.uploadImage(file, { compress: !isAnimated, purpose: 'emoticon' });
         setItems(prev => {
           const idx = prev.findIndex(it => it.file === file);
           if (idx === -1) return prev;
@@ -294,7 +294,7 @@ export default function CreateEmoticonPage() {
     return (
       <PageContainer maxWidth="sm" className="!py-16 text-center">
         <p className="text-muted-foreground mb-4">로그인이 필요합니다.</p>
-        <Button onClick={() => router.push('/login')}>로그인</Button>
+        <Button onClick={() => router.push(`/login?redirect=${encodeURIComponent('/emoticons/create')}`)} className="cursor-pointer">로그인</Button>
       </PageContainer>
     );
   }

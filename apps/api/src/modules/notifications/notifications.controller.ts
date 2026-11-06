@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Delete, Param, UseGuards, Req, Sse, MessageEvent, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -9,11 +10,20 @@ import { map } from 'rxjs/operators';
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   @Get()
   async findAll(@Req() req: any) {
     return this.notificationsService.findAll(req.user.id);
+  }
+
+  @Get('realtime')
+  @ApiOperation({ summary: '내 알림 실시간 채널 이름 (Supabase Realtime을 쓸 때 SSE 대신 이 채널을 듣는다)' })
+  getRealtimeTopic(@Req() req: any) {
+    return { topic: this.realtime.isEnabled() ? this.realtime.notificationTopic(req.user.id) : null };
   }
 
   @Get('unread-count')

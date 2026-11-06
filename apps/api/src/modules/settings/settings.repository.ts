@@ -22,7 +22,7 @@ export class SettingsRepository {
     return settings;
   }
 
-  async updateSettings(data: { showSidebarAds?: boolean; showAllBoardMenu?: boolean; showBoardDirectoryMenu?: boolean }) {
+  async updateSettings(data: Partial<Omit<typeof siteSettings.$inferInsert, 'id' | 'updatedAt'>>) {
     const current = await this.getSettings();
     const [updated] = await this.db.update(siteSettings)
       .set({ ...data, updatedAt: new Date() })

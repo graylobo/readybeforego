@@ -11,6 +11,7 @@ import { useEmoticonPacks } from '@/hooks/queries/use-emoticon-queries';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import { toast } from '@/lib/toast';
 import { EmoticonPack } from '@community/shared-types';
 import { Clock, Plus, Search, ShoppingBag, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
@@ -25,6 +26,15 @@ export default function EmoticonShopPage() {
   const [limit, setLimit] = usePaginationLimit('emoticons', 40);
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounce(searchInput, 300);
+
+  const handleCreate = () => {
+    if (!user) {
+      toast.info('이모티콘을 등록하려면 로그인해 주세요.');
+      router.push(`/login?redirect=${encodeURIComponent('/emoticons/create')}`);
+      return;
+    }
+    router.push('/emoticons/create');
+  };
 
   useEffect(() => {
     setPage(1);
@@ -94,25 +104,24 @@ export default function EmoticonShopPage() {
               />
             </div>
             {user && (
-              <>
-                <Button
-                    variant="outline"
-                    onClick={() => router.push('/emoticons/my')}
-                    size="sm"
-                    className="rounded-full px-4 gap-1.5 border-border hover:bg-muted font-bold whitespace-nowrap"
-                >
-                    내 이모티콘
-                </Button>
-                <Button
-                    onClick={() => router.push('/emoticons/create')}
-                    size="sm"
-                    className="rounded-full px-4 gap-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 border-0 shadow-lg shadow-violet-500/30 whitespace-nowrap font-bold"
-                >
-                    <Plus className="w-4 h-4" />
-                    상품 등록
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                onClick={() => router.push('/emoticons/my')}
+                size="sm"
+                className="rounded-full px-4 gap-1.5 border-border hover:bg-muted font-bold whitespace-nowrap"
+              >
+                내 이모티콘
+              </Button>
             )}
+            {/* 비로그인도 보이게 두고, 누르면 로그인 후 등록 화면으로 */}
+            <Button
+              onClick={handleCreate}
+              size="sm"
+              className="rounded-full px-4 gap-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 border-0 shadow-lg shadow-violet-500/30 whitespace-nowrap font-bold cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              상품 등록
+            </Button>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SQL, and, asc, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
+import { SQL, and, asc, desc, eq, getTableColumns, inArray, isNull, or, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -55,6 +55,18 @@ export class PostsRepository {
     .offset(offset);
   }
 
+  /** 목록 조건에 맞는 글 id (최신 글부터). 일괄 삭제에서 검색 결과 전체를 지울 때 쓴다 */
+  async findPostIds(whereClause: SQL | undefined, limit: number) {
+    const rows = await this.db
+      .select({ id: schema.posts.id })
+      .from(schema.posts)
+      .leftJoin(schema.boards, eq(schema.posts.boardId, schema.boards.id))
+      .where(whereClause)
+      .orderBy(desc(schema.posts.createdAt))
+      .limit(limit);
+    return rows.map((row) => row.id);
+  }
+
   async countPosts(whereClause: SQL | undefined, tx?: Transaction) {
     const db = tx ?? this.db;
     // 조건에 게시판(공개 여부)이 들어갈 수 있으므로 게시판만 조인 (작성자 조인은 필요 없음)
@@ -66,8 +78,15 @@ export class PostsRepository {
     return result.count;
   }
 
-  async getUserReactionsForPosts(postIds: string[], userId: string, tx?: Transaction) {
+  /** 목록 글들에 대한 내 반응. 회원은 계정, 비회원은 IP로 찾는다 (findUserReaction과 같은 기준) */
+  async getUserReactionsForPosts(postIds: string[], viewer: { userId?: string; ipAddress?: string }, tx?: Transaction) {
     if (postIds.length === 0) return [];
+    const viewerCondition = viewer.userId
+      ? eq(schema.postReactions.userId, viewer.userId)
+      : viewer.ipAddress
+        ? and(eq(schema.postReactions.ipAddress, viewer.ipAddress), isNull(schema.postReactions.userId))
+        : null;
+    if (!viewerCondition) return [];
     const db = tx ?? this.db;
     return db
       .select({
@@ -78,7 +97,7 @@ export class PostsRepository {
       .where(
           and(
               inArray(schema.postReactions.postId, postIds),
-              eq(schema.postReactions.userId, userId)
+              viewerCondition
           )
       );
   }
@@ -383,6 +402,51 @@ export class PostsRepository {
   }
 
   // ---- 게시판 통째로 삭제 (관리자) ----
+
+  /** 완전 삭제할 글들 (지우기 전에 포인트 회수·이미지 정리에 쓸 정보). 크롤러 글은 crawled/ 이미지 정리를 위해 본문도 */
+  async findPostsForPurge(postIds: string[]) {
+    if (postIds.length === 0) return [];
+    return this.db.select({
+      id: schema.posts.id,
+      userId: schema.posts.userId,
+      title: schema.posts.title,
+      isBot: schema.posts.isBot,
+      content: sql<string | null>`case when ${schema.posts.isBot} then ${schema.posts.content} end`,
+    })
+    .from(schema.posts)
+    .where(inArray(schema.posts.id, postIds));
+  }
+
+  /** 글들에 달린 모든 댓글·답글 (이미 지운 댓글 포함): 첨부 이미지 정리와 포인트 회수용 */
+  async findCommentsForPurge(postIds: string[]) {
+    if (postIds.length === 0) return [];
+    return this.db.select({
+      id: schema.comments.id,
+      targetId: schema.comments.targetId,
+      userId: schema.comments.userId,
+      imageUrl: schema.comments.imageUrl,
+      deletedAt: schema.comments.deletedAt,
+    })
+    .from(schema.comments)
+    .where(and(eq(schema.comments.targetType, 'post'), inArray(schema.comments.targetId, postIds)));
+  }
+
+  /**
+   * 글들을 DB에서 완전히 지운다: 글을 가리키는 알림, 댓글·답글(댓글 추천은 함께 지워짐), 글(추천·스크랩은 함께 지워짐).
+   * 지운 글 수를 돌려준다 (그 사이 다른 곳에서 지워진 글은 빠짐)
+   */
+  async purgePosts(postIds: string[], commentIds: string[], tx: Transaction) {
+    if (postIds.length === 0) return 0;
+    await tx.delete(schema.notifications).where(or(
+      and(eq(schema.notifications.targetType, 'POST'), inArray(schema.notifications.targetId, postIds)),
+      ...(commentIds.length > 0
+        ? [and(eq(schema.notifications.targetType, 'COMMENT'), inArray(schema.notifications.targetId, commentIds))]
+        : []),
+    ));
+    await tx.delete(schema.comments).where(and(eq(schema.comments.targetType, 'post'), inArray(schema.comments.targetId, postIds)));
+    const deleted = await tx.delete(schema.posts).where(inArray(schema.posts.id, postIds)).returning({ id: schema.posts.id });
+    return deleted.length;
+  }
 
   /** 게시판의 모든 글(지운 글 포함). 크롤러 글은 crawled/ 이미지 정리를 위해 본문도 */
   async findBoardPostsForPurge(boardId: string, tx?: Transaction) {

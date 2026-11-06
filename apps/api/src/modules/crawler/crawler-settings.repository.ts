@@ -24,7 +24,7 @@ export class CrawlerSettingsRepository {
     return settings;
   }
 
-  async updateSettings(data: { preservedTerms?: string | null }) {
+  async updateSettings(data: { preservedTerms?: string | null; excludeKeywords?: string | null }) {
     const current = await this.getSettings();
     const [updated] = await this.db
       .update(crawlerSettings)

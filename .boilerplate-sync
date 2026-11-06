@@ -3,4 +3,4 @@
 #   git remote add boilerplate ../community-bolierplate && git remote set-url --push boilerplate no-push
 #   git fetch boilerplate && git diff <아래 커밋> boilerplate/main > bp.patch && git apply --3way bp.patch
 #   (반영·커밋 후 아래 커밋 값을 갱신하고) git remote remove boilerplate
-e93033e1eac09f777a9ee40955eff6040d441d54
+5197bbd3797f4e4b406a5a304d56c2dc3e602b03

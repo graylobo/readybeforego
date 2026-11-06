@@ -23,7 +23,13 @@ export class AuthService {
 
   async validateKakaoUser(profile: any) {
     const { id, _json, displayName } = profile;
-    const email = _json?.kakao_account?.email;
+    // 이메일로 기존 계정을 찾아 연결하므로, 카카오가 인증·유효하다고 한 이메일만 쓴다
+    // (이메일 동의항목을 켜야 오고, 사용자가 동의하지 않으면 없다)
+    const account = _json?.kakao_account;
+    const email =
+      account?.is_email_valid && account?.is_email_verified
+        ? account.email
+        : undefined;
     const name = displayName || _json?.properties?.nickname || '카카오 사용자';
     const picture = _json?.properties?.profile_image || _json?.kakao_account?.profile?.profile_image_url;
 

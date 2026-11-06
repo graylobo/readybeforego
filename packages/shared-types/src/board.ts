@@ -77,7 +77,8 @@ export type CreateBoardDto = z.infer<typeof CreateBoardSchema>;
 
 export const UpdateBoardSchema = z.object({
   name: BoardNameSchema.optional(),
-  description: BoardDescriptionSchema.optional(),
+  // 설명이 없는 게시판은 null로 저장돼 있어 화면이 null을 그대로 보낼 수 있다 (null = 설명 없음)
+  description: BoardDescriptionSchema.nullish(),
   isActive: z.boolean().optional(),
   allowAnonymous: z.boolean().optional(),
   viewMode: z.enum(['list', 'lounge', 'feed']).optional(),
@@ -106,7 +107,7 @@ export type ReviewBoardRequestDto = z.infer<typeof ReviewBoardRequestSchema>;
 
 // 매니저가 고치는 게시판 설정 (보낸 항목만 바꾼다)
 export const UpdateBoardSettingsSchema = z.object({
-  description: BoardDescriptionSchema.optional(),
+  description: BoardDescriptionSchema.nullish(),
   showManagers: z.boolean().optional(),
 });
 export type UpdateBoardSettingsDto = z.infer<typeof UpdateBoardSettingsSchema>;

@@ -5,8 +5,10 @@ import { Maximize2, Minimize2, Settings, SquareArrowOutUpRight, X } from 'lucide
 import { ErrorCode, ErrorMessages, formatGuestTag, isSuperAdmin } from '@community/shared-types';
 import { Button } from '@/components/ui/button';
 import { useChatAlerts } from '@/hooks/use-chat-alerts';
-import { useChatSocket } from '@/hooks/use-chat-socket';
+import { useChatConnection } from '@/hooks/use-chat-connection';
 import { useIsLgUp } from '@/hooks/use-media-query';
+import { usePageVisible } from '@/hooks/use-page-visible';
+import { useChatPrefsStore } from '@/lib/stores/chat-prefs.store';
 import { openChatPopup } from '@/lib/chat/popup';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { useChatGuestStore } from '@/lib/stores/chat-guest.store';
@@ -64,6 +66,18 @@ export function ChatPanel({ variant = 'rail' }: ChatPanelProps) {
     };
   }, [mobileMode]);
 
+  const isPopup = variant === 'popup';
+  const mobileOpen = !isPopup && !isDesktop && mobileMode !== 'closed';
+  const mobileFull = !isPopup && !isDesktop && mobileMode === 'full';
+  const railVisible = !isPopup && isDesktop && railOpen;
+  const panelVisible = isPopup || mobileOpen || railVisible;
+
+  // 채팅 창이 열려 있고 탭이 보일 때만 연결한다. API 서버 웹소켓이면 연결이 열려 있는 동안 서버(Cloud Run)가 계속 과금되고,
+  // Supabase Realtime이면 동시 접속 수 한도를 아낀다. 브라우저 알림(다른 창을 볼 때 멘션·답글 알림)을 켠 사람은 계속 연결한다
+  const pageVisible = usePageVisible();
+  const browserPush = useChatPrefsStore((state) => state.browserPush);
+  const socketEnabled = (panelVisible && pageVisible) || browserPush;
+
   const {
     messages,
     onlineCount,
@@ -77,18 +91,13 @@ export function ChatPanel({ variant = 'rail' }: ChatPanelProps) {
     canSend,
     sendMessage,
     deleteMessage,
-  } = useChatSocket({ enabled: true });
+  } = useChatConnection({ enabled: socketEnabled });
 
   useChatAlerts(messages, joined, nickname, selfUserId, selfGuestId);
 
-  const isPopup = variant === 'popup';
   const showGate = hasHydrated && !unavailable && !user && !guestToken;
   const headerNick =
     nickname && selfGuestId ? `${nickname} ${formatGuestTag(selfGuestId)}` : nickname;
-  const mobileOpen = !isPopup && !isDesktop && mobileMode !== 'closed';
-  const mobileFull = !isPopup && !isDesktop && mobileMode === 'full';
-  const railVisible = !isPopup && isDesktop && railOpen;
-  const panelVisible = isPopup || mobileOpen || railVisible;
 
   useEffect(() => {
     if (!isDesktop || mobileMode === 'closed') return;

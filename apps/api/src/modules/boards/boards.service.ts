@@ -3,6 +3,7 @@ import { ErrorCode } from '@community/shared-types';
 import { ApiException } from '../../common/exceptions/api.exception';
 import { boards } from '../../database/schema';
 import { BoardsRepository } from './boards.repository';
+import { SettingsService } from '../settings/settings.service';
 
 type BoardRow = typeof boards.$inferSelect;
 interface BoardCache {
@@ -24,6 +25,7 @@ export class BoardsService implements OnModuleInit {
 
   constructor(
     private readonly boardsRepo: BoardsRepository,
+    private readonly settingsService: SettingsService,
   ) {}
 
   private async getBoardCache(): Promise<BoardCache> {
@@ -80,20 +82,22 @@ export class BoardsService implements OnModuleInit {
   }
 
   async findBySlug(slug: string) {
-      // 전체 게시판: 공개 게시판의 글을 모아 보여주기만 하는 화면 (실제 게시판이 아니라 글을 쓸 수 없음)
+      // 전체 게시판: 공개 게시판의 글을 모아 보여주기만 하는 화면 (실제 게시판이 아니라 글을 쓸 수 없음).
+      // 이름·설명·화면 형식은 관리자 사이트 설정에서 바꾼다
       if (slug === 'all') {
+          const settings = await this.settingsService.getSettings();
           return {
               id: 'virtual-all-board',
               slug: 'all',
-              name: '전체 게시판',
-              description: '모든 게시판의 최신 글',
+              name: settings.allBoardName,
+              description: settings.allBoardDescription,
               sortOrder: -2,
               isPrivate: false,
               allowAnonymous: false,
               isActive: true,
               isReadOnly: true,
               type: 'system' as const,
-              viewMode: 'list',
+              viewMode: settings.allBoardViewMode,
           };
       }
       if (slug === 'best') {

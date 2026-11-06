@@ -68,6 +68,14 @@ export interface ChatGuestClaimResponse {
   expiresIn: number;
 }
 
+/** 채팅에서 나의 역할·닉네임 (GET /chat/session, Supabase Realtime을 쓸 때 입장 정보 대신) */
+export interface ChatSession {
+  role: ChatClientRole;
+  nickname: string | null;
+  userId: string | null;
+  guestId: string | null;
+}
+
 export interface ChatJoinedPayload {
   room: string;
   role: ChatClientRole;

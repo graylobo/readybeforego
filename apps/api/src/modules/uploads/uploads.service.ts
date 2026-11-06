@@ -14,6 +14,9 @@ import {
 /** 본문 이미지 작은 버전 너비 (원본보다 작은 것만 만든다) */
 const IMAGE_RESPONSIVE_WIDTHS = [720, 1280];
 
+/** 이모티콘은 댓글에서 최대 220px 정도로 보이므로 고해상도 화면 기준 두 배 안쪽으로 줄여 저장 */
+export const EMOTICON_IMAGE_MAX_SIZE = 480;
+
 /** 댓글 이미지는 화면이 원본 주소에서 작은 버전 주소(-w440)를 바로 만들어 쓰므로, 원본 크기와 상관없이 항상 만든다 */
 const COMMENT_FOLDER = 'comments';
 
@@ -35,7 +38,8 @@ export class UploadsService {
     mimeType: string,
     folder: string = 'temp',
     userId?: string,
-    options: { responsive?: boolean } = {},
+    // maxSize: 가로·세로를 이 크기 안으로 줄인다 (이모티콘). 없으면 너비만 IMAGE_PROCESSING.MAX_WIDTH로
+    options: { responsive?: boolean; maxSize?: number } = {},
   ): Promise<ImageUploadResult> {
     const withThumbnail = folder === COMMENT_FOLDER;
     // 원본 크기 검증. 저장 크기(10MB)는 최적화한 뒤에 검사한다 (큰 GIF도 WebP로 바꾸면 크게 줄어듦)
@@ -73,13 +77,20 @@ export class UploadsService {
       const metadata = await image.metadata();
       isAnimated = (metadata.pages ?? 1) > 1;
       const width = metadata.width ?? 0;
-      // 움직이는 WebP는 다시 압축하면 화질이 떨어지거나 오히려 커지기 쉬워, 너비가 기준 이내면 그대로 둔다
-      const keepAsIs = isAnimated && metadata.format === 'webp' && width <= IMAGE_PROCESSING.MAX_WIDTH;
+      // 움직이는 이미지의 height는 모든 프레임 합이라 한 프레임 높이(pageHeight)로 본다
+      const height = metadata.pageHeight ?? metadata.height ?? 0;
+      const { maxSize } = options;
+      const tooLarge = maxSize
+        ? width > maxSize || height > maxSize
+        : width > IMAGE_PROCESSING.MAX_WIDTH;
+      // 움직이는 WebP는 다시 압축하면 화질이 떨어지거나 오히려 커지기 쉬워, 크기가 기준 이내면 그대로 둔다
+      const keepAsIs = isAnimated && metadata.format === 'webp' && !tooLarge;
       if (!keepAsIs) {
-        const pipeline =
-          width > IMAGE_PROCESSING.MAX_WIDTH
-            ? image.resize({ width: IMAGE_PROCESSING.MAX_WIDTH, withoutEnlargement: true, fit: 'inside' })
-            : image;
+        const pipeline = !tooLarge
+          ? image
+          : maxSize
+            ? image.resize({ width: maxSize, height: maxSize, withoutEnlargement: true, fit: 'inside' })
+            : image.resize({ width: IMAGE_PROCESSING.MAX_WIDTH, withoutEnlargement: true, fit: 'inside' });
         outputBuffer = await pipeline.webp({ quality: IMAGE_PROCESSING.QUALITY }).toBuffer();
       }
     } catch (error) {
@@ -146,6 +157,21 @@ export class UploadsService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 사용자가 temp에 올린 이미지를 영구 폴더로 옮기고 새 주소를 돌려준다 (매일 temp 정리에서 지워지지 않게).
+   * 이미 다른 폴더에 있는 우리 저장소 주소나 바깥 주소는 그대로 두고, 다른 사용자의 temp 파일은 거절한다.
+   */
+  async persistTempImage(url: string, targetFolder: string, ownerId: string): Promise<string> {
+    const path = this.extractPathFromUrl(url)?.split(/[?#]/)[0];
+    if (!path || !path.startsWith('temp/')) return url;
+    if (!path.startsWith(`temp/${ownerId}/`) || path.includes('..')) {
+      throw new BadRequestException('업로드한 이미지가 아닙니다.');
+    }
+    const fileName = path.split('/').pop()!;
+    const moved = await this.moveImage(path, `${targetFolder}/${fileName}`);
+    return moved.url;
   }
 
   /**

@@ -8,7 +8,10 @@ export interface GeneratedComment {
 export interface RewriteInput {
   title: string;
   content: string; // HTML content
+  // 게시글 재작성 어조 (리라이팅 톤앤매너)
   promptTone?: string | null;
+  // 댓글에만 적용할 지시 (비면 기본 댓글 문체)
+  commentPromptTone?: string | null;
   generateComments?: boolean;
   commentsCount?: number;
   // 토큰(⟦T1⟧)으로 치환된 보존 단어 목록. 프롬프트에 보존 규칙과 뜻 설명으로 들어간다

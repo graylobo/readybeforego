@@ -232,7 +232,7 @@ export default function EditEmoticonPage() {
     for (const file of files) {
       try {
         const isAnimated = file.type === 'image/gif' || file.type === 'image/webp';
-        const url = await uploadsApi.uploadImage(file, { compress: !isAnimated });
+        const url = await uploadsApi.uploadImage(file, { compress: !isAnimated, purpose: 'emoticon' });
         setItems(prev => {
           const idx = prev.findIndex(it => it.file === file);
           if (idx === -1) return prev;

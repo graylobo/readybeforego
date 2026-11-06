@@ -101,3 +101,60 @@ describe('UploadsService - 댓글 이미지 작은 버전', () => {
     expect(provider.delete).toHaveBeenCalledWith('posts/p1/a.webp');
   });
 });
+
+describe('UploadsService - 이모티콘', () => {
+  let stored: Map<string, Buffer>;
+  let provider: { upload: jest.Mock; move: jest.Mock; extractPathFromUrl: jest.Mock };
+  let service: UploadsService;
+
+  beforeEach(() => {
+    stored = new Map();
+    provider = {
+      upload: jest.fn(async (buffer: Buffer, path: string) => {
+        stored.set(path, buffer);
+        return { url: `https://cdn/object/public/b/${path}`, path };
+      }),
+      move: jest.fn(async (from: string, to: string) => ({ url: `https://cdn/object/public/b/${to}`, path: to })),
+      extractPathFromUrl: jest.fn((url: string) => url.match(/\/object\/public\/[^/]+\/(.+)$/)?.[1] ?? null),
+    };
+    service = new UploadsService(provider as any, {} as any);
+  });
+
+  const frame = (color: string, width: number, height: number) =>
+    sharp({ create: { width, height, channels: 3, background: color } }).png().toBuffer();
+
+  it('가로·세로를 480px 안으로 줄인다 (세로로 긴 이미지도)', async () => {
+    const result = await service.uploadImage(await frame('#3a6', 600, 1200), 'image/png', 'temp', 'u1', { maxSize: 480 });
+
+    const meta = await sharp(stored.get(result.path)!).metadata();
+    expect([meta.width, meta.height]).toEqual([240, 480]);
+  });
+
+  it('움직이는 GIF는 프레임을 유지한 채 한 프레임 크기 기준으로 줄인다', async () => {
+    const frames = await Promise.all(['#f00', '#0f0', '#00f'].map((c) => frame(c, 400, 300)));
+    const gif = await sharp(frames, { join: { animated: true } }).gif().toBuffer();
+
+    // 프레임 하나는 480px 안이라 줄이지 않는다 (전체 높이 900px로 잘못 보지 않는다)
+    const result = await service.uploadImage(gif, 'image/gif', 'temp', 'u1', { maxSize: 480 });
+
+    const meta = await sharp(stored.get(result.path)!, { animated: true }).metadata();
+    expect([meta.width, meta.pageHeight, meta.pages]).toEqual([400, 300, 3]);
+  });
+
+  it('작성자가 temp에 올린 이미지를 영구 폴더로 옮긴 주소를 돌려준다', async () => {
+    const url = await service.persistTempImage('https://cdn/object/public/b/temp/u1/a.webp?x=1', 'emoticons/u1', 'u1');
+
+    expect(provider.move).toHaveBeenCalledWith('temp/u1/a.webp', 'emoticons/u1/a.webp');
+    expect(url).toBe('https://cdn/object/public/b/emoticons/u1/a.webp');
+  });
+
+  it('이미 옮긴 이미지나 바깥 주소는 그대로, 다른 사용자의 temp 이미지는 거절한다', async () => {
+    const kept = 'https://cdn/object/public/b/emoticons/u1/a.webp';
+    await expect(service.persistTempImage(kept, 'emoticons/u1', 'u1')).resolves.toBe(kept);
+    await expect(service.persistTempImage('https://example.com/a.gif', 'emoticons/u1', 'u1')).resolves.toBe('https://example.com/a.gif');
+    await expect(
+      service.persistTempImage('https://cdn/object/public/b/temp/u2/a.webp', 'emoticons/u1', 'u1'),
+    ).rejects.toThrow('업로드한 이미지가 아닙니다');
+    expect(provider.move).not.toHaveBeenCalled();
+  });
+});

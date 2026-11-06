@@ -28,7 +28,8 @@ import {
   Clock,
   Unlock,
   Search,
-  History
+  History,
+  Coins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +44,7 @@ import { isSuperAdmin, UserRole, USER_ROLES, UserStatus } from '@community/share
 import { useState, useEffect } from 'react';
 import { useDebounce } from '@/hooks/use-debounce'; // Assuming this hook exists or I should implement it
 import { ModerationHistoryDialog } from './moderation-history-dialog';
+import { GrantPointsDialog } from './grant-points-dialog';
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuthStore();
@@ -52,6 +54,7 @@ export default function AdminUsersPage() {
   const { data: users, isLoading } = useAdminUsers(debouncedSearch);
   
   const [historyTarget, setHistoryTarget] = useState<{ id: string, name: string } | null>(null);
+  const [pointsTarget, setPointsTarget] = useState<{ id: string, name: string } | null>(null);
 
   const updateRoleMutation = useUpdateUserRole();
   const warnMutation = useWarnUser();
@@ -298,6 +301,11 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => setHistoryTarget({ id: user.id, name: user.name })}>
                             <History className="w-4 h-4 mr-2 font-bold" /> 제재 히스토리
                           </DropdownMenuItem>
+                          {canChangeRole && (
+                            <DropdownMenuItem className="cursor-pointer" onClick={() => setPointsTarget({ id: user.id, name: user.name })}>
+                              <Coins className="w-4 h-4 mr-2 text-amber-500" /> 포인트 지급
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleWarn(user.id)}>
                             <AlertTriangle className="w-4 h-4 mr-2 text-yellow-500" /> 경고 주기
@@ -336,6 +344,8 @@ export default function AdminUsersPage() {
         isOpen={!!historyTarget}
         onClose={() => setHistoryTarget(null)}
       />
+
+      <GrantPointsDialog target={pointsTarget} onClose={() => setPointsTarget(null)} />
     </div>
   );
 }

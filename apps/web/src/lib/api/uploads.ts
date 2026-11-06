@@ -4,6 +4,8 @@ import { apiClient } from '../api-client';
 interface UploadImageOptions {
   compress?: boolean;
   folder?: string;
+  /** 'emoticon'이면 서버가 이모티콘 크기(최대 480px)로 줄여 저장한다 */
+  purpose?: 'emoticon';
   onProgress?: (progress: number, loaded: number, total: number) => void;
 }
 
@@ -25,6 +27,9 @@ async function uploadImageRequest(
   }
   if (responsive) {
     formData.append('responsive', 'true');
+  }
+  if (options.purpose) {
+    formData.append('purpose', options.purpose);
   }
 
   const response = await apiClient.post('/uploads/images', formData, {

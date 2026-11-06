@@ -9,10 +9,11 @@ import {
   UseGuards,
   Inject,
   NotFoundException,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, count } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { USER_ROLES } from '@community/shared-types';
 import * as schema from '../../database/schema';
@@ -24,6 +25,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CrawlerService } from './services/crawler.service';
 import { CrawlerRunControl } from './services/crawler-run-control.service';
 import { CrawlerSettingsRepository } from './crawler-settings.repository';
+
+const LOGS_DEFAULT_LIMIT = 30;
+const LOGS_MAX_LIMIT = 100;
 
 @ApiTags('crawler')
 @Controller('admin/crawler')
@@ -45,10 +49,12 @@ export class CrawlerController {
   }
 
   @Patch('settings')
-  @ApiOperation({ summary: '수집 전체 공통 설정 수정 (공통 보존 단어)' })
-  async updateSettings(@Body() body: { preservedTerms?: string | null }) {
+  @ApiOperation({ summary: '수집 전체 공통 설정 수정 (공통 보존 단어, 공통 제외 키워드)' })
+  async updateSettings(@Body() body: { preservedTerms?: string | null; excludeKeywords?: string | null }) {
+    // 보낸 항목만 바꾼다 (보존 단어 창에서 저장해도 제외 키워드가 지워지지 않게)
     return this.crawlerSettings.updateSettings({
-      preservedTerms: body.preservedTerms?.trim() || null,
+      ...(body.preservedTerms !== undefined && { preservedTerms: body.preservedTerms?.trim() || null }),
+      ...(body.excludeKeywords !== undefined && { excludeKeywords: body.excludeKeywords?.trim() || null }),
     });
   }
 
@@ -76,6 +82,7 @@ export class CrawlerController {
       minRecommendCount?: number;
       botUserId?: string;
       promptTone?: string;
+      commentPromptTone?: string;
       preservedTerms?: string;
       excludeKeywords?: string;
       collectLimit?: number;
@@ -87,6 +94,7 @@ export class CrawlerController {
       viewCountMin?: number;
       viewCountMax?: number;
       includeImages?: boolean;
+      excludeIpMentions?: boolean;
       authorMainKeywords?: string;
       authorSubKeywords?: string;
       authorUseSub?: boolean;
@@ -117,6 +125,7 @@ export class CrawlerController {
         minRecommendCount: body.minRecommendCount ?? 0,
         botUserId: body.botUserId || null,
         promptTone: body.promptTone || 'natural',
+        commentPromptTone: body.commentPromptTone?.trim() || null,
         preservedTerms: body.preservedTerms?.trim() || null,
         excludeKeywords: body.excludeKeywords?.trim() || null,
         collectLimit: body.collectLimit ?? 5,
@@ -128,6 +137,7 @@ export class CrawlerController {
         viewCountMin: body.viewCountMin ?? 5,
         viewCountMax: body.viewCountMax ?? 15,
         includeImages: body.includeImages ?? true,
+        excludeIpMentions: body.excludeIpMentions ?? true,
         authorMainKeywords: body.authorMainKeywords || null,
         authorSubKeywords: body.authorSubKeywords || null,
         authorUseSub: body.authorUseSub ?? false,
@@ -168,6 +178,7 @@ export class CrawlerController {
       minRecommendCount: number;
       botUserId: string;
       promptTone: string;
+      commentPromptTone: string | null;
       preservedTerms: string | null;
       excludeKeywords: string | null;
       collectLimit: number;
@@ -179,6 +190,7 @@ export class CrawlerController {
       viewCountMin: number;
       viewCountMax: number;
       includeImages: boolean;
+      excludeIpMentions: boolean;
       authorMainKeywords: string;
       authorSubKeywords: string;
       authorUseSub: boolean;
@@ -246,6 +258,9 @@ export class CrawlerController {
 
     if (body.excludeKeywords !== undefined) {
       updateData.excludeKeywords = body.excludeKeywords?.trim() || null;
+    }
+    if (body.commentPromptTone !== undefined) {
+      updateData.commentPromptTone = body.commentPromptTone?.trim() || null;
     }
     if (body.postOrderMode !== undefined) {
       updateData.postOrderMode = toPostOrderMode(body.postOrderMode);
@@ -329,11 +344,26 @@ export class CrawlerController {
   }
 
   @Get('logs')
-  @ApiOperation({ summary: '최근 크롤링 및 발행 로그 조회' })
-  async getLogs() {
+  @ApiOperation({ summary: '크롤링 및 발행 로그 조회 (최신순, 페이지 단위)' })
+  async getLogs(
+    @Query('page') pageParam: string = '1',
+    @Query('limit') limitParam: string = String(LOGS_DEFAULT_LIMIT),
+  ) {
+    const page = Math.max(1, parseInt(pageParam) || 1);
+    const limit = Math.min(LOGS_MAX_LIMIT, Math.max(1, parseInt(limitParam) || LOGS_DEFAULT_LIMIT));
+    const [items, [{ total }]] = await Promise.all([
+      this.findLogsPage(page, limit),
+      this.db.select({ total: count() }).from(schema.crawlerLogs),
+    ]);
+    return { items, total, page, limit };
+  }
+
+  private findLogsPage(page: number, limit: number) {
     return this.db.query.crawlerLogs.findMany({
-      orderBy: [desc(schema.crawlerLogs.createdAt)],
-      limit: 100,
+      // 같은 시각에 생긴 이력끼리도 페이지 경계에서 순서가 흔들리지 않도록 id로 한 번 더 정렬
+      orderBy: [desc(schema.crawlerLogs.createdAt), desc(schema.crawlerLogs.id)],
+      limit,
+      offset: (page - 1) * limit,
       with: {
         target: true,
         // 글은 지워지거나 비공개가 돼도 이력은 남는다 (이미 가져온 글을 다시 수집하지 않도록). 화면이 상태를 표시하도록 함께 내려준다

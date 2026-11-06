@@ -9,13 +9,16 @@ interface ExcludeKeywordsFieldProps {
   id: string;
   value: string;
   onChange: (value: string) => void;
+  rows?: number;
+  /** 어디에 적용되는지 안내 (카드 설정 창 / 공통 설정 창) */
+  scopeHint?: React.ReactNode;
 }
 
 /**
  * 제외 키워드 입력칸. 제목이나 본문에 이 단어가 있는 글은 수집하지 않는다.
  * (해석 규칙은 API와 같은 shared-types의 parseExcludeKeywords를 사용)
  */
-export function ExcludeKeywordsField({ id, value, onChange }: ExcludeKeywordsFieldProps) {
+export function ExcludeKeywordsField({ id, value, onChange, rows = 2, scopeHint }: ExcludeKeywordsFieldProps) {
   const keywords = useMemo(() => parseExcludeKeywords(value), [value]);
 
   return (
@@ -23,7 +26,7 @@ export function ExcludeKeywordsField({ id, value, onChange }: ExcludeKeywordsFie
       <Label htmlFor={id}>제외 키워드</Label>
       <Textarea
         id={id}
-        rows={2}
+        rows={rows}
         placeholder="예: 광고, 홍보, 코인"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -44,6 +47,7 @@ export function ExcludeKeywordsField({ id, value, onChange }: ExcludeKeywordsFie
         제목이나 본문에 이 단어가 들어 있는 글은 수집하지 않습니다. 쉼표(,)나 줄바꿈으로 구분하며, 대소문자와
         띄어쓰기는 무시합니다 (&quot;광고&quot;를 적으면 &quot;광 고&quot;도 걸러짐).
       </span>
+      {scopeHint && <span className="block text-[11px] text-muted-foreground">{scopeHint}</span>}
     </div>
   );
 }

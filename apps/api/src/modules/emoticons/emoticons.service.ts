@@ -4,6 +4,7 @@ import { ApiException } from '../../common/exceptions/api.exception';
 import { and, eq, ilike, sql } from 'drizzle-orm';
 import * as schema from '../../database/schema';
 import { PointsService } from '../points/points.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { EmoticonsRepository } from './emoticons.repository';
 
 @Injectable()
@@ -11,9 +12,39 @@ export class EmoticonsService {
   constructor(
     private readonly emoticonsRepo: EmoticonsRepository,
     private readonly pointsService: PointsService,
+    private readonly uploadsService: UploadsService,
   ) {}
 
-  async create(userId: string, data: CreateEmoticonPackDto) {
+  /**
+   * 대표 이미지·이모티콘 이미지 중 temp에 올린 것을 emoticons/{작성자}/로 옮긴 주소로 바꾼다.
+   * (업로드는 temp에 하고, temp는 매일 정리되므로 저장할 때 옮겨야 남는다. 대표 이미지는 보통 이모티콘 중 하나라 한 번만 옮긴다)
+   */
+  private async persistImages<
+    T extends { thumbnailUrl: string; emoticons: { url: string }[] },
+  >(userId: string, data: T): Promise<T> {
+    const folder = `emoticons/${userId}`;
+    const urls = [
+      ...new Set([data.thumbnailUrl, ...data.emoticons.map((e) => e.url)]),
+    ];
+    const moved = new Map<string, string>();
+    for (const url of urls) {
+      moved.set(
+        url,
+        await this.uploadsService.persistTempImage(url, folder, userId),
+      );
+    }
+    return {
+      ...data,
+      thumbnailUrl: moved.get(data.thumbnailUrl) ?? data.thumbnailUrl,
+      emoticons: data.emoticons.map((e) => ({
+        ...e,
+        url: moved.get(e.url) ?? e.url,
+      })),
+    };
+  }
+
+  async create(userId: string, input: CreateEmoticonPackDto) {
+    const data = await this.persistImages(userId, input);
     return this.emoticonsRepo.transaction(async (tx) => {
       // Create pack
       const pack = await this.emoticonsRepo.createPack(userId, data, tx);
@@ -25,12 +56,14 @@ export class EmoticonsService {
     });
   }
 
-  async update(id: string, userId: string, data: UpdateEmoticonPackDto) {
+  async update(id: string, userId: string, input: UpdateEmoticonPackDto) {
     const pack = await this.findOne(id);
 
     if (pack.authorId !== userId) {
         throw new ApiException(ErrorCode.FORBIDDEN_ACTION, HttpStatus.FORBIDDEN);
     }
+    // 새로 올린 이미지만 옮긴다 (이미 옮긴 이미지는 그대로. 빠진 이미지는 예전 댓글이 쓰고 있을 수 있어 지우지 않는다)
+    const data = await this.persistImages(userId, input);
 
     // If already approved/rejected, set back to pending for re-review
     const status = pack.status === 'pending' ? undefined : 'pending';

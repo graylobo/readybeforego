@@ -416,6 +416,9 @@ function FeedPostCard({
   const effectiveSlug = slug || (post as any).board?.slug;
   const postHref = effectiveSlug ? `/board/${effectiveSlug}/${post.id}` : '#';
   const authorName = post.user?.name || post.guestName || '익명';
+  // 여러 게시판 글을 모은 목록(전체/베스트, 검색 등)이면 목록형처럼 어느 게시판 글인지 보여주고 누르면 그 게시판으로 간다
+  const postBoard = (post as any).board as { slug?: string; name?: string } | undefined;
+  const boardHref = !slug && postBoard?.slug && postBoard.name ? `/board/${postBoard.slug}` : undefined;
   
   const previewText = stripHtml(post.content);
   const allImages = extractAllImages(post.content);
@@ -427,12 +430,7 @@ function FeedPostCard({
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!user) {
-      toast.error('로그인이 필요합니다.');
-      return;
-    }
-
+    // 비회원도 누를 수 있다 (서버가 IP로 한 번만 반영, 상세 화면과 같음)
     toggleReactionMutation.mutate('like');
   };
 
@@ -441,6 +439,15 @@ function FeedPostCard({
     e.stopPropagation();
     setPendingPath(postHref);
     router.push(`/board/${effectiveSlug}/${post.id}?focusComment=true`);
+  };
+
+  // 카드 전체가 글 링크라 그 안에 링크를 둘 수 없어, 댓글 버튼처럼 카드 클릭을 막고 게시판으로 보낸다
+  const handleBoardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!boardHref) return;
+    setPendingPath(boardHref);
+    router.push(boardHref);
   };
 
   const isLiked = post.userReaction === 'like';
@@ -461,6 +468,19 @@ function FeedPostCard({
           <span className="font-semibold text-foreground/90">{authorName}</span>
           <span>·</span>
           <span>{getRelativeTimeStr(post.createdAt)}</span>
+          {boardHref && (
+            <>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={handleBoardClick}
+                className="truncate max-w-[10rem] hover:text-primary hover:underline cursor-pointer"
+                title={`${postBoard!.name} 게시판으로`}
+              >
+                {postBoard!.name}
+              </button>
+            </>
+          )}
           {post.isNotice && (
             <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-destructive text-white rounded">공지</span>
           )}
@@ -848,12 +868,7 @@ function InstagramFeedCard({
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!user) {
-      toast.error('로그인이 필요합니다.');
-      return;
-    }
-
+    // 비회원도 누를 수 있다 (서버가 IP로 한 번만 반영, 상세 화면과 같음)
     toggleReactionMutation.mutate('like');
   };
 
@@ -894,7 +909,19 @@ function InstagramFeedCard({
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 truncate">
               <span>{getRelativeTimeStr(post.createdAt)}</span>
               <span>·</span>
-              <span className="text-muted-foreground/80 font-medium truncate">{boardName}에 남긴 글</span>
+              {!slug && (post as any).board?.slug ? (
+                // 여러 게시판 글을 모은 목록이면 게시판 이름을 눌러 그 게시판으로 간다
+                <Link
+                  href={`/board/${(post as any).board.slug}`}
+                  onClick={(e) => markPendingNavigation(e, `/board/${(post as any).board.slug}`)}
+                  className="text-muted-foreground/80 font-medium truncate hover:text-primary hover:underline"
+                  title={`${boardName} 게시판으로`}
+                >
+                  {boardName}에 남긴 글
+                </Link>
+              ) : (
+                <span className="text-muted-foreground/80 font-medium truncate">{boardName}에 남긴 글</span>
+              )}
             </div>
           </div>
         </div>

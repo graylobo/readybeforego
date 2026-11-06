@@ -166,6 +166,17 @@ export function useSetPostHidden(postId: string) {
     });
 }
 
+/** 게시글 일괄 삭제 (Super Admin). 끝나면 모든 글 목록을 다시 받는다 */
+export function useBulkDeletePosts() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: boardApi.bulkDeletePosts,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: boardKeys.allPosts() });
+        },
+    });
+}
+
 export function useDeletePost(boardSlug: string) {
     const queryClient = useQueryClient();
     return useMutation({

@@ -1,6 +1,8 @@
 'use client';
 
 import { AppLayout } from '@/components/layout/app-layout';
+import { useAdminDashboardTasks } from '@/hooks/queries/use-admin-queries';
+import { applyTaskBadges } from './admin/components/dashboard/task-badges';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { isAdmin } from '@community/shared-types';
@@ -17,6 +19,10 @@ export default function AdminLayout({
   const pathname = usePathname();
   const { user, isAuthenticated, isLoading, checkAuth } = useAuthStore();
   const [hasCheckedAuth, setHasCheckedAuth] = React.useState(false);
+  // 사이드바에 처리할 일 대기 건수를 보인다 (관리자 확인 뒤에만 요청)
+  const { data: dashboardTasks } = useAdminDashboardTasks(
+    hasCheckedAuth && isAuthenticated && isAdmin(user?.role),
+  );
 
   // Initial Auth Check
   useEffect(() => {
@@ -152,9 +158,9 @@ export default function AdminLayout({
   return (
     <AppLayout
       variant="admin"
-      menuItems={adminMenuItems}
+      menuItems={applyTaskBadges(adminMenuItems, dashboardTasks)}
       showFooter={false}
-      contentClassName="p-8"
+      contentClassName="p-4 md:p-8"
     >
       {children}
     </AppLayout>

@@ -171,7 +171,8 @@ export default function AdminBoardsPage() {
         setFormData({
             slug: board.slug,
             name: board.name,
-            description: board.description,
+            // 개설 신청으로 만든 게시판(크루 게시판 등)은 설명이 비어(null) 있다. 그대로 보내면 서버 입력 검사에서 막힌다
+            description: board.description ?? '',
             sortOrder: board.sortOrder,
             allowAnonymous: board.allowAnonymous,
             isPrivate: board.isPrivate,

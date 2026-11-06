@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi } from '@/lib/api/admin';
+import { adminApi, type DashboardRangeDays } from '@/lib/api/admin';
 import { pointsApi } from '@/lib/api/points';
 import { scamsApi } from '@/lib/api/scams';
 
 export const adminKeys = {
-  stats: ['admin', 'stats'] as const,
+  dashboard: (days: DashboardRangeDays) => ['admin', 'dashboard', days] as const,
+  dashboardTasks: ['admin', 'dashboard', 'tasks'] as const,
   users: {
     all: ['admin', 'users'] as const,
     list: (search?: string) => ['admin', 'users', { search }] as const,
@@ -14,10 +15,23 @@ export const adminKeys = {
   pointPolicies: ['admin', 'points', 'policies'] as const,
 };
 
-export function useAdminStats() {
+export function useAdminDashboard(days: DashboardRangeDays) {
   return useQuery({
-    queryKey: adminKeys.stats,
-    queryFn: () => adminApi.getDashboard(),
+    queryKey: adminKeys.dashboard(days),
+    queryFn: () => adminApi.getDashboard(days),
+    staleTime: 60 * 1000,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** 처리할 일 (대시보드와 사이드바 배지가 함께 쓴다) */
+export function useAdminDashboardTasks(enabled = true) {
+  return useQuery({
+    queryKey: adminKeys.dashboardTasks,
+    queryFn: () => adminApi.getDashboardTasks(),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    enabled,
   });
 }
 
@@ -53,6 +67,13 @@ export function useWarnUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminKeys.users.all });
     },
+  });
+}
+
+export function useGrantPoints() {
+  return useMutation({
+    mutationFn: ({ id, amount, reason }: { id: string; amount: number; reason: string }) =>
+      adminApi.grantPoints(id, amount, reason),
   });
 }
 
