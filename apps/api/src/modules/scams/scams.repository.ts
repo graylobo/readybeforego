@@ -129,6 +129,7 @@ export class ScamsRepository {
   async findSightings(scamInfoId: string, tx?: Transaction) {
     const db = tx ?? this.db;
     return db.select({
+      id: schema.scamSightings.id,
       latitude: schema.scamSightings.latitude,
       longitude: schema.scamSightings.longitude,
       seenOn: schema.scamSightings.seenOn,
@@ -154,6 +155,32 @@ export class ScamsRepository {
           updatedAt: new Date(),
         },
       });
+  }
+
+  async deleteSightingAndResolveReports(sightingId: string, adminId: string) {
+    return this.db.transaction(async (tx) => {
+      const [deleted] = await tx.delete(schema.scamSightings)
+        .where(eq(schema.scamSightings.id, sightingId))
+        .returning({ id: schema.scamSightings.id });
+      if (!deleted) return null;
+      await tx.update(schema.reports)
+        .set({ status: 'resolved', resolvedAt: new Date(), resolvedBy: adminId })
+        .where(and(
+          eq(schema.reports.targetType, 'SCAM_SIGHTING'),
+          eq(schema.reports.targetId, sightingId),
+          eq(schema.reports.status, 'pending'),
+        ));
+      return deleted;
+    });
+  }
+
+  async findDeletedBefore(cutoff: Date, limit = 200, tx?: Transaction) {
+    const db = tx ?? this.db;
+    return db.select({ id: schema.scamInfos.id })
+      .from(schema.scamInfos)
+      .where(sql`${schema.scamInfos.deletedAt} < ${cutoff.toISOString()}`)
+      .orderBy(asc(schema.scamInfos.deletedAt))
+      .limit(limit);
   }
 
   async deleteSighting(scamInfoId: string, userId: string, tx?: Transaction) {

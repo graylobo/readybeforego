@@ -3,12 +3,13 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "@/hooks/use-translation";
-import { AreaSummaries, Region, ScamSighting, scamsApi } from "@/lib/api/scams";
+import { AreaSummaries, Region, ScamSighting, ScamSightingInput, scamsApi } from "@/lib/api/scams";
+import { ReportDialog } from "@/components/common/report-dialog";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { distanceMeters, findNearbyRegions, REGION_AREA_RADIUS_M } from "@/lib/nearby";
-import { earlierMonthOptions, formatLocalDate, resolveSightingDate, SIGHTING_WHEN_OPTIONS, SightingWhen } from "@/lib/sighting-date";
+import { earlierMonthOptions, formatLocalDate, formatSightingDate, resolveSightingDate, SIGHTING_WHEN_OPTIONS, SightingWhen } from "@/lib/sighting-date";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -322,6 +323,7 @@ export default function ReadyBeforeGoMap() {
   const [sightingEarlierMonth, setSightingEarlierMonth] = useState("");
   const [sightingExactDate, setSightingExactDate] = useState("");
   const [sightingFarNotice, setSightingFarNotice] = useState<string | null>(null);
+  const [reportingSightingId, setReportingSightingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: sightings = [] } = useQuery<ScamSighting[]>({
@@ -331,7 +333,7 @@ export default function ReadyBeforeGoMap() {
   });
 
   const saveSightingMutation = useMutation({
-    mutationFn: (data: { scamId: string; sighting: ScamSighting }) => scamsApi.saveSighting(data.scamId, data.sighting),
+    mutationFn: (data: { scamId: string; sighting: ScamSightingInput }) => scamsApi.saveSighting(data.scamId, data.sighting),
     onSuccess: (_result, { scamId }) => {
       toast.success("겪은 위치를 기록했습니다. 다른 여행자에게 도움이 됩니다.");
       queryClient.invalidateQueries({ queryKey: ["scams"] });
@@ -1222,14 +1224,31 @@ export default function ReadyBeforeGoMap() {
           setMapCenter(center);
           setMapZoom(zoom);
         }} />}
-        {focusedScamId && sightings.map((sighting, index) => (
+        {focusedScamId && sightings.map((sighting) => (
           <CircleMarker
-            key={`sighting-${sighting.latitude}-${sighting.longitude}-${index}`}
+            // 위치를 고르는 동안에는 점이 지도 클릭을 가로채지 않도록 다시 그린다
+            key={`${sighting.id}-${sightingPick ? "picking" : "viewing"}`}
             center={[sighting.latitude, sighting.longitude]}
             radius={7}
-            interactive={false}
+            interactive={!sightingPick}
+            bubblingMouseEvents={false}
             pathOptions={{ color: "#ffffff", weight: 2, fillColor: "#dc2626", fillOpacity: 0.85 }}
-          />
+          >
+            {!sightingPick && (
+              <Popup closeButton={false}>
+                <div className="space-y-1.5 text-slate-100">
+                  <p className="text-xs font-bold">{formatSightingDate(sighting.seenOn, sighting.seenPrecision)}에 겪음</p>
+                  <button
+                    type="button"
+                    onClick={() => setReportingSightingId(sighting.id)}
+                    className="cursor-pointer text-[11px] font-semibold text-red-300 underline underline-offset-2 hover:text-red-200"
+                  >
+                    잘못된 기록 신고
+                  </button>
+                </div>
+              </Popup>
+            )}
+          </CircleMarker>
         ))}
 
         {/* 사용자 현재 위치 마커 (이벤트 클릭 투과 & 하위 zIndex 레이어 설정 🛡️) */}
@@ -1472,6 +1491,13 @@ export default function ReadyBeforeGoMap() {
           <span>사전 꿀팁만</span>
         </button>
       </div>
+
+      <ReportDialog
+        isOpen={!!reportingSightingId}
+        onClose={() => setReportingSightingId(null)}
+        targetType="SCAM_SIGHTING"
+        targetId={reportingSightingId || ""}
+      />
 
       {/* ESC 키 제보 위치 선택 취소 확인 모달 🛑 */}
       <Dialog open={isEscConfirmOpen} onOpenChange={setIsEscConfirmOpen}>

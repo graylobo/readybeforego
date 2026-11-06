@@ -5,7 +5,7 @@ import { UserProfilePopover } from '@/components/common/user-profile-popover';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAdminReports, useResolveReport } from '@/hooks/queries/use-report-queries';
+import { reportKeys, useAdminReports, useResolveReport } from '@/hooks/queries/use-report-queries';
 import { usePaginationLimit } from '@/hooks/use-pagination-limit';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -13,6 +13,8 @@ import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import React, { useMemo } from 'react';
 import { toast } from '@/lib/toast';
+import { scamsApi } from '@/lib/api/scams';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
   AllCommunityModule,
@@ -71,6 +73,13 @@ const ReporterRenderer = (params: any) => {
   );
 };
 
+const TARGET_LABELS: Record<string, string> = {
+  POST: '게시글',
+  COMMENT: '댓글',
+  SCAM_INFO: '제보',
+  SCAM_SIGHTING: '겪은 위치 기록',
+};
+
 // Actions Component
 const ActionsRenderer = (params: any) => {
   const { data, context } = params;
@@ -78,6 +87,17 @@ const ActionsRenderer = (params: any) => {
 
   return (
     <div className="flex items-center gap-1.5 h-full">
+      {data.targetType === 'SCAM_SIGHTING' && !data.targetDeleted && (
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-7 px-2 text-[11px]"
+          onClick={() => context.handleDeleteSighting(data.targetId)}
+          disabled={context.isPending}
+        >
+          기록 삭제
+        </Button>
+      )}
       <Button 
         variant="outline" 
         size="sm" 
@@ -116,6 +136,23 @@ export default function AdminReportsPage() {
     targetFilter === 'all' ? undefined : targetFilter
   );
   const resolveReport = useResolveReport();
+  const queryClient = useQueryClient();
+  const deleteSighting = useMutation({
+    mutationFn: (sightingId: string) => scamsApi.deleteAdminSighting(sightingId),
+    onSuccess: () => {
+      toast.success('기록을 삭제하고 관련 신고를 처리완료로 변경했습니다.');
+      queryClient.invalidateQueries({ queryKey: reportKeys.all });
+    },
+    onError: () => {
+      toast.error('기록 삭제 중 오류가 발생했습니다.');
+    },
+  });
+
+  const handleDeleteSighting = (sightingId: string) => {
+    if (confirm('이 겪은 위치 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.')) {
+      deleteSighting.mutate(sightingId);
+    }
+  };
 
   const handleStatusChange = (id: string, status: 'resolved' | 'rejected') => {
     resolveReport.mutate({ id, data: { status } }, {
@@ -139,7 +176,7 @@ export default function AdminReportsPage() {
           <div className="flex flex-col justify-center h-full py-1 gap-0.5">
             <div className="flex items-center">
               <span className={`text-[11px] font-bold ${targetType === 'POST' ? 'text-primary' : 'text-foreground'}`}>
-                {targetType === 'POST' ? '게시글' : '댓글'}
+                {TARGET_LABELS[targetType] || targetType}
               </span>
               {/* 신고 뒤에 지워진 대상은 열어도 없는 페이지라 링크 대신 표시만 한다 */}
               {targetDeleted && <span className="ml-1.5 text-[11px] text-destructive">(삭제됨)</span>}
@@ -236,7 +273,7 @@ export default function AdminReportsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">신고 관리</h1>
           <p className="text-muted-foreground mt-2">
-            사용자들이 접수한 게시글 및 댓글 신고 내역을 확인하고 처리합니다.
+            사용자들이 접수한 게시글, 댓글, 제보, 겪은 위치 기록 신고 내역을 확인하고 처리합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -248,6 +285,8 @@ export default function AdminReportsPage() {
               <SelectItem value="all">전체 대상</SelectItem>
               <SelectItem value="POST">게시글</SelectItem>
               <SelectItem value="COMMENT">댓글</SelectItem>
+              <SelectItem value="SCAM_INFO">제보</SelectItem>
+              <SelectItem value="SCAM_SIGHTING">겪은 위치 기록</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
@@ -272,7 +311,8 @@ export default function AdminReportsPage() {
           defaultColDef={defaultColDef}
           context={{ 
             handleStatusChange,
-            isPending: resolveReport.isPending
+            handleDeleteSighting,
+            isPending: resolveReport.isPending || deleteSighting.isPending
           }}
           rowHeight={64}
         />

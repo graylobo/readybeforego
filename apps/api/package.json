@@ -25,6 +25,8 @@
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "db:cleanup-temp-uploads": "node -r ts-node/register -r tsconfig-paths/register src/jobs/uploads-temp-cleanup.ts",
     "prod:cleanup-temp-uploads": "node dist/src/jobs/uploads-temp-cleanup.js",
+    "db:purge-deleted-scams": "node -r ts-node/register -r tsconfig-paths/register src/jobs/scams-purge-deleted.ts",
+    "prod:purge-deleted-scams": "node dist/src/jobs/scams-purge-deleted.js",
     "dev:crawler-worker": "nest start --watch --entryFile crawler-worker",
     "prod:crawler-worker": "node dist/src/crawler-worker.js",
     "prod:crawler-run": "node dist/src/jobs/crawler-run.js"

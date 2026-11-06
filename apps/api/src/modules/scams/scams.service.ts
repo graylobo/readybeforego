@@ -1,6 +1,7 @@
 import {
   SIGHTING_MAX_DISTANCE_FROM_CITY_M,
   SIGHTING_MAX_DISTANCE_FROM_REGION_M,
+  SCAM_DELETED_RETENTION_DAYS,
   SightingDatePrecision,
 } from '@community/shared-types';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
@@ -636,6 +637,31 @@ export class ScamsService {
       seenPrecision: data.seenPrecision,
     });
     return this.scamsRepository.findSightings(scamInfoId);
+  }
+
+  async deleteAdminSighting(sightingId: string, adminId: string) {
+    const deleted = await this.scamsRepository.deleteSightingAndResolveReports(sightingId, adminId);
+    if (!deleted) {
+      throw new NotFoundException('해당 기록을 찾을 수 없습니다.');
+    }
+    return { id: sightingId };
+  }
+
+  // 지운 지 보관 기간이 지난 제보를 사진과 함께 영구 삭제한다. 외부 스케줄러가 jobs/scams-purge-deleted를 매일 실행한다
+  async purgeExpiredDeletedScams(now = new Date()) {
+    const cutoff = new Date(now.getTime() - SCAM_DELETED_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const expired = await this.scamsRepository.findDeletedBefore(cutoff);
+    let purgedCount = 0;
+    for (const scam of expired) {
+      try {
+        await this.deleteAdminScam(scam.id);
+        purgedCount++;
+      } catch (err) {
+        // 하나가 실패해도 나머지는 지우고, 실패한 제보는 다음 실행 때 다시 시도한다
+        this.logger.error(`Failed to purge deleted scam ${scam.id}`, err);
+      }
+    }
+    return { foundCount: expired.length, purgedCount };
   }
 
   async deleteSighting(scamInfoId: string, userId: string) {

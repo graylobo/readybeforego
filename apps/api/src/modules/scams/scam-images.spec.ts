@@ -81,4 +81,27 @@ describe('제보 사진 소유 확인', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, ScamsController.prototype.toggleReaction);
     expect(guards).toEqual(expect.arrayContaining([JwtAuthGuard]));
   });
+
+  it('지운 지 30일이 지난 제보만 사진과 함께 영구 삭제한다', async () => {
+    const { service, repository, storageProvider } = createService({ imageUrls: [ownerImage], deletedAt: new Date() });
+    (repository as any).findDeletedBefore = jest.fn().mockResolvedValue([{ id: 's1' }]);
+    (repository as any).deleteAdminScam = jest.fn().mockResolvedValue({ id: 's1' });
+    const now = new Date('2026-12-01T00:00:00Z');
+
+    await expect(service.purgeExpiredDeletedScams(now)).resolves.toEqual({ foundCount: 1, purgedCount: 1 });
+
+    expect((repository as any).findDeletedBefore).toHaveBeenCalledWith(new Date('2026-11-01T00:00:00Z'));
+    expect((repository as any).deleteAdminScam).toHaveBeenCalledWith('s1');
+    expect(storageProvider.delete).toHaveBeenCalledWith('scams/owner/a.webp');
+  });
+
+  it('영구 삭제 중 하나가 실패해도 나머지를 계속 지운다', async () => {
+    const { service, repository } = createService();
+    (repository as any).findDeletedBefore = jest.fn().mockResolvedValue([{ id: 'bad' }, { id: 'good' }]);
+    (repository as any).deleteAdminScam = jest.fn(async (id: string) => {
+      if (id === 'bad') throw new Error('fail');
+      return { id };
+    });
+    await expect(service.purgeExpiredDeletedScams()).resolves.toEqual({ foundCount: 2, purgedCount: 1 });
+  });
 });

@@ -418,6 +418,7 @@ Cloud Run 은 요청을 처리하는 동안에만 CPU 가 할당되고, 트래�
 | 작업 | 실행 명령 | 권장 주기 |
 |---|---|---|
 | 미사용 temp 업로드 이미지 정리 | `pnpm --filter api run prod:cleanup-temp-uploads` | 매일 1회 (예: 새벽 4시) |
+| 지운 지 30일이 지난 제보와 사진 영구 삭제 | `pnpm --filter api run prod:purge-deleted-scams` | 매일 1회 (예: 새벽 4시 30분) |
 
 스케줄러 선택지 (비용 순)
 

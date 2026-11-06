@@ -54,6 +54,14 @@ export class ScamsController {
     });
   }
 
+  @Delete('admin/sightings/:sightingId')
+  @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
+  @Roles(USER_ROLES.ADMIN)
+  @ApiOperation({ summary: '잘못된 겪은 위치 기록 삭제 (관리자). 이 기록에 대한 신고는 처리 완료가 된다' })
+  async deleteAdminSighting(@Param('sightingId') sightingId: string, @Req() req: any) {
+    return this.scamsService.deleteAdminSighting(sightingId, req.user.id);
+  }
+
   @Delete('admin/:id')
   @UseGuards(JwtAuthGuard, UserStatusGuard, RolesGuard)
   @Roles(USER_ROLES.ADMIN)

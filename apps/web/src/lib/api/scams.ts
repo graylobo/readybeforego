@@ -65,11 +65,15 @@ export interface AreaSummaries {
   countries: CountrySummary[];
 }
 
-export interface ScamSighting {
+export interface ScamSightingInput {
   latitude: number;
   longitude: number;
   seenOn: string;
   seenPrecision: SightingDatePrecision;
+}
+
+export interface ScamSighting extends ScamSightingInput {
+  id: string;
 }
 
 export interface ScamInfo {
@@ -155,9 +159,13 @@ export const scamsApi = {
     return response.data;
   },
 
-  saveSighting: async (scamId: string, data: ScamSighting): Promise<ScamSighting[]> => {
+  saveSighting: async (scamId: string, data: ScamSightingInput): Promise<ScamSighting[]> => {
     const response = await apiClient.post(`/scams/${scamId}/sightings`, data);
     return response.data;
+  },
+
+  deleteAdminSighting: async (sightingId: string): Promise<void> => {
+    await apiClient.delete(`/scams/admin/sightings/${sightingId}`);
   },
 
   deleteSighting: async (scamId: string): Promise<ScamSighting[]> => {

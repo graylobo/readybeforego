@@ -33,3 +33,6 @@ export function isScamImagePath(pathOrUrl: string): boolean {
 export function scamImageThumbnailUrl(url: string): string | null {
   return isScamImagePath(url) ? imageVariantPath(url, SCAM_IMAGE_THUMBNAIL_WIDTH) : null;
 }
+
+/** 사용자가 지운 제보를 관리자가 복원할 수 있는 기간. 지나면 사진과 함께 영구 삭제한다 */
+export const SCAM_DELETED_RETENTION_DAYS = 30;

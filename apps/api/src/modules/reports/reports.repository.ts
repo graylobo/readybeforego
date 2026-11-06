@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { desc, eq, and, inArray, isNull, sql, SQL } from 'drizzle-orm';
-import { reports, users, posts, comments, boards } from '../../database/schema';
+import { reports, users, posts, comments, boards, scamInfos, scamSightings } from '../../database/schema';
 import * as schema from '../../database/schema';
 import { CreateReportRequest, ResolveReportRequest } from '@community/shared-types';
 
@@ -114,12 +114,50 @@ export class ReportsRepository {
         deleted: !!c.deletedAt || !!post.deletedAt,
       });
     }
+    await this.addScamTargetLinks(list, links);
     return links;
   }
 
-  /** 신고할 수 있는 대상인지 (있고 지워지지 않은 글/댓글) */
+  /** 제보와 겪은 위치 기록은 지도 화면에서 해당 지역을 열어 확인한다. 지역이 없는 도시·국가 제보는 주소가 없다 */
+  private async addScamTargetLinks(
+    list: { targetType: string; targetId: string }[],
+    links: Map<string, { url: string; deleted: boolean }>,
+  ) {
+    const regionUrl = (regionId: string | null) => (regionId ? `/?regionId=${regionId}` : '');
+    const scamIds = list.filter((r) => r.targetType === 'SCAM_INFO').map((r) => r.targetId);
+    if (scamIds.length) {
+      const rows = await this.db
+        .select({ id: scamInfos.id, regionId: scamInfos.regionId, deletedAt: scamInfos.deletedAt })
+        .from(scamInfos)
+        .where(inArray(scamInfos.id, scamIds));
+      for (const r of rows) {
+        links.set(`SCAM_INFO:${r.id}`, { url: regionUrl(r.regionId), deleted: !!r.deletedAt });
+      }
+    }
+    const sightingIds = list.filter((r) => r.targetType === 'SCAM_SIGHTING').map((r) => r.targetId);
+    if (sightingIds.length) {
+      const rows = await this.db
+        .select({ id: scamSightings.id, regionId: scamInfos.regionId, deletedAt: scamInfos.deletedAt })
+        .from(scamSightings)
+        .innerJoin(scamInfos, eq(scamSightings.scamInfoId, scamInfos.id))
+        .where(inArray(scamSightings.id, sightingIds));
+      for (const r of rows) {
+        links.set(`SCAM_SIGHTING:${r.id}`, { url: regionUrl(r.regionId), deleted: !!r.deletedAt });
+      }
+    }
+  }
+
+  /** 신고할 수 있는 대상인지 (있고 지워지지 않은 글/댓글/제보/겪은 위치 기록) */
   async targetExists(targetType: string, targetId: string): Promise<boolean> {
-    const table = targetType === 'POST' ? posts : targetType === 'COMMENT' ? comments : null;
+    if (targetType === 'SCAM_SIGHTING') {
+      const [row] = await this.db
+        .select({ id: scamSightings.id })
+        .from(scamSightings)
+        .where(eq(scamSightings.id, targetId))
+        .limit(1);
+      return !!row;
+    }
+    const table = targetType === 'POST' ? posts : targetType === 'COMMENT' ? comments : targetType === 'SCAM_INFO' ? scamInfos : null;
     if (!table) return false;
     const [row] = await this.db
       .select({ id: table.id })

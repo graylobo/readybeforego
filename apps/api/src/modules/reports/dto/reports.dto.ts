@@ -2,7 +2,7 @@ import { createZodDto } from '@anatine/zod-nestjs';
 import { z } from 'zod';
 
 export const CreateReportSchema = z.object({
-  targetType: z.enum(['POST', 'COMMENT', 'SCAM_INFO']),
+  targetType: z.enum(['POST', 'COMMENT', 'SCAM_INFO', 'SCAM_SIGHTING']),
   targetId: z.string(),
   reason: z.string().min(1).max(1000),
 });

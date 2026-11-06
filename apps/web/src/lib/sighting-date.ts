@@ -53,3 +53,11 @@ export function resolveSightingDate(
       return null;
   }
 }
+
+// 정확한 날짜를 모르는 기록은 그 정밀도까지만 보여 준다
+export function formatSightingDate(seenOn: string, precision: SightingDatePrecision): string {
+  const [year, month, day] = seenOn.split("-").map(Number);
+  if (precision === "month") return `${year}년 ${month}월쯤`;
+  if (precision === "week") return `${year}년 ${month}월 ${day}일 주간`;
+  return `${year}년 ${month}월 ${day}일`;
+}

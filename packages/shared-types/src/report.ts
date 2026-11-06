@@ -1,4 +1,4 @@
-export type ReportTargetType = 'POST' | 'COMMENT' | 'SCAM_INFO';
+export type ReportTargetType = 'POST' | 'COMMENT' | 'SCAM_INFO' | 'SCAM_SIGHTING';
 export type ReportStatus = 'pending' | 'resolved' | 'rejected';
 
 export interface Report {
