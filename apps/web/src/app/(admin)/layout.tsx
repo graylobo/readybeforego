@@ -118,12 +118,6 @@ export default function AdminLayout({
       href: '/admin/inquiries',
     },
     {
-      id: 'admin-inquiries',
-      label: '1:1 문의 관리',
-      icon: <HelpCircle className="h-5 w-5 text-sky-500" />,
-      href: '/admin/inquiries',
-    },
-    {
       id: 'admin-points',
       label: '포인트 관리',
       icon: <Award className="h-5 w-5" />,
