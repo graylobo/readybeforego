@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const destination = findDestination(country, city);
   if (!destination) return {};
   const title = pageTitle(destination.cityName);
-  const description = `${destination.cityName}에서 여행자가 자주 겪는 호객과 사기 수법, 알아채는 신호와 대처법을 여행 전에 확인하세요.`;
+  const description = `${destination.cityName}에서 여행자가 자주 겪는 호객과 사기, 알아채는 신호와 대처법을 여행 전에 확인하세요.`;
   const path = destinationPath(destination);
   return {
     title,
@@ -86,12 +86,12 @@ export default async function DestinationPage({ params }: Props) {
       <header className="space-y-3">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{pageTitle(destination.cityName)}</h1>
         <p className="text-muted-foreground">
-          {destination.cityName}에 가기 전에 알아두면 좋은 수법 {cards.length}가지입니다. 모든 제안이 사기는 아니지만, 아래 신호가 보이면 한 번 더 확인하세요.
+          {destination.cityName}에 가기 전에 알아두면 좋은 주의사항 {cards.length}가지입니다. 모든 제안이 사기는 아니지만, 아래 신호가 보이면 한 번 더 확인하세요.
         </p>
       </header>
 
       {cards.length > 0 && (
-        <nav aria-label="수법 목록" className="rounded-xl border border-border p-4">
+        <nav aria-label="주의사항 목록" className="rounded-xl border border-border p-4">
           <ol className="list-decimal space-y-1.5 pl-5 text-sm">
             {cards.map((scam) => (
               <li key={scam.id}>
@@ -155,7 +155,7 @@ export default async function DestinationPage({ params }: Props) {
       <section className="space-y-3 rounded-xl border border-border p-5">
         <h2 className="text-lg font-semibold">{destination.cityName}에서 겪은 일이 있나요?</h2>
         <p className="text-sm text-muted-foreground">
-          다른 여행자에게 도움이 되도록 알려 주세요. 특정 업체나 개인을 지목하기보다 어떤 수법이었는지 적어 주시면 좋습니다.
+          다른 여행자에게 도움이 되도록 알려 주세요. 특정 업체나 개인을 지목하기보다 어떤 일을 겪었는지 적어 주시면 좋습니다.
         </p>
         <Link href="/" className="inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           지도에서 제보하기
