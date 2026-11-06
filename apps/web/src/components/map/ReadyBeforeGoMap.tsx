@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "@/hooks/use-translation";
-import { Region, ScamSighting, scamsApi } from "@/lib/api/scams";
+import { AreaSummaries, Region, ScamSighting, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
-import { distanceMeters, findNearbyRegions, REGION_AREA_RADIUS_M, topCategoryIcons } from "@/lib/nearby";
+import { distanceMeters, findNearbyRegions, REGION_AREA_RADIUS_M } from "@/lib/nearby";
 import { earlierMonthOptions, formatLocalDate, resolveSightingDate, SIGHTING_WHEN_OPTIONS, SightingWhen } from "@/lib/sighting-date";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import L from "leaflet";
@@ -21,7 +21,6 @@ import { toast } from "sonner";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { cwd } from "process";
 
 // 주요 국가별 표준 중심 좌표 정의 (도시/마커 분포 쏠림 방지)
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -63,8 +62,7 @@ const createClusterIcon = (
   cautionCount: number = 0,
   tipCount: number = 0,
   isSelected: boolean = false,
-  filterReportType: "ALL" | "CAUTION" | "TIP" = "ALL",
-  cautionIcons: string = ""
+  filterReportType: "ALL" | "CAUTION" | "TIP" = "ALL"
 ) => {
   const isSelectedStyle = isSelected 
     ? "ring-4 ring-red-500 shadow-[0_0_18px_rgba(239,68,68,0.9)] scale-110 z-50" 
@@ -83,7 +81,7 @@ const createClusterIcon = (
     badgeHtml = `
       <div class="flex items-center rounded-full border-2 border-white overflow-hidden transition-all duration-200 ${isSelectedStyle} z-10 bg-slate-900">
         <div class="bg-gradient-to-r from-red-500 to-rose-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5 border-r border-white/30">
-          <span class="text-[10px]">${cautionIcons || "⚠️"}</span><span>${cautionCount}</span>
+          <span class="text-[10px]">⚠️</span><span>${cautionCount}</span>
         </div>
         <div class="bg-gradient-to-r from-emerald-500 to-teal-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5">
           <span class="text-[10px]">💡</span><span>${tipCount}</span>
@@ -103,11 +101,9 @@ const createClusterIcon = (
     // 3. CAUTION 전용 마커 (Red Circle)
     const count = filterReportType === "ALL" ? cautionCount : cautionCount;
     let sizeClass = count >= 6 ? "w-12 h-12 text-sm" : count >= 3 ? "w-10 h-10 text-xs" : "w-9 h-9 text-xs";
-    // 유형 아이콘이 있으면 내용 길이에 맞는 알약 모양으로 그린다
-    if (cautionIcons) sizeClass = "h-9 px-2.5 text-xs whitespace-nowrap";
     badgeHtml = `
       <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br from-red-500 to-rose-700 transition-all duration-200 ${sizeClass} border-2 border-white ${isSelectedStyle} z-10">
-        <span class="mr-1 text-[13px]">${cautionIcons || "⚠️"}</span>${count}
+        <span class="mr-0.5 text-[10px]">⚠️</span>${count}
       </div>
     `;
   }
@@ -158,6 +154,13 @@ const createUserLocationIcon = () => {
     iconAnchor: [12, 12],
   });
 };
+
+const sumCounts = (
+  regions: Region[],
+  areas: Partial<Record<"scamCount" | "cautionCount" | "tipCount", number>>[],
+  key: "scamCount" | "cautionCount" | "tipCount"
+) =>
+  regions.reduce((sum, r) => sum + (r[key] || 0), 0) + areas.reduce((sum, a) => sum + (a[key] || 0), 0);
 
 // 지도 제어 및 카메라 뷰 핸들러
 function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -470,6 +473,13 @@ export default function ReadyBeforeGoMap() {
     gcTime: 30 * 60 * 1000,
   });
 
+  // 도시·국가 전체 주의사항은 장소에 묶이지 않아 지역 목록에 없으므로 따로 받아 마커에 더한다
+  const { data: areaSummaries } = useQuery<AreaSummaries>({
+    queryKey: ["scam-regions", "area-summaries"],
+    queryFn: () => scamsApi.getAreaSummaries(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const nearbyRadiusM = nearby ? findNearbyRegions(nearby.center, regions).radiusM : null;
 
   // 지도 마커 데이터 로딩 피드백 감지 및 자동 전환 🛡️
@@ -510,6 +520,25 @@ export default function ReadyBeforeGoMap() {
     return NEARBY_LOCATION_THRESHOLD; // 줌 18 이상에서도 동일한 근접 장소 임계값(0.00025) 적용 🎯
   };
 
+  // 장소 제보 없이 도시 전체 주의사항만 있는 도시도 지도에서 찾을 수 있게 도시 좌표에 마커를 둔다
+  const regionlessCityClusters = (citiesWithRegions: Record<string, unknown>) =>
+    (areaSummaries?.cities || [])
+      .filter((c) => !citiesWithRegions[c.id])
+      .map((c) => ({
+        id: `city-${c.id}`,
+        name: c.name,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        scamCount: c.scamCount,
+        cautionCount: c.cautionCount,
+        tipCount: c.tipCount,
+        isCluster: true,
+        scope: "city" as const,
+        cityId: c.id,
+        countryCode: c.countryCode,
+        regions: [] as Region[],
+      }));
+
   // 모든 줌 레벨 통합 동적 클러스터러
   const getDynamicClusters = () => {
     const activeRegions = regions.filter((r) => (r.scamCount || 0) > 0);
@@ -523,31 +552,47 @@ export default function ReadyBeforeGoMap() {
         countryGroups[code].push(r);
       });
 
-      return Object.entries(countryGroups).map(([code, group]) => {
-        const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
-        const totalCautionCount = group.reduce((sum, r) => sum + (r.cautionCount || 0), 0);
-        const totalTipCount = group.reduce((sum, r) => sum + (r.tipCount || 0), 0);
+      const codes = new Set([
+        ...Object.keys(countryGroups),
+        ...(areaSummaries?.cities || []).map((c) => c.countryCode),
+        ...(areaSummaries?.countries || []).map((c) => c.code),
+      ]);
+
+      return [...codes].flatMap((code) => {
+        const group = countryGroups[code] || [];
+        const areas = [
+          ...(areaSummaries?.cities || []).filter((c) => c.countryCode === code),
+          ...(areaSummaries?.countries || []).filter((c) => c.code === code),
+        ];
         const name = getCountryName(code, lang) || code;
-        
-        let lat = group.reduce((sum, r) => sum + r.latitude, 0) / group.length;
-        let lng = group.reduce((sum, r) => sum + r.longitude, 0) / group.length;
+
+        let lat: number | null = null;
+        let lng: number | null = null;
         if (COUNTRY_COORDS[code]) {
           [lat, lng] = COUNTRY_COORDS[code];
+        } else if (group.length > 0) {
+          lat = group.reduce((sum, r) => sum + r.latitude, 0) / group.length;
+          lng = group.reduce((sum, r) => sum + r.longitude, 0) / group.length;
+        } else {
+          const located = areas.find((a) => a.latitude !== null && a.longitude !== null);
+          lat = located?.latitude ?? null;
+          lng = located?.longitude ?? null;
         }
+        if (lat === null || lng === null) return [];
 
-        return {
+        return [{
           id: `country-${code}`,
           name,
           latitude: lat,
           longitude: lng,
-          scamCount: totalScamCount,
-          cautionCount: totalCautionCount,
-          tipCount: totalTipCount,
+          scamCount: sumCounts(group, areas, "scamCount"),
+          cautionCount: sumCounts(group, areas, "cautionCount"),
+          tipCount: sumCounts(group, areas, "tipCount"),
           isCluster: true,
           scope: "country" as const,
           countryCode: code,
           regions: group,
-        };
+        }];
       });
     }
 
@@ -561,10 +606,8 @@ export default function ReadyBeforeGoMap() {
         cityGroups[cid].push(r);
       });
 
-      return Object.entries(cityGroups).map(([cid, group]) => {
-        const totalScamCount = group.reduce((sum, r) => sum + (r.scamCount || 0), 0);
-        const totalCautionCount = group.reduce((sum, r) => sum + (r.cautionCount || 0), 0);
-        const totalTipCount = group.reduce((sum, r) => sum + (r.tipCount || 0), 0);
+      const cityClusters = Object.entries(cityGroups).map(([cid, group]) => {
+        const area = (areaSummaries?.cities || []).find((c) => c.id === cid);
         const representative = group[0];
         const cityName = representative.cityName || "기타 도시";
 
@@ -580,15 +623,18 @@ export default function ReadyBeforeGoMap() {
           name: cityName,
           latitude: lat,
           longitude: lng,
-          scamCount: totalScamCount,
-          cautionCount: totalCautionCount,
-          tipCount: totalTipCount,
+          scamCount: sumCounts(group, area ? [area] : [], "scamCount"),
+          cautionCount: sumCounts(group, area ? [area] : [], "cautionCount"),
+          tipCount: sumCounts(group, area ? [area] : [], "tipCount"),
           isCluster: true,
           scope: "city" as const,
           cityId: cid,
+          countryCode: representative.countryCode,
           regions: group,
         };
       });
+
+      return [...cityClusters, ...regionlessCityClusters(cityGroups)];
     }
 
     // C. 상세 스케일 (zoom > 9): 임계값 기반 거리 클러스터링
@@ -672,7 +718,8 @@ export default function ReadyBeforeGoMap() {
       }
     }
 
-    return clusters;
+    const citiesWithRegions = Object.fromEntries(activeRegions.map((r) => [r.cityId, true]));
+    return [...clusters, ...regionlessCityClusters(citiesWithRegions)];
   };
 
   // 개별 지역 마커 클릭 시
@@ -691,6 +738,12 @@ export default function ReadyBeforeGoMap() {
   const handleDynamicClusterClick = (cluster: any) => {
     if (sightingPick) {
       chooseSightingPoint([cluster.latitude, cluster.longitude]);
+      return;
+    }
+    // 장소가 없는 마커는 제보 모드에서 확대만 한다
+    if (isReportMode && cluster.regions.length === 0) {
+      setMapCenter([cluster.latitude, cluster.longitude]);
+      setMapZoom(Math.min(currentZoom + 2, 18));
       return;
     }
     if (isReportMode) {
@@ -733,9 +786,8 @@ export default function ReadyBeforeGoMap() {
         setSelectedCityId(cluster.cityId);
         setSelectedRegionId(null);
         setSelectedRegion(null);
-        const representative = cluster.regions[0];
-        if (representative && representative.countryCode) {
-          setSelectedCountryCode(representative.countryCode);
+        if (cluster.countryCode) {
+          setSelectedCountryCode(cluster.countryCode);
         }
         setMapCenter([cluster.latitude, cluster.longitude]);
         setMapZoom(11);
@@ -838,7 +890,6 @@ export default function ReadyBeforeGoMap() {
         },
         (error) => {
           console.error(`Geolocation Error (highAccuracy=${highAccuracy}):`, error);
-          console.log("에러랑",error.code)
           if (highAccuracy) {
             // 고정밀도 실패 시 저정밀도로 재시도하여 성공률 극대화
             getPosition(false);
@@ -1232,7 +1283,8 @@ export default function ReadyBeforeGoMap() {
             return true;
           })
           .map((cluster) => {
-            const isSelected = cluster.regions.some((r: any) => r.id === selectedRegionId || r.id === highlightedRegionId);
+            const isSelected = cluster.regions.some((r: any) => r.id === selectedRegionId || r.id === highlightedRegionId)
+              || (cluster.regions.length === 0 && !!cluster.cityId && cluster.cityId === selectedCityId);
 
             // 필터 활성화 시 해당 타입의 count만 표시, 전체일 때는 총 scamCount
             let displayCount = cluster.scamCount;
@@ -1256,9 +1308,7 @@ export default function ReadyBeforeGoMap() {
                   cluster.cautionCount || 0,
                   cluster.tipCount || 0,
                   isSelected,
-                  filterReportType,
-                  // 국가·도시처럼 넓게 묶인 마커는 여러 유형이 섞이므로 지역 단위에서만 유형을 보여 준다
-                  currentZoom > 9 ? topCategoryIcons(cluster.regions) : ""
+                  filterReportType
                 )}
                 zIndexOffset={isSelected ? 2000 : 1000}
                 eventHandlers={{

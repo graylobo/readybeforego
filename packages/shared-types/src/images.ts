@@ -19,3 +19,17 @@ export function commentImageThumbnailUrl(url: string): string | null {
 
 /** 제보 하나에 첨부할 수 있는 사진 수 */
 export const SCAM_MAX_IMAGE_COUNT = 5;
+
+/** 제보 사진을 올릴 때 서버가 함께 만드는 작은 버전의 너비 (목록 칸 최대 약 400px의 2배, 고해상도 화면용) */
+export const SCAM_IMAGE_THUMBNAIL_WIDTH = 720;
+
+/** 서버가 작은 버전을 함께 만드는 제보 사진인지 (scams 폴더의 원본 webp) */
+export function isScamImagePath(pathOrUrl: string): boolean {
+  const path = pathOrUrl.split(/[?#]/)[0];
+  return /(^|\/)scams\//.test(path) && path.endsWith('.webp') && !/-w\d+\.webp$/.test(path);
+}
+
+/** 제보 사진의 작은 버전 주소. 작은 버전이 없는 이미지면 null */
+export function scamImageThumbnailUrl(url: string): string | null {
+  return isScamImagePath(url) ? imageVariantPath(url, SCAM_IMAGE_THUMBNAIL_WIDTH) : null;
+}

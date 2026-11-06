@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "@/hooks/use-translation";
-import { Country, Region, scamsApi } from "@/lib/api/scams";
+import { AreaSummaries, Country, Region, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 
@@ -35,7 +35,7 @@ function groupBy(regions: Region[], keyOf: (region: Region) => string | null | u
   return groups;
 }
 
-export function PlaceSearch({ regions }: { regions: Region[] }) {
+export function PlaceSearch({ regions, areaSummaries }: { regions: Region[]; areaSummaries?: AreaSummaries }) {
   const { lang } = useTranslation();
   const {
     selectedCountryCode,
@@ -74,39 +74,55 @@ export function PlaceSearch({ regions }: { regions: Region[] }) {
     setMapZoom(15);
   };
 
-  const selectCity = (cityId: string, group: Region[]) => {
-    setSelectedCountryCode(group[0].countryCode || null);
+  const selectCity = (cityId: string, countryCode: string | null, center: [number, number]) => {
+    setSelectedCountryCode(countryCode);
     setSelectedCityId(cityId);
     setSelectedRegionId(null);
     setSelectedRegion(null);
-    setMapCenter(centerOf(group));
+    setMapCenter(center);
     setMapZoom(12);
   };
 
-  const selectCountry = (code: string, group: Region[]) => {
+  const selectCountry = (code: string, center: [number, number] | null) => {
     setSelectedCountryCode(code);
     setSelectedCityId(null);
     setSelectedRegionId(null);
     setSelectedRegion(null);
-    setMapCenter(centerOf(group));
-    setMapZoom(6);
+    if (center) {
+      setMapCenter(center);
+      setMapZoom(6);
+    }
   };
 
   const rows = useMemo<PlaceRow[]>(() => {
     const q = normalize(query);
     const cityGroups = groupBy(activeRegions, (r) => r.cityId);
-    const cityRow = (cityId: string, group: Region[]): PlaceRow => ({
-      key: `city-${cityId}`,
-      label: `${group[0].cityName || "도시"} 전체`,
-      sublabel: getCountryName(group[0].countryCode, lang) || "",
-      count: totalCount(group),
-      onSelect: () => selectCity(cityId, group),
+    const summaryCities = areaSummaries?.cities || [];
+    // 장소 제보가 없는 도시와 나라도 도시·국가 전체 주의사항이 있으면 찾을 수 있어야 한다
+    const allCities = [...new Set([...cityGroups.keys(), ...summaryCities.map((c) => c.id)])].map((cityId) => {
+      const group = cityGroups.get(cityId) || [];
+      const summary = summaryCities.find((c) => c.id === cityId);
+      return {
+        cityId,
+        name: summary?.name || group[0]?.cityName || "도시",
+        nameEn: summary?.nameEn,
+        countryCode: summary?.countryCode || group[0]?.countryCode || null,
+        center: summary ? ([summary.latitude, summary.longitude] as [number, number]) : centerOf(group),
+        count: totalCount(group) + (summary?.scamCount || 0),
+      };
+    });
+    const cityRow = (city: (typeof allCities)[number]): PlaceRow => ({
+      key: `city-${city.cityId}`,
+      label: `${city.name} 전체`,
+      sublabel: getCountryName(city.countryCode, lang) || "",
+      count: city.count,
+      onSelect: () => selectCity(city.cityId, city.countryCode, city.center),
     });
 
     // 검색어가 없으면 제보가 많은 도시를 먼저 보여 준다
     if (!q) {
-      return [...cityGroups.entries()]
-        .map(([cityId, group]) => cityRow(cityId, group))
+      return allCities
+        .map(cityRow)
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
     }
@@ -121,12 +137,19 @@ export function PlaceSearch({ regions }: { regions: Region[] }) {
         onSelect: () => selectRegion(region),
       }));
 
-    const cityRows = [...cityGroups.entries()]
-      .filter(([, group]) => normalize(group[0].cityName).includes(q))
-      .map(([cityId, group]) => cityRow(cityId, group));
+    const cityRows = allCities
+      .filter((city) => normalize(city.name).includes(q) || normalize(city.nameEn).includes(q))
+      .map(cityRow);
 
-    const countryRows = [...groupBy(activeRegions, (r) => r.countryCode).entries()]
-      .filter(([code]) => {
+    const countryGroups = groupBy(activeRegions, (r) => r.countryCode);
+    const summaryCountries = areaSummaries?.countries || [];
+    const countryCodes = new Set([
+      ...countryGroups.keys(),
+      ...allCities.map((c) => c.countryCode).filter((c): c is string => !!c),
+      ...summaryCountries.map((c) => c.code),
+    ]);
+    const countryRows = [...countryCodes]
+      .filter((code) => {
         const country = countries.find((c) => c.code === code);
         return (
           normalize(getCountryName(code, lang)).includes(q) ||
@@ -134,18 +157,29 @@ export function PlaceSearch({ regions }: { regions: Region[] }) {
           normalize(country?.nameEn).includes(q)
         );
       })
-      .map(([code, group]): PlaceRow => ({
-        key: `country-${code}`,
-        label: `${getCountryName(code, lang) || code} 전체`,
-        sublabel: "",
-        count: totalCount(group),
-        onSelect: () => selectCountry(code, group),
-      }));
+      .map((code): PlaceRow => {
+        const group = countryGroups.get(code) || [];
+        const summary = summaryCountries.find((c) => c.code === code);
+        const cities = allCities.filter((c) => c.countryCode === code);
+        const center: [number, number] | null = group.length > 0
+          ? centerOf(group)
+          : cities[0]?.center
+            ?? (summary?.latitude != null && summary?.longitude != null ? [summary.latitude, summary.longitude] : null);
+        return {
+          key: `country-${code}`,
+          label: `${getCountryName(code, lang) || code} 전체`,
+          sublabel: "",
+          count: totalCount(group)
+            + summaryCities.filter((c) => c.countryCode === code).reduce((sum, c) => sum + c.scamCount, 0)
+            + (summary?.scamCount || 0),
+          onSelect: () => selectCountry(code, center),
+        };
+      });
 
     return [...regionRows, ...cityRows, ...countryRows].slice(0, 8);
     // 선택 함수는 스토어 setter만 사용하므로 의존성에서 제외한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, activeRegions, countries, lang]);
+  }, [query, activeRegions, areaSummaries, countries, lang]);
 
   // 선택이 모두 해제되면 입력창도 비운다
   useEffect(() => {

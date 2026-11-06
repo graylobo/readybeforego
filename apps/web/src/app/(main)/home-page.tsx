@@ -7,14 +7,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { useTranslation } from "@/hooks/use-translation";
-import { scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
+import { AreaSummaries, scamsApi, ScamInfo, Region, Country, City } from "@/lib/api/scams";
 import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
-import { findNearbyRegions, formatDistance, formatRadius, REGION_AREA_RADIUS_M, zoomForRadius } from "@/lib/nearby";
+import { distanceMeters, findNearbyRegions, formatDistance, formatRadius, NEARBY_CITY_FALLBACK_RADIUS_M, REGION_AREA_RADIUS_M, zoomForRadius } from "@/lib/nearby";
+import { SmartImage } from "@/components/common/smart-image";
 import { PlaceSearch } from "@/components/map/place-search";
-import { SIGHTING_MAX_DISTANCE_FROM_CITY_M, SIGHTING_MAX_DISTANCE_FROM_REGION_M } from "@community/shared-types";
+import { SCAM_MAX_IMAGE_COUNT, scamImageThumbnailUrl, SIGHTING_MAX_DISTANCE_FROM_CITY_M, SIGHTING_MAX_DISTANCE_FROM_REGION_M } from "@community/shared-types";
 import {
   CAUTION_CATEGORY_ITEMS,
   TIP_CATEGORY_ITEMS,
@@ -266,6 +267,19 @@ export default function Home() {
     gcTime: 30 * 60 * 1000,
   });
 
+  // 장소 없이 도시·국가 전체 주의사항만 있는 지역 정보
+  const { data: areaSummaries } = useQuery<AreaSummaries>({
+    queryKey: ["scam-regions", "area-summaries"],
+    queryFn: () => scamsApi.getAreaSummaries(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const cityNameOf = (cityId?: string | null) =>
+    cities.find((c) => c.id === cityId)?.name
+    || allRegions.find((r) => r.cityId === cityId)?.cityName
+    || areaSummaries?.cities.find((c) => c.id === cityId)?.name
+    || "도시";
+
   // 동일/근접 좌표를 갖는 모든 지역 필터링 (클러스터 단위 통합 피드 구현 🎯)
   const sharingRegions = selectedRegionId && selectedRegion
     ? allRegions.filter(
@@ -288,9 +302,16 @@ export default function Home() {
     () => new Map((nearbyResult?.items || []).map((item) => [item.region.id, item.distanceM])),
     [nearbyResult]
   );
+  // 주변에 장소 제보가 없으면 가까운 도시의 도시 전체 주의사항이라도 보여 준다
+  const nearbyFallbackCityIds = useMemo(() => {
+    if (!nearby || (nearbyResult?.items.length ?? 0) > 0) return [];
+    return (areaSummaries?.cities || [])
+      .filter((c) => distanceMeters(nearby.center, [c.latitude, c.longitude]) <= NEARBY_CITY_FALLBACK_RADIUS_M)
+      .map((c) => c.id);
+  }, [nearby, nearbyResult, areaSummaries]);
   const nearbyCityIds = useMemo(
-    () => Array.from(new Set((nearbyResult?.items || []).map((item) => item.region.cityId))),
-    [nearbyResult]
+    () => Array.from(new Set([...(nearbyResult?.items || []).map((item) => item.region.cityId), ...nearbyFallbackCityIds])),
+    [nearbyResult, nearbyFallbackCityIds]
   );
 
   useEffect(() => {
@@ -498,18 +519,23 @@ export default function Home() {
       setIsEditModalOpen(false);
       setEditingScam(null);
     },
-    onError: (error: any) => {
+    onError: (error: any, { data }) => {
       console.error(error);
       toast.error("제보 수정에 실패했습니다.");
+      // 저장하지 못한 제보에 새로 올린 사진은 저장소에 남기지 않는다
+      const existing = editingScam?.imageUrls || [];
+      (data.imageUrls || []).filter((url: string) => !existing.includes(url)).forEach((url: string) => uploadsApi.deleteImage(url));
     }
   });
 
   const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
+      // 같은 파일을 지운 뒤 다시 고를 수 있도록 입력값을 비운다
+      e.target.value = "";
       const totalCount = editExistingImageUrls.length + editImageFiles.length + selectedFiles.length;
-      if (totalCount > 5) {
-        toast.error("사진은 최대 5장까지 첨부할 수 있습니다.");
+      if (totalCount > SCAM_MAX_IMAGE_COUNT) {
+        toast.error(`사진은 최대 ${SCAM_MAX_IMAGE_COUNT}장까지 첨부할 수 있습니다.`);
         return;
       }
       setEditImageFiles((prev) => [...prev, ...selectedFiles]);
@@ -545,16 +571,15 @@ export default function Home() {
     }
 
     setIsUploading(true);
+    const uploadedUrls: string[] = [];
     try {
-      const uploadedUrls = await Promise.all(
-        editImageFiles.map(async (file) => {
-          const isAnimated = file.type === "image/gif" || file.type === "image/webp";
-          return uploadsApi.uploadImage(file, {
-            compress: !isAnimated,
-            folder: "scams",
-          });
-        })
-      );
+      for (const file of editImageFiles) {
+        const isAnimated = file.type === "image/gif" || file.type === "image/webp";
+        uploadedUrls.push(await uploadsApi.uploadImage(file, {
+          compress: !isAnimated,
+          folder: "scams",
+        }));
+      }
 
       const finalImageUrls = [...editExistingImageUrls, ...uploadedUrls];
 
@@ -573,6 +598,7 @@ export default function Home() {
       });
     } catch (err) {
       toast.error("이미지 업로드에 실패했습니다.");
+      uploadedUrls.forEach((url) => uploadsApi.deleteImage(url));
     } finally {
       setIsUploading(false);
     }
@@ -766,8 +792,7 @@ export default function Home() {
     // 어디서 겪을 수 있는 내용인지 범위별로 묶어 보여 준다
     const groupLabelOf = (scam: ScamInfo) => {
       if (scam.scope === "city") {
-        const cityName = allRegions.find((r) => r.cityId === scam.cityId)?.cityName || "도시";
-        return `${cityName} 어디서나`;
+        return `${cityNameOf(scam.cityId)} 어디서나`;
       }
       if (scam.scope === "country") {
         return `${getCountryName(scam.countryCode, lang) || "이 나라"} 어디서나`;
@@ -785,7 +810,7 @@ export default function Home() {
       return formatDistance(distance);
     };
 
-    if (nearby && nearbyResult && nearbyResult.items.length === 0) {
+    if (nearby && nearbyResult && nearbyCityIds.length === 0) {
       const nearest = nearbyResult.nearest;
       return (
         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
@@ -906,8 +931,7 @@ export default function Home() {
                           </Badge>
                         )}
                         {isExpanded && scam.scope === "city" && (() => {
-                          const matchedRegion = allRegions.find(r => r.cityId === scam.cityId);
-                          const cityName = matchedRegion?.cityName || "도시";
+                          const cityName = cityNameOf(scam.cityId);
                           return (
                             <Badge variant="outline" className="bg-amber-50 border-amber-250 dark:bg-amber-950/20 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                               🏙️ {cityName} 전체
@@ -1044,10 +1068,13 @@ export default function Home() {
                               setActiveMediaIndex(idx);
                             }}
                           >
-                            <img 
-                              src={url} 
-                              alt={`scam-attachment-${idx}`} 
-                              className="w-full h-full object-cover" 
+                            {/* 목록에서는 작은 버전을 받아 로밍 데이터를 아낀다. 작은 버전이 없는 예전 사진은 원본으로 */}
+                            <SmartImage
+                              src={scamImageThumbnailUrl(url) ?? url}
+                              fallbackSrc={url}
+                              alt={`${scam.title} 사진 ${idx + 1}`}
+                              showErrorText={false}
+                              className="w-full h-full object-cover"
                             />
                           </button>
                         ))}
@@ -1243,11 +1270,7 @@ export default function Home() {
     const placeName = (() => {
       if (nearby) return nearby.kind === "gps" ? "내 주변" : `${nearby.label} 주변`;
       if (selectedRegion) return selectedRegion.name;
-      if (selectedCityId) {
-        return cities.find((c) => c.id === selectedCityId)?.name
-          || allRegions.find((r) => r.cityId === selectedCityId)?.cityName
-          || "도시";
-      }
+      if (selectedCityId) return cityNameOf(selectedCityId);
       return getCountryName(selectedCountryCode, lang) || "국가";
     })();
     const radiusM = nearbyResult?.radiusM;
@@ -1333,7 +1356,7 @@ export default function Home() {
 
         {/* 플로팅 컨트롤 그룹 (여행지 검색 + 제보하기 버튼). 제보 위치를 고르는 동안에는 안내 배너에 자리를 내준다 */}
         <div className={`absolute top-2.5 right-2.5 flex items-center justify-end gap-2 ${isReportMode ? "z-10" : "left-2.5 z-[1100]"}`}>
-          {!isReportMode && !sightingPick && <PlaceSearch regions={allRegions} />}
+          {!isReportMode && !sightingPick && <PlaceSearch regions={allRegions} areaSummaries={areaSummaries} />}
 
           {/* 맵 직접 제보하기 플로팅 버튼 */}
           {!sightingPick && <Button

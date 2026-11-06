@@ -1,6 +1,9 @@
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 
 import { BadRequestException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ScamsController } from './scams.controller';
 import { UploadsService } from '../uploads/uploads.service';
 import { ScamsService } from './scams.service';
 
@@ -61,7 +64,21 @@ describe('제보 사진 소유 확인', () => {
   it('수정에서 뺀 사진은 작성자 파일일 때만 저장소에서 지운다', async () => {
     const { service, storageProvider } = createService({ imageUrls: [ownerImage, otherUserImage, profileImage] });
     await service.update('s1', { imageUrls: [] } as any, 'owner', 'user');
-    expect(storageProvider.delete).toHaveBeenCalledTimes(1);
-    expect(storageProvider.delete).toHaveBeenCalledWith('scams/owner/a.webp');
+    // 원본과 함께 저장한 작은 버전까지만 지운다
+    expect(storageProvider.delete.mock.calls.map(([path]) => path).sort()).toEqual([
+      'scams/owner/a-w720.webp',
+      'scams/owner/a.webp',
+    ]);
+  });
+
+  it('사용자가 제보를 지워도 사진은 복원을 위해 남겨 둔다', async () => {
+    const { service, storageProvider } = createService({ imageUrls: [ownerImage] });
+    await service.delete('s1', 'owner', 'user');
+    expect(storageProvider.delete).not.toHaveBeenCalled();
+  });
+
+  it('반응은 로그인해야 남길 수 있다', () => {
+    const guards = Reflect.getMetadata(GUARDS_METADATA, ScamsController.prototype.toggleReaction);
+    expect(guards).toEqual(expect.arrayContaining([JwtAuthGuard]));
   });
 });

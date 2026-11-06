@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, memo } from "react";
+import { SCAM_MAX_IMAGE_COUNT, scamImageThumbnailUrl } from "@community/shared-types";
+import { SmartImage } from "@/components/common/smart-image";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { useTranslation } from "@/hooks/use-translation";
@@ -31,20 +33,28 @@ import {
   hasOtherCategory,
 } from "@/lib/constants/scam-categories";
 
+// 미리보기와 업로드할 파일을 한 항목으로 묶어, 압축이 끝나는 순서와 상관없이 짝이 어긋나지 않게 한다
+interface ImageAttachment {
+  id: string;
+  previewUrl: string;
+  file: File;
+  isCompressed: boolean;
+}
+
 interface ImagePreviewItemProps {
+  id: string;
   url: string;
-  index: number;
-  onRemove: (index: number) => void;
+  onRemove: (id: string) => void;
   disabled: boolean;
 }
 
-const ImagePreviewItem = memo(({ url, index, onRemove, disabled }: ImagePreviewItemProps) => {
+const ImagePreviewItem = memo(({ id, url, onRemove, disabled }: ImagePreviewItemProps) => {
   return (
     <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-border group">
       <img src={url} alt="preview" className="w-full h-full object-cover" />
       <button
         type="button"
-        onClick={() => onRemove(index)}
+        onClick={() => onRemove(id)}
         className="absolute top-1 right-1 w-4.5 h-4.5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200"
         disabled={disabled}
       >
@@ -95,11 +105,16 @@ export function ScamReportModal() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [scope, setScope] = useState<'spot' | 'region' | 'city' | 'country'>('spot');
 
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const attachmentsRef = useRef<ImageAttachment[]>([]);
+  attachmentsRef.current = attachments;
+  const clearAttachments = useCallback(() => {
+    attachmentsRef.current.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
+    setAttachments([]);
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState("");
-  const [isCompressing, setIsCompressing] = useState(false);
+  const isCompressing = attachments.some((attachment) => !attachment.isCompressed);
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
   const [selectedScamDetail, setSelectedScamDetail] = useState<ScamInfo | null>(null);
 
@@ -159,11 +174,9 @@ export function ScamReportModal() {
       setAvoidanceTip("");
       setSubLocation("");
       setSourceUrl("");
-      setImageFiles([]);
-      setImagePreviews([]);
+      clearAttachments();
       setUploading(false);
       setUploadProgressText("");
-      setIsCompressing(false);
       setErrors({});
       setScope("spot");
 
@@ -289,11 +302,7 @@ export function ScamReportModal() {
     }
   }, [isReportModalOpen, reportCoords, reportType, selectedCountryCode, selectedCityId, countries, geoData, selectedRegion, lang]);
 
-  useEffect(() => {
-    return () => {
-      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [imagePreviews]);
+  useEffect(() => clearAttachments, [clearAttachments]);
 
   const createMutation = useMutation<ScamInfo, Error, Parameters<typeof scamsApi.createScam>[0]>({
     mutationFn: (data: Parameters<typeof scamsApi.createScam>[0]) => scamsApi.createScam(data),
@@ -309,8 +318,7 @@ export function ScamReportModal() {
       setReportModalOpen(false);
       setReportCoords(null);
       setIsReportMode(false);
-      setImageFiles([]);
-      setImagePreviews([]);
+      clearAttachments();
       setUploading(false);
 
       if (newScam.regionId) {
@@ -321,8 +329,10 @@ export function ScamReportModal() {
         }
       }
     },
-    onError: (err: any) => {
+    onError: (err: any, variables) => {
       setUploading(false);
+      // 등록하지 못한 제보의 사진은 저장소에 남기지 않는다. 다시 제출하면 새로 올린다
+      (variables.imageUrls || []).forEach((url) => uploadsApi.deleteImage(url));
       const serverMsg = err.response?.data?.message || err.message;
       if (serverMsg && serverMsg !== "Validation failed" && serverMsg !== "Error") {
         toast.error(serverMsg);
@@ -330,42 +340,38 @@ export function ScamReportModal() {
     },
   });
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
-      
-      if (imageFiles.length + selectedFiles.length > 5) {
-        toast.error(t("report_modal.attachments_label"));
-        return;
-      }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    // 같은 파일을 지운 뒤 다시 고를 수 있도록 입력값을 비운다
+    e.target.value = "";
+    if (selectedFiles.length === 0) return;
 
-      // 1. 임시 미리보기 생성하여 화면에 바로 피드백 노출
-      const newPreviews = selectedFiles.map((file) => URL.createObjectURL(file));
-      setImagePreviews((prev) => [...prev, ...newPreviews]);
-
-      // 2. 비동기 백그라운드 이미지 압축 시작 (사용자 모르게 물밑에서 조용히 실행)
-      setIsCompressing(true);
-      try {
-        const compressPromises = selectedFiles.map((file) => uploadsApi.compressImage(file));
-        const compressedFiles = await Promise.all(compressPromises);
-        
-        setImageFiles((prev) => [...prev, ...compressedFiles]);
-      } catch (err) {
-        console.error("Image compression error:", err);
-        // 압축 실패 시 원본이라도 저장하여 등록 가능하도록 지원
-        setImageFiles((prev) => [...prev, ...selectedFiles]);
-      } finally {
-        setIsCompressing(false);
-      }
+    if (attachmentsRef.current.length + selectedFiles.length > SCAM_MAX_IMAGE_COUNT) {
+      toast.error(`사진은 최대 ${SCAM_MAX_IMAGE_COUNT}장까지 첨부할 수 있습니다.`);
+      return;
     }
+
+    // 미리보기는 바로 보여 주고, 압축은 뒤에서 진행한다. 압축에 실패하면 compressImage가 원본을 돌려준다
+    const added = selectedFiles.map((file, index): ImageAttachment => ({
+      id: `${Date.now()}-${index}-${file.name}`,
+      previewUrl: URL.createObjectURL(file),
+      file,
+      isCompressed: false,
+    }));
+    setAttachments((prev) => [...prev, ...added]);
+
+    added.forEach(async ({ id, file }) => {
+      const compressed = await uploadsApi.compressImage(file);
+      setAttachments((prev) =>
+        prev.map((attachment) => (attachment.id === id ? { ...attachment, file: compressed, isCompressed: true } : attachment))
+      );
+    });
   };
 
-  const removeImage = useCallback((index: number) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setImagePreviews((prev) => {
-      URL.revokeObjectURL(prev[index]);
-      return prev.filter((_, i) => i !== index);
-    });
+  const removeAttachment = useCallback((id: string) => {
+    const target = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (target) URL.revokeObjectURL(target.previewUrl);
+    setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -438,7 +444,8 @@ export function ScamReportModal() {
       return;
     }
 
-    let urls: string[] = [];
+    const imageFiles = attachments.map((attachment) => attachment.file);
+    const urls: string[] = [];
     try {
       if (imageFiles.length > 0) {
         setUploading(true);
@@ -459,7 +466,9 @@ export function ScamReportModal() {
             } catch (err) {
               attempts++;
               console.warn(`[Image Upload Retry ${attempts}/2]`, err);
-              if (attempts >= 2) throw err;
+              // 잘못된 요청은 다시 보내도 같은 결과이므로 네트워크·서버 오류만 재시도한다
+              const status = (err as any)?.response?.status;
+              if (attempts >= 2 || (status && status < 500)) throw err;
               await new Promise((res) => setTimeout(res, 1000));
             }
           }
@@ -514,7 +523,11 @@ export function ScamReportModal() {
       }
     } catch (error: any) {
       console.error("Image Upload Failed:", error);
-      toast.error("사진 업로드에 실패했습니다. 모바일 데이터 상태를 확인한 후 다시 시도해 주세요.");
+      // 오류 안내는 공통 API 처리에서 띄운다. 로그인 만료(401)만 공통 처리에서 빠지므로 여기서 알린다
+      if (error?.response?.status === 401) {
+        toast.error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+      }
+      urls.forEach((url) => uploadsApi.deleteImage(url));
       setUploading(false);
       setUploadProgressText("");
     }
@@ -871,7 +884,7 @@ export function ScamReportModal() {
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("report_modal.attachments_label")}</Label>
             <div className="flex flex-wrap gap-2 items-center pt-1">
               
-              {imagePreviews.length < 5 && (
+              {attachments.length < SCAM_MAX_IMAGE_COUNT && (
                 <label className="w-16 h-16 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 hover:border-slate-400 bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 gap-1 text-[10px] text-muted-foreground">
                   <ImageIcon className="w-4 h-4 text-slate-500" />
                   {t("report_modal.add_photo")}
@@ -886,12 +899,12 @@ export function ScamReportModal() {
                 </label>
               )}
 
-              {imagePreviews.map((url, index) => (
+              {attachments.map((attachment) => (
                 <ImagePreviewItem
-                  key={url}
-                  url={url}
-                  index={index}
-                  onRemove={removeImage}
+                  key={attachment.id}
+                  id={attachment.id}
+                  url={attachment.previewUrl}
+                  onRemove={removeAttachment}
                   disabled={uploading}
                 />
               ))}
@@ -1077,7 +1090,13 @@ export function ScamReportModal() {
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
                   {selectedScamDetail.imageUrls.map((url, i) => (
                     <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative w-20 h-20 rounded-xl overflow-hidden border border-border shrink-0 hover:opacity-90 transition-opacity">
-                      <img src={url} alt={`attachment-${i}`} className="w-full h-full object-cover" />
+                      <SmartImage
+                        src={scamImageThumbnailUrl(url) ?? url}
+                        fallbackSrc={url}
+                        alt={`${selectedScamDetail.title} 사진 ${i + 1}`}
+                        showErrorText={false}
+                        className="w-full h-full object-cover"
+                      />
                     </a>
                   ))}
                 </div>

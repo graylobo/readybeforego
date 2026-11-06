@@ -478,6 +478,44 @@ export class ScamsRepository {
       .orderBy(asc(schema.regions.name));
   }
 
+  async findAreaSummaries(tx?: Transaction) {
+    const db = tx ?? this.db;
+    const counts = {
+      scamCount: sql<number>`count(${schema.scamInfos.id})::int`,
+      cautionCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'CAUTION' then 1 end)::int`,
+      tipCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'TIP' then 1 end)::int`,
+    };
+    const [cities, countries] = await Promise.all([
+      db.select({
+        id: schema.cities.id,
+        name: schema.cities.name,
+        nameEn: schema.cities.nameEn,
+        countryCode: schema.cities.countryCode,
+        latitude: schema.cities.latitude,
+        longitude: schema.cities.longitude,
+        ...counts,
+      })
+      .from(schema.scamInfos)
+      .innerJoin(schema.cities, eq(schema.scamInfos.cityId, schema.cities.id))
+      .where(and(eq(schema.scamInfos.scope, 'city'), sql`${schema.scamInfos.deletedAt} is null`))
+      .groupBy(schema.cities.id),
+      db.select({
+        code: schema.countries.code,
+        name: schema.countries.name,
+        nameEn: schema.countries.nameEn,
+        // 국가에는 좌표가 없어 그 나라 도시들의 가운데로 지도를 옮긴다
+        latitude: sql<number | null>`(select avg(c.latitude) from ${schema.cities} c where c.country_code = ${schema.countries.code})`,
+        longitude: sql<number | null>`(select avg(c.longitude) from ${schema.cities} c where c.country_code = ${schema.countries.code})`,
+        ...counts,
+      })
+      .from(schema.scamInfos)
+      .innerJoin(schema.countries, eq(schema.scamInfos.countryCode, schema.countries.code))
+      .where(and(eq(schema.scamInfos.scope, 'country'), sql`${schema.scamInfos.deletedAt} is null`))
+      .groupBy(schema.countries.code),
+    ]);
+    return { cities, countries };
+  }
+
   async findAllRegions(tx?: Transaction) {
     const db = tx ?? this.db;
     return db.select({
@@ -493,7 +531,6 @@ export class ScamsRepository {
       cautionCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'CAUTION' then 1 end)::int`,
       tipCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'TIP' then 1 end)::int`,
       hasRegionScope: sql<boolean>`coalesce(bool_or(${schema.scamInfos.scope} = 'region'), false)`,
-      cautionCategories: sql<string | null>`string_agg(${schema.scamInfos.scamCategory}, ',') filter (where ${schema.scamInfos.reportType} = 'CAUTION')`,
     })
     .from(schema.regions)
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))

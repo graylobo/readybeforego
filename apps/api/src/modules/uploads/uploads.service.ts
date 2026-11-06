@@ -9,6 +9,8 @@ import {
   COMMENT_IMAGE_THUMBNAIL_WIDTH,
   imageVariantPath,
   isCommentImagePath,
+  isScamImagePath,
+  SCAM_IMAGE_THUMBNAIL_WIDTH,
 } from '@community/shared-types';
 
 /** 본문 이미지 작은 버전 너비 (원본보다 작은 것만 만든다) */
@@ -17,8 +19,12 @@ const IMAGE_RESPONSIVE_WIDTHS = [720, 1280];
 /** 이모티콘은 댓글에서 최대 220px 정도로 보이므로 고해상도 화면 기준 두 배 안쪽으로 줄여 저장 */
 export const EMOTICON_IMAGE_MAX_SIZE = 480;
 
-/** 댓글 이미지는 화면이 원본 주소에서 작은 버전 주소(-w440)를 바로 만들어 쓰므로, 원본 크기와 상관없이 항상 만든다 */
+/** 댓글·제보 이미지는 화면이 원본 주소에서 작은 버전 주소(-w{너비})를 바로 만들어 쓰므로, 원본 크기와 상관없이 항상 만든다 */
 const COMMENT_FOLDER = 'comments';
+const THUMBNAIL_WIDTH_BY_FOLDER: Record<string, number> = {
+  [COMMENT_FOLDER]: COMMENT_IMAGE_THUMBNAIL_WIDTH,
+  scams: SCAM_IMAGE_THUMBNAIL_WIDTH,
+};
 
 @Injectable()
 export class UploadsService {
@@ -41,7 +47,7 @@ export class UploadsService {
     // maxSize: 가로·세로를 이 크기 안으로 줄인다 (이모티콘). 없으면 너비만 IMAGE_PROCESSING.MAX_WIDTH로
     options: { responsive?: boolean; maxSize?: number } = {},
   ): Promise<ImageUploadResult> {
-    const withThumbnail = folder === COMMENT_FOLDER;
+    const thumbnailWidth = THUMBNAIL_WIDTH_BY_FOLDER[folder];
     // 원본 크기 검증. 저장 크기(10MB)는 최적화한 뒤에 검사한다 (큰 GIF도 WebP로 바꾸면 크게 줄어듦)
     if (fileData.length > UPLOAD_LIMITS.IMAGE_INPUT_SIZE) {
       throw new BadRequestException(
@@ -115,7 +121,7 @@ export class UploadsService {
         : [];
     const [main, thumbnail, ...variants] = await Promise.all([
       this.storageProvider.upload(outputBuffer, filePath, 'image/webp'),
-      withThumbnail ? this.uploadCommentThumbnail(outputBuffer, filePath, isAnimated, size?.width) : null,
+      thumbnailWidth ? this.uploadThumbnail(outputBuffer, filePath, isAnimated, thumbnailWidth, size?.width) : null,
       ...variantWidths.map(async (w) => {
         const buffer = await sharp(outputBuffer).resize({ width: w }).webp({ quality: IMAGE_PROCESSING.QUALITY }).toBuffer();
         return this.storageProvider.upload(buffer, imageVariantPath(filePath, w), 'image/webp');
@@ -133,20 +139,20 @@ export class UploadsService {
     };
   }
 
-  /** 댓글 이미지 작은 버전. 움직이는 이미지도 프레임째 줄인다 (원본이 이미 작으면 같은 파일을 그 이름으로 저장) */
-  private async uploadCommentThumbnail(buffer: Buffer, filePath: string, isAnimated: boolean, width?: number) {
+  /** 작은 버전. 움직이는 이미지도 프레임째 줄인다 (원본이 이미 작으면 같은 파일을 그 이름으로 저장) */
+  private async uploadThumbnail(buffer: Buffer, filePath: string, isAnimated: boolean, thumbnailWidth: number, width?: number) {
     let thumbnail = buffer;
-    if (width && width > COMMENT_IMAGE_THUMBNAIL_WIDTH) {
+    if (width && width > thumbnailWidth) {
       try {
         thumbnail = await sharp(buffer, { animated: isAnimated })
-          .resize({ width: COMMENT_IMAGE_THUMBNAIL_WIDTH })
+          .resize({ width: thumbnailWidth })
           .webp({ quality: IMAGE_PROCESSING.QUALITY })
           .toBuffer();
       } catch (error) {
-        this.logger.error('Comment thumbnail conversion failed', error);
+        this.logger.error('Thumbnail conversion failed', error);
       }
     }
-    return this.storageProvider.upload(thumbnail, imageVariantPath(filePath, COMMENT_IMAGE_THUMBNAIL_WIDTH), 'image/webp');
+    return this.storageProvider.upload(thumbnail, imageVariantPath(filePath, thumbnailWidth), 'image/webp');
   }
 
   private async readImageSize(buffer: Buffer): Promise<{ width: number; height: number } | null> {
@@ -184,12 +190,15 @@ export class UploadsService {
     throw new BadRequestException('Move operation not supported by current storage provider');
   }
 
-  /** 댓글 이미지면 함께 저장한 작은 버전도 지운다 (본문 이미지의 작은 버전은 본문에 주소가 있어 따로 지워진다) */
+  /** 댓글·제보 이미지면 함께 저장한 작은 버전도 지운다 (본문 이미지의 작은 버전은 본문에 주소가 있어 따로 지워진다) */
   async deleteImage(path: string): Promise<void> {
     await Promise.all([
       this.storageProvider.delete(path),
       ...(isCommentImagePath(path)
         ? [this.storageProvider.delete(imageVariantPath(path, COMMENT_IMAGE_THUMBNAIL_WIDTH))]
+        : []),
+      ...(isScamImagePath(path)
+        ? [this.storageProvider.delete(imageVariantPath(path, SCAM_IMAGE_THUMBNAIL_WIDTH))]
         : []),
     ]);
   }

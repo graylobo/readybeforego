@@ -1,5 +1,4 @@
 import type { Region } from "./api/scams";
-import { CATEGORY_MAP, OTHER_CATEGORY, parseCategories } from "./constants/scam-categories";
 
 export type LatLng = [number, number];
 
@@ -31,6 +30,9 @@ export function distanceMeters(a: LatLng, b: LatLng): number {
 }
 
 // 위치는 서버로 보내지 않고 브라우저에서 계산한다
+// 주변에 장소 제보가 없을 때 도시 전체 주의사항을 찾는 거리
+export const NEARBY_CITY_FALLBACK_RADIUS_M = 50000;
+
 export function findNearbyRegions(center: LatLng, regions: Region[]): NearbyResult {
   const ranked = regions
     .filter((r) => (r.scamCount || 0) > 0)
@@ -66,21 +68,4 @@ export function formatDistance(distanceM: number): string {
 
 export function formatRadius(radiusM: number): string {
   return radiusM >= 1000 ? `${radiusM / 1000}km` : `${radiusM}m`;
-}
-
-// 마커에 표시할 유형 아이콘. 많이 제보된 유형부터 최대 limit개
-export function topCategoryIcons(regions: Region[], limit = 2): string {
-  const counts = new Map<string, number>();
-  for (const region of regions) {
-    for (const category of parseCategories(region.cautionCategories)) {
-      if (category !== OTHER_CATEGORY && CATEGORY_MAP[category]) {
-        counts.set(category, (counts.get(category) || 0) + 1);
-      }
-    }
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([category]) => CATEGORY_MAP[category].icon)
-    .join("");
 }

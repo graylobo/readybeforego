@@ -111,6 +111,12 @@ export class ScamsController {
     return this.scamsService.getRegions(cityId);
   }
 
+  @Get('area-summaries')
+  @ApiOperation({ summary: '도시·국가 전체 주의사항 건수 (장소가 없는 지역도 지도와 검색에 보여 주기 위함)' })
+  async getAreaSummaries() {
+    return this.scamsService.getAreaSummaries();
+  }
+
   @Get('region/:regionId')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: '특정 지역의 사기 경고 정보 목록 조회' })
@@ -226,7 +232,7 @@ export class ScamsController {
   }
 
   @Post(':id/reaction')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(JwtAuthGuard, UserStatusGuard)
   @ApiOperation({ summary: '사기 경고 정보에 대한 좋아요/싫어요 토글' })
   @UsePipes(new ZodValidationPipe(ToggleScamReactionZodDto))
   @ApiBody({ type: ToggleScamReactionZodDto })
@@ -235,9 +241,6 @@ export class ScamsController {
     @Body() body: ToggleScamReactionZodDto,
     @Req() req: any
   ) {
-    const userId = req.user?.id;
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const ip = (typeof rawIp === 'string' ? rawIp.split(',')[0] : Array.isArray(rawIp) ? rawIp[0] : rawIp)?.trim() || '127.0.0.1';
-    return this.scamsService.toggleReaction(id, body.type, userId, ip);
+    return this.scamsService.toggleReaction(id, body.type, req.user.id);
   }
 }

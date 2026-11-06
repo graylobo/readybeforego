@@ -550,10 +550,7 @@ export class ScamsService {
 
     const deleteResult = await this.scamsRepository.update(id, { deletedAt: new Date() });
 
-    // 제보 본문 이미지 삭제
-    if (Array.isArray(scam.imageUrls)) {
-      await this.deleteOwnedScamImages(scam.imageUrls as string[], scam.userId);
-    }
+    // 제보 사진은 관리자가 복원할 수 있도록 남겨 두고, 영구 삭제할 때 저장소에서 지운다
 
     // 제보 관련 댓글 이미지 개별 스토리지 클린업
     for (const url of commentImages) {
@@ -733,6 +730,10 @@ export class ScamsService {
 
   async getRegions(cityId: string) {
     return this.scamsRepository.findRegionsByCity(cityId);
+  }
+
+  async getAreaSummaries() {
+    return this.scamsRepository.findAreaSummaries();
   }
 
   async getAllRegions() {

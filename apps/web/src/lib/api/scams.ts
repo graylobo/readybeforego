@@ -33,9 +33,36 @@ export interface Region {
   cautionCount?: number;
   tipCount?: number;
   hasRegionScope?: boolean;
-  cautionCategories?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AreaCounts {
+  scamCount: number;
+  cautionCount: number;
+  tipCount: number;
+}
+
+export interface CitySummary extends AreaCounts {
+  id: string;
+  name: string;
+  nameEn: string;
+  countryCode: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface CountrySummary extends AreaCounts {
+  code: string;
+  name: string;
+  nameEn: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface AreaSummaries {
+  cities: CitySummary[];
+  countries: CountrySummary[];
 }
 
 export interface ScamSighting {
@@ -100,6 +127,11 @@ export const scamsApi = {
 
   getAllRegions: async (): Promise<Region[]> => {
     const response = await apiClient.get('/scams/regions/all');
+    return response.data;
+  },
+
+  getAreaSummaries: async (): Promise<AreaSummaries> => {
+    const response = await apiClient.get('/scams/area-summaries');
     return response.data;
   },
 
