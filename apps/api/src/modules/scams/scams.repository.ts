@@ -440,6 +440,7 @@ export class ScamsRepository {
       cautionCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'CAUTION' then 1 end)::int`,
       tipCount: sql<number>`count(case when ${schema.scamInfos.reportType} = 'TIP' then 1 end)::int`,
       hasRegionScope: sql<boolean>`coalesce(bool_or(${schema.scamInfos.scope} = 'region'), false)`,
+      cautionCategories: sql<string | null>`string_agg(${schema.scamInfos.scamCategory}, ',') filter (where ${schema.scamInfos.reportType} = 'CAUTION')`,
     })
     .from(schema.regions)
     .leftJoin(schema.cities, eq(schema.regions.cityId, schema.cities.id))

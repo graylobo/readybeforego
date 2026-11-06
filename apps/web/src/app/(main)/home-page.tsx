@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,8 @@ import { uploadsApi } from "@/lib/api/uploads";
 import { getCountryName } from "@/lib/utils/country";
 import { formatExternalUrl } from "@/lib/utils/url";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
+import { findNearbyRegions, formatDistance, formatRadius, REGION_AREA_RADIUS_M, zoomForRadius } from "@/lib/nearby";
+import { PlaceSearch } from "@/components/map/place-search";
 import {
   CAUTION_CATEGORY_ITEMS,
   TIP_CATEGORY_ITEMS,
@@ -95,6 +97,10 @@ export default function Home() {
     setSelectedCityId,
     setSelectedRegionId,
     setSelectedRegion,
+    nearby,
+    setNearby,
+    setHighlightedRegionId,
+    filterReportType,
     mapCenter,
     setMapCenter,
     mapZoom,
@@ -142,24 +148,23 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [displayScams, setDisplayScams] = useState<ScamInfo[]>([]);
   const [feedScopeFilter, setFeedScopeFilter] = useState<'all' | 'spot' | 'region' | 'city' | 'country'>('all');
+  const [expandedScamIds, setExpandedScamIds] = useState<Set<string>>(new Set());
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
+  const sheetDragStartY = useRef<number | null>(null);
   const isInitialUrlParsed = useRef(false);
 
-  // 마커/지역 선택 시 해당 마커의 스코프 범위(특정위치/구역/도시/국가) 탭이 자동 선택되도록 동기화 🎯
+  // 장소를 새로 고르면 그곳에 해당하는 주의사항을 범위 구분 없이 모두 보여 준다
   useEffect(() => {
-    if (selectedRegion) {
-      if (selectedRegion.hasRegionScope) {
-        setFeedScopeFilter('region');
-      } else {
-        setFeedScopeFilter('spot');
-      }
-    } else if (selectedCityId) {
-      setFeedScopeFilter('city');
-    } else if (selectedCountryCode) {
-      setFeedScopeFilter('country');
-    } else {
-      setFeedScopeFilter('all');
-    }
-  }, [selectedCountryCode, selectedCityId, selectedRegionId, selectedRegion]);
+    setFeedScopeFilter('all');
+    setExpandedScamIds(new Set());
+  }, [selectedCountryCode, selectedCityId, selectedRegionId, nearby]);
+
+  // 휴대폰에서는 무언가 선택되면 지도를 가리지 않는 높이로 목록을 연다
+  const isFeedActive = !!(selectedCountryCode || selectedCityId || selectedRegionId || nearby);
+  useEffect(() => {
+    setIsMobileFeedOpen(isFeedActive && window.innerWidth < 768);
+    setIsSheetExpanded(false);
+  }, [isFeedActive, selectedRegionId, setIsMobileFeedOpen]);
 
   // 모바일 환경 하드웨어 뒤로가기 버튼(및 스와이프 백) 제어 📱
   useEffect(() => {
@@ -269,10 +274,37 @@ export default function Home() {
     ? Array.from(new Set(sharingRegions.map((r) => r.id))) 
     : (selectedRegionId ? [selectedRegionId] : []);
 
+  // 내 위치는 서버로 보내지 않고, 브라우저에서 가까운 지역을 계산한 뒤 해당 도시의 목록만 요청한다
+  const nearbyResult = useMemo(
+    () => (nearby ? findNearbyRegions(nearby.center, allRegions) : null),
+    [nearby, allRegions]
+  );
+  const nearbyDistances = useMemo(
+    () => new Map((nearbyResult?.items || []).map((item) => [item.region.id, item.distanceM])),
+    [nearbyResult]
+  );
+  const nearbyCityIds = useMemo(
+    () => Array.from(new Set((nearbyResult?.items || []).map((item) => item.region.cityId))),
+    [nearbyResult]
+  );
+
+  useEffect(() => {
+    if (nearby && allRegions.length > 0) {
+      setMapZoom(zoomForRadius(nearbyResult?.radiusM ?? null));
+    }
+  }, [nearby, nearbyResult?.radiusM, allRegions.length, setMapZoom]);
+
   // 줌 수준 및 선택된 스코프(국가/도시/지역)에 따른 다형적 사기 목록 쿼리
   const { data: scams = EMPTY_ARRAY, isPending: isScamsPending, isFetching: isScamsFetching } = useQuery<ScamInfo[]>({
-    queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId, selectedRegionIds.join(",")],
+    queryKey: ["scams", selectedCountryCode, selectedCityId, selectedRegionId, selectedRegionIds.join(","), nearby ? `${nearby.center.join(",")}|${nearbyCityIds.join(",")}` : null],
     queryFn: async () => {
+      if (nearby) {
+        const results = await Promise.all(nearbyCityIds.map((id) => scamsApi.getScamsByCity(id)));
+        const unique = new Map(results.flat().map((scam) => [scam.id, scam]));
+        return Array.from(unique.values()).filter(
+          (scam) => scam.scope === "city" || scam.scope === "country" || (!!scam.regionId && nearbyDistances.has(scam.regionId))
+        );
+      }
       if (selectedRegionId) {
         if (selectedRegionIds.length > 1) {
           // 동일 좌표 내의 모든 지역 제보들을 병렬 패치하여 병합
@@ -293,7 +325,7 @@ export default function Home() {
       }
       return [];
     },
-    enabled: !!selectedRegionId || !!selectedCityId || !!selectedCountryCode,
+    enabled: !!selectedRegionId || !!selectedCityId || !!selectedCountryCode || (!!nearby && nearbyCityIds.length > 0),
   });
 
   // scams의 데이터 갱신 시 순서 동결(Freeze) 처리하여 Layout Instability 방지
@@ -548,17 +580,29 @@ export default function Home() {
     }
   }, [isEditModalOpen]);
 
-  // 제보 카드 클릭 시 해당 제보 위치로 지도 이동 및 최대 확대
+  // 제보 카드를 누르면 내용을 펼치고, 해당 위치의 마커를 지도에서 강조한다
   const handleCardClick = (scam: ScamInfo) => {
+    setExpandedScamIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(scam.id)) next.delete(scam.id);
+      else next.add(scam.id);
+      return next;
+    });
     const region = allRegions.find(r => r.id === scam.regionId);
     if (region) {
+      setHighlightedRegionId(region.id);
       setMapCenter([region.latitude, region.longitude]);
-      setMapZoom(18);
-      // 모바일 기기인 경우 카드를 눌렀을 때 지도가 잘 보이게 바텀 시트를 닫아줌
-      if (typeof window !== "undefined" && window.innerWidth < 768) {
-        setIsMobileFeedOpen(false);
-      }
+      setMapZoom(Math.max(mapZoom, 15));
     }
+  };
+
+  const selectRegionFromFeed = (region: Region) => {
+    setSelectedCountryCode(region.countryCode || null);
+    setSelectedCityId(region.cityId);
+    setSelectedRegionId(region.id);
+    setSelectedRegion(region);
+    setMapCenter([region.latitude, region.longitude]);
+    setMapZoom(15);
   };
 
   // 공유하기 기능 🔗
@@ -635,6 +679,8 @@ export default function Home() {
     ] as const;
 
     // 피드 목록 렌더링 시 특정 위치/구역(spot/region) 제보글이 최상단에 1순위로 노출되도록 정렬 🎯
+    const distanceOf = (scam: ScamInfo) => (scam.regionId ? nearbyDistances.get(scam.regionId) : undefined);
+
     const sortedDisplayScams = [...displayScams].sort((a, b) => {
       const getScopePriority = (scope?: string) => {
         if (scope === "spot" || scope === "region") return 1;
@@ -647,13 +693,56 @@ export default function Home() {
       if (priorityA !== priorityB) {
         return priorityA - priorityB;
       }
+      const distanceA = distanceOf(a);
+      const distanceB = distanceOf(b);
+      if (distanceA !== undefined && distanceB !== undefined && distanceA !== distanceB) {
+        return distanceA - distanceB;
+      }
       return b.upvoteCount - a.upvoteCount || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
     const filteredScams = sortedDisplayScams.filter((s) => {
+      if (filterReportType !== "ALL" && (s.reportType || "CAUTION") !== filterReportType) return false;
       if (feedScopeFilter === "all") return true;
       return s.scope === feedScopeFilter;
     });
+
+    // 어디서 겪을 수 있는 내용인지 범위별로 묶어 보여 준다
+    const groupLabelOf = (scam: ScamInfo) => {
+      if (scam.scope === "city") {
+        const cityName = allRegions.find((r) => r.cityId === scam.cityId)?.cityName || "도시";
+        return `${cityName} 어디서나`;
+      }
+      if (scam.scope === "country") {
+        return `${getCountryName(scam.countryCode, lang) || "이 나라"} 어디서나`;
+      }
+      if (nearby) return nearby.kind === "gps" ? "내 주변" : `${nearby.label} 주변`;
+      return selectedRegion ? "이 근처에서" : "장소별";
+    };
+
+    const distanceLabelOf = (scam: ScamInfo) => {
+      const distance = distanceOf(scam);
+      if (distance === undefined) return null;
+      if (scam.scope === "region" && distance <= REGION_AREA_RADIUS_M) {
+        return nearby?.kind === "gps" ? "지금 이 구역 안" : "이 구역 안";
+      }
+      return formatDistance(distance);
+    };
+
+    if (nearby && nearbyResult && nearbyResult.items.length === 0) {
+      const nearest = nearbyResult.nearest;
+      return (
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+          <Info className="w-8 h-8 text-slate-300" />
+          <p className="text-sm text-muted-foreground">이 주변에는 아직 등록된 주의사항이 없습니다.</p>
+          {nearest && (
+            <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => selectRegionFromFeed(nearest.region)}>
+              가장 가까운 곳 보기: {nearest.region.name} ({formatDistance(nearest.distanceM)})
+            </Button>
+          )}
+        </div>
+      );
+    }
 
     const formatDate = (dateStr: string) => {
       const d = new Date(dateStr);
@@ -676,7 +765,7 @@ export default function Home() {
     return (
       <div className="space-y-4 pb-8">
         {/* 필터 칩 목록 🎛️ */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] select-none">
           {chips.map((chip) => {
             const isActive = feedScopeFilter === chip.value;
             const count = chip.value === "all" 
@@ -724,7 +813,11 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredScams.map((scam) => {
+            {filteredScams.map((scam, scamIndex) => {
+              const isExpanded = expandedScamIds.has(scam.id);
+              const groupLabel = groupLabelOf(scam);
+              const showGroupLabel = feedScopeFilter === "all" && (scamIndex === 0 || groupLabelOf(filteredScams[scamIndex - 1]) !== groupLabel);
+              const distanceLabel = distanceLabelOf(scam);
               const isSuperAdmin = user?.role === "super_admin";
               const isOwner = user && scam.userId === user.id;
               const canManage = isSuperAdmin || isOwner;
@@ -732,21 +825,31 @@ export default function Home() {
               const isEdited = new Date(scam.updatedAt).getTime() - new Date(scam.createdAt).getTime() > 1000;
 
               return (
+                <div key={scam.id} className="space-y-2">
+                {showGroupLabel && (
+                  <h3 className="pt-1 text-xs font-bold text-muted-foreground">{groupLabel}</h3>
+                )}
                 <Card 
-                  key={scam.id} 
                   className="border-border overflow-hidden hover:border-slate-300 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
                   onClick={() => handleCardClick(scam)}
+                  onMouseEnter={() => setHighlightedRegionId(scam.regionId || null)}
+                  onMouseLeave={() => setHighlightedRegionId(null)}
                 >
                   <CardHeader className="p-4 pb-2 space-y-2">
                     <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
                       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        {distanceLabel && (
+                          <Badge className="bg-blue-600 text-white text-[10px] font-bold py-0.5 px-2 shrink-0">
+                            {distanceLabel}
+                          </Badge>
+                        )}
                         {/* 적용 범위 배지 뱃지 🏷️ */}
-                        {scam.scope === "country" && (
+                        {isExpanded && scam.scope === "country" && (
                           <Badge variant="outline" className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             {scam.countryCode ? `🇹🇭 ${getCountryName(scam.countryCode, lang)} 전체` : "🇹🇭 국가 경보"}
                           </Badge>
                         )}
-                        {scam.scope === "city" && (() => {
+                        {isExpanded && scam.scope === "city" && (() => {
                           const matchedRegion = allRegions.find(r => r.cityId === scam.cityId);
                           const cityName = matchedRegion?.cityName || "도시";
                           return (
@@ -755,12 +858,12 @@ export default function Home() {
                             </Badge>
                           );
                         })()}
-                        {scam.scope === "region" && (
+                        {isExpanded && scam.scope === "region" && (
                           <Badge variant="outline" className="bg-violet-50 border-violet-200 dark:bg-violet-950/20 dark:border-violet-900/50 text-violet-700 dark:text-violet-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             🗺️ 구역 전체
                           </Badge>
                         )}
-                        {scam.scope === "spot" && (
+                        {isExpanded && scam.scope === "spot" && (
                           <Badge variant="outline" className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold py-0.5 px-2 select-none shrink-0">
                             📍 특정 위치
                           </Badge>
@@ -792,11 +895,15 @@ export default function Home() {
                             </Badge>
                           );
                         })}
-                        <AudienceNationalityBadges value={scam.audienceNationalities} />
-                        <span className="text-[10px] text-muted-foreground select-none shrink-0">
-                          {formatDate(scam.createdAt)}
-                          {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
-                        </span>
+                        {isExpanded && (
+                          <>
+                            <AudienceNationalityBadges value={scam.audienceNationalities} />
+                            <span className="text-[10px] text-muted-foreground select-none shrink-0">
+                              {formatDate(scam.createdAt)}
+                              {isEdited && ` (수정됨: ${formatDateTime(scam.updatedAt)})`}
+                            </span>
+                          </>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-2 shrink-0 ml-auto whitespace-nowrap">
@@ -855,12 +962,14 @@ export default function Home() {
                   </CardHeader>
                   
                   <CardContent className="p-4 pt-0 pb-3 space-y-3">
+                    {isExpanded && (
                     <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
                       {scam.description}
                     </p>
+                    )}
 
                     {/* Attached image gallery layout */}
-                    {scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
+                    {isExpanded && scam.imageUrls && Array.isArray(scam.imageUrls) && scam.imageUrls.length > 0 && (
                       <div className={`grid gap-1.5 rounded-lg overflow-hidden ${
                         scam.imageUrls.length === 1 
                           ? 'grid-cols-1' 
@@ -907,11 +1016,20 @@ export default function Home() {
                             </>
                           )}
                         </h4>
-                        <p className="leading-relaxed whitespace-pre-line">{scam.avoidanceTip}</p>
+                        <p className={`leading-relaxed whitespace-pre-line ${isExpanded ? "" : "line-clamp-2"}`}>{scam.avoidanceTip}</p>
                       </div>
                     )}
 
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      className="text-xs font-semibold text-blue-700 dark:text-blue-400 cursor-pointer"
+                    >
+                      {isExpanded ? "접기" : "자세히 보기"}
+                    </button>
+
                     {/* Card Footer Actions */}
+                    {isExpanded && (
                     <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-muted-foreground">
                       
                       {/* Reactions (Likes/Dislikes) & Comments */}
@@ -999,6 +1117,7 @@ export default function Home() {
                         </Button>
                       </div>
                     </div>
+                    )}
 
                     {/* Collapsible Discussion Panel */}
                     {activeCommentScamId === scam.id && (
@@ -1026,10 +1145,87 @@ export default function Home() {
                     targetId={scam.id}
                   />
                 </Card>
+                </div>
               );
             })}
           </div>
         )}
+      </div>
+    );
+  };
+
+  // 목록 패널 제목과 동작 버튼 (데스크톱·휴대폰 공통)
+  const renderPanelHeader = () => {
+    const placeName = (() => {
+      if (nearby) return nearby.kind === "gps" ? "내 주변" : `${nearby.label} 주변`;
+      if (selectedRegion) return selectedRegion.name;
+      if (selectedCityId) {
+        return cities.find((c) => c.id === selectedCityId)?.name
+          || allRegions.find((r) => r.cityId === selectedCityId)?.cityName
+          || "도시";
+      }
+      return getCountryName(selectedCountryCode, lang) || "국가";
+    })();
+    const radiusM = nearbyResult?.radiusM;
+
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <MapPin className="w-4 h-4 text-red-600 shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="font-bold text-sm text-card-foreground truncate">{placeName} 주의사항</h2>
+            {nearby && radiusM && (
+              <p className="text-xs text-muted-foreground">반경 {formatRadius(radiusM)} 안에서 찾았어요</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {selectedRegionId && (
+            <>
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-8 px-2.5 rounded-full flex items-center gap-1 shadow-sm cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
+                      router.push("/login");
+                    }
+                    return;
+                  }
+                  setIsReportMode(true);
+                  setReportType("existing");
+                  setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
+                  setItemReportTypeModalOpen(true);
+                  setIsMobileFeedOpen(false);
+                }}
+              >
+                <span aria-hidden="true">➕</span>
+                <span>제보 추가</span>
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                onClick={handleShare}
+                title="공유하기"
+                aria-label="공유하기"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={resetSelections}
+            title="닫기"
+            aria-label="닫기"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
     );
   };
@@ -1047,26 +1243,19 @@ export default function Home() {
     <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] w-full overflow-hidden bg-background font-sans relative">
       
       {/* Left Map Canvas (Occupies full viewport on mobile) */}
-      <div className="flex-1 h-[calc(100vh-8rem)] md:h-full relative z-0">
+      {/* 휴대폰에서 목록이 열리면 지도를 줄여 선택한 위치가 목록에 가리지 않게 한다 */}
+      <div className={`md:flex-1 md:h-full relative z-0 ${isMobileFeedOpen && !isReportMode ? "flex-none h-[calc(52%-4rem)]" : "flex-1 h-[calc(100vh-8rem)]"}`}>
         <ReadyBeforeGoMap />
 
-        {/* 플로팅 컨트롤 그룹 (검색 버튼 + 제보하기 버튼) */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-          {/* 플로팅 지역선택 검색 버튼 */}
-          <Button
-            size="icon"
-            className="w-9 h-9 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shrink-0"
-            onClick={() => setIsFilterModalOpen(true)}
-            title={t("report_modal.city_select")}
-          >
-            <Search className="w-4.5 h-4.5" />
-          </Button>
+        {/* 플로팅 컨트롤 그룹 (여행지 검색 + 제보하기 버튼). 제보 위치를 고르는 동안에는 안내 배너에 자리를 내준다 */}
+        <div className={`absolute top-2.5 right-2.5 flex items-center justify-end gap-2 ${isReportMode ? "z-10" : "left-2.5 z-[1100]"}`}>
+          {!isReportMode && <PlaceSearch regions={allRegions} />}
 
           {/* 맵 직접 제보하기 플로팅 버튼 */}
           <Button
             size="sm"
             variant={isReportMode ? "destructive" : "default"}
-            className={`font-bold text-xs h-9 px-3.5 rounded-full shadow-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border ${
+            className={`font-bold text-xs h-10 px-3.5 rounded-full shrink-0 shadow-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border ${
               isReportMode 
                 ? "bg-red-600 border-red-700 text-white animate-pulse" 
                 : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-red-600 dark:text-red-400 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -1090,132 +1279,54 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Right Sidebar Panel (Hidden on mobile, only desktop, visible when a region is selected) */}
-      {selectedRegionId && (
+      {/* 데스크톱 오른쪽 목록 패널 */}
+      {isFeedActive && !isReportMode && (
         <div className="hidden md:flex w-[450px] h-full flex-col border-l border-border bg-card/95 backdrop-blur-md z-10 shadow-lg shrink-0">
-          
-          {/* Active Scope Header */}
-          <div className="px-6 py-4 bg-muted/40 border-b border-border flex items-center justify-between gap-2 shrink-0">
-            <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-red-600 mt-0.5" />
-              <div className="space-y-0.5">
-                <h2 className="font-bold text-sm text-card-foreground">
-                  이 위치 내 주의 정보
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-8 px-2.5 rounded-full flex items-center gap-1 shadow-sm cursor-pointer transition-all active:scale-95"
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                      router.push("/login");
-                    }
-                    return;
-                  }
-                  setIsReportMode(true);
-                  setReportType("existing");
-                  setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
-                  setItemReportTypeModalOpen(true);
-                }}
-              >
-                <span>➕</span>
-                <span>{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
-              </Button>
-
-              {/* 공유하기 버튼 */}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
-                onClick={handleShare}
-                title="공유하기"
-              >
-                <Share2 className="w-4 h-4" />
-              </Button>
-
-              {/* 닫기 (X) 버튼 */}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                onClick={resetSelections}
-                title="닫기"
-              >
-                <span className="text-base font-bold">✕</span>
-              </Button>
-            </div>
+          <div className="px-6 py-4 bg-muted/40 border-b border-border shrink-0">
+            {renderPanelHeader()}
           </div>
-
-          {/* Feed Container */}
           <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-200">
             {renderFeedContent()}
           </div>
         </div>
       )}
 
-      {/* --- 모바일 전용 바텀 시트 (마커 클릭 시 아래서 올라오는 팝업 카드) --- */}
-      <Dialog open={isMobileFeedOpen} onOpenChange={setIsMobileFeedOpen}>
-        <DialogContent className="md:hidden sm:max-w-[480px] h-[75vh] bottom-0 top-auto translate-y-0 rounded-t-2xl rounded-b-none p-0 overflow-hidden flex flex-col gap-0 border-t border-border bg-card/98 backdrop-blur-lg">
-          <DialogHeader className="px-4 py-3 bg-muted/40 border-b border-border flex flex-row items-center justify-between gap-2 shrink-0 space-y-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <MapPin className="w-4 h-4 text-red-600 shrink-0" />
-              <DialogTitle className="font-bold text-xs sm:text-sm text-card-foreground whitespace-nowrap truncate">
-                {selectedRegionId 
-                  ? "이 위치 내 주의 정보" 
-                  : selectedCityId 
-                    ? (cities.find(c => c.id === selectedCityId)?.name || "도시")
-                    : (getCountryName(selectedCountryCode, lang) || "국가")
-                } 
-              </DialogTitle>
-            </div>
-
-            {selectedRegionId && (
-              <div className="flex items-center gap-1.5 mr-6 shrink-0">
-                <Button
-                  size="sm"
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 px-2.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                  onClick={() => {
-                    if (!isAuthenticated) {
-                      if (confirm(t("common.login_required_confirm", { defaultValue: "로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?" }))) {
-                        router.push("/login");
-                      }
-                      return;
-                    }
-                    setIsReportMode(true);
-                    setReportType("existing");
-                    setReportCoords([selectedRegion!.latitude, selectedRegion!.longitude]);
-                    setItemReportTypeModalOpen(true);
-                    setIsMobileFeedOpen(false);
-                  }}
-                >
-                  <span>➕</span>
-                  <span className="hidden xs:inline">{t("common.report_here", { defaultValue: "이 위치에 추가 제보하기" })}</span>
-                  <span className="xs:hidden">추가 제보하기</span>
-                </Button>
-
-                {/* 모바일 공유하기 버튼 */}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 rounded-full cursor-pointer hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors shrink-0 flex items-center justify-center"
-                  onClick={handleShare}
-                  title="공유하기"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            )}
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+      {/* 휴대폰 하단 목록 시트. 지도를 계속 보고 만질 수 있도록 모달로 띄우지 않는다 */}
+      {isMobileFeedOpen && !isReportMode && (
+        <div
+          className={`md:hidden absolute inset-x-0 bottom-16 z-20 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-card shadow-[0_-8px_30px_rgba(0,0,0,0.2)] transition-[height] duration-200 ${
+            isSheetExpanded ? "h-[calc(100%-5rem)]" : "h-[48%]"
+          }`}
+        >
+          <button
+            type="button"
+            aria-label={isSheetExpanded ? "목록 줄이기" : "목록 크게 보기"}
+            aria-expanded={isSheetExpanded}
+            onClick={() => setIsSheetExpanded((prev) => !prev)}
+            onPointerDown={(event) => {
+              sheetDragStartY.current = event.clientY;
+            }}
+            onPointerUp={(event) => {
+              const start = sheetDragStartY.current;
+              sheetDragStartY.current = null;
+              if (start === null) return;
+              const delta = event.clientY - start;
+              if (delta < -30) setIsSheetExpanded(true);
+              if (delta > 30) setIsSheetExpanded(false);
+              if (Math.abs(delta) > 30) event.preventDefault();
+            }}
+            className="flex h-6 w-full shrink-0 cursor-grab touch-none items-center justify-center bg-muted/40"
+          >
+            <span className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
+          </button>
+          <div className="px-4 pb-3 pt-1 bg-muted/40 border-b border-border shrink-0">
+            {renderPanelHeader()}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
             {renderFeedContent()}
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* --- 필터 다이얼로그 (상단 둥둥 검색바 터치 시 팝업) --- */}
       <Dialog open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen}>

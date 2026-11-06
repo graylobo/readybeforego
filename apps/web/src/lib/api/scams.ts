@@ -32,6 +32,7 @@ export interface Region {
   cautionCount?: number;
   tipCount?: number;
   hasRegionScope?: boolean;
+  cautionCategories?: string | null;
   createdAt: string;
   updatedAt: string;
 }

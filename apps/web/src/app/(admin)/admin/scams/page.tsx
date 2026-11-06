@@ -756,10 +756,10 @@ export default function AdminScamsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>피해 상세 수법 설명</Label>
+              <Label>피해 상황 설명</Label>
               <Textarea
                 rows={4}
-                placeholder="관광객이 겪게 되는 상세 사기 수법 및 상황을 서술해 주세요..."
+                placeholder="관광객이 겪게 되는 피해 상황을 서술해 주세요..."
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />

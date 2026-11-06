@@ -141,6 +141,13 @@
       "when": 1793948015178,
       "tag": "0019_clean_seed_scams",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793948075178,
+      "tag": "0020_area_scope_and_wording",
+      "breakpoints": true
     }
   ]
 }

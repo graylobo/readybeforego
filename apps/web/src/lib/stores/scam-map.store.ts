@@ -1,11 +1,19 @@
 import { create } from "zustand";
 import { Region } from "../api/scams";
 
+export interface NearbySearch {
+  center: [number, number];
+  label: string;
+  kind: "gps" | "place";
+}
+
 interface ScamMapStore {
   selectedCountryCode: string | null;
   selectedCityId: string | null;
   selectedRegionId: string | null;
   selectedRegion: Region | null;
+  nearby: NearbySearch | null;
+  highlightedRegionId: string | null;
   mapCenter: [number, number];
   mapZoom: number;
   isReportMode: boolean;
@@ -35,6 +43,8 @@ interface ScamMapStore {
   setSelectedCityId: (id: string | null) => void;
   setSelectedRegionId: (id: string | null) => void;
   setSelectedRegion: (region: Region | null) => void;
+  setNearby: (nearby: NearbySearch | null) => void;
+  setHighlightedRegionId: (id: string | null) => void;
   setMapCenter: (center: [number, number]) => void;
   setMapZoom: (zoom: number) => void;
   setIsReportMode: (val: boolean) => void;
@@ -60,6 +70,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   selectedCityId: null,
   selectedRegionId: null,
   selectedRegion: null,
+  nearby: null,
+  highlightedRegionId: null,
   mapCenter: [13.7563, 100.5018],
   mapZoom: 5,
   isReportMode: false,
@@ -76,10 +88,15 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   isReportConfirmModalOpen: false,
   isMobileFeedOpen: false,
   isFilterModalOpen: false,
-  setSelectedCountryCode: (code) => set({ selectedCountryCode: code }),
-  setSelectedCityId: (id) => set({ selectedCityId: id }),
-  setSelectedRegionId: (id) => set({ selectedRegionId: id }),
+  // 지역을 고르면 '내 주변' 목록에서 벗어난다
+  setSelectedCountryCode: (code) => set(code ? { selectedCountryCode: code, nearby: null } : { selectedCountryCode: code }),
+  setSelectedCityId: (id) => set(id ? { selectedCityId: id, nearby: null } : { selectedCityId: id }),
+  setSelectedRegionId: (id) => set(id ? { selectedRegionId: id, nearby: null, highlightedRegionId: null } : { selectedRegionId: id }),
   setSelectedRegion: (region) => set({ selectedRegion: region }),
+  setNearby: (nearby) => set(nearby
+    ? { nearby, selectedCountryCode: null, selectedCityId: null, selectedRegionId: null, selectedRegion: null, highlightedRegionId: null }
+    : { nearby: null, highlightedRegionId: null }),
+  setHighlightedRegionId: (id) => set({ highlightedRegionId: id }),
   setMapCenter: (center) => set({ mapCenter: center }),
   setMapZoom: (zoom) => set({ mapZoom: zoom }),
   setIsReportMode: (val) => set({ isReportMode: val }),
@@ -97,6 +114,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
   setIsMobileFeedOpen: (val) => set({ isMobileFeedOpen: val }),
   setIsFilterModalOpen: (val) => set({ isFilterModalOpen: val }),
   resetSelections: () => set({
+    nearby: null,
+    highlightedRegionId: null,
     selectedCountryCode: null,
     selectedCityId: null,
     selectedRegionId: null,
@@ -115,6 +134,8 @@ export const useScamMapStore = create<ScamMapStore>((set) => ({
     isFilterModalOpen: false,
   }),
   resetFeedSelections: () => set({
+    nearby: null,
+    highlightedRegionId: null,
     selectedCountryCode: null,
     selectedCityId: null,
     selectedRegionId: null,

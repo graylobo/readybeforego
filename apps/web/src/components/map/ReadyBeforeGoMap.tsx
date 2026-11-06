@@ -7,10 +7,11 @@ import { Region, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
+import { findNearbyRegions, REGION_AREA_RADIUS_M, topCategoryIcons } from "@/lib/nearby";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { CheckCircle2, Loader2, Locate, MapPin, Search } from "lucide-react";
+import { CheckCircle2, Loader2, Locate, MapPin, Navigation, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { toast } from "sonner";
@@ -52,13 +53,17 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow.src,
 });
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string);
+
 // "직방" 스타일의 수량 비례형 원형 뱃지 마커 및 위치 이름 라벨 오버레이 생성
 const createClusterIcon = (
   name: string,
   cautionCount: number = 0,
   tipCount: number = 0,
   isSelected: boolean = false,
-  filterReportType: "ALL" | "CAUTION" | "TIP" = "ALL"
+  filterReportType: "ALL" | "CAUTION" | "TIP" = "ALL",
+  cautionIcons: string = ""
 ) => {
   const isSelectedStyle = isSelected 
     ? "ring-4 ring-red-500 shadow-[0_0_18px_rgba(239,68,68,0.9)] scale-110 z-50" 
@@ -77,7 +82,7 @@ const createClusterIcon = (
     badgeHtml = `
       <div class="flex items-center rounded-full border-2 border-white overflow-hidden transition-all duration-200 ${isSelectedStyle} z-10 bg-slate-900">
         <div class="bg-gradient-to-r from-red-500 to-rose-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5 border-r border-white/30">
-          <span class="text-[10px]">⚠️</span><span>${cautionCount}</span>
+          <span class="text-[10px]">${cautionIcons || "⚠️"}</span><span>${cautionCount}</span>
         </div>
         <div class="bg-gradient-to-r from-emerald-500 to-teal-600 px-2 py-1 text-white font-black text-xs flex items-center gap-0.5">
           <span class="text-[10px]">💡</span><span>${tipCount}</span>
@@ -97,9 +102,11 @@ const createClusterIcon = (
     // 3. CAUTION 전용 마커 (Red Circle)
     const count = filterReportType === "ALL" ? cautionCount : cautionCount;
     let sizeClass = count >= 6 ? "w-12 h-12 text-sm" : count >= 3 ? "w-10 h-10 text-xs" : "w-9 h-9 text-xs";
+    // 유형 아이콘이 있으면 내용 길이에 맞는 알약 모양으로 그린다
+    if (cautionIcons) sizeClass = "h-9 px-2.5 text-xs whitespace-nowrap";
     badgeHtml = `
       <div class="flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br from-red-500 to-rose-700 transition-all duration-200 ${sizeClass} border-2 border-white ${isSelectedStyle} z-10">
-        <span class="mr-0.5 text-[10px]">⚠️</span>${count}
+        <span class="mr-1 text-[13px]">${cautionIcons || "⚠️"}</span>${count}
       </div>
     `;
   }
@@ -109,7 +116,7 @@ const createClusterIcon = (
       <div class="relative flex items-center justify-center w-[74px] h-[60px] select-none group cursor-pointer">
         ${badgeHtml}
         <div class="absolute bottom-[-10px] left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap max-w-[120px] truncate text-center group-hover:bg-slate-900 transition-colors ${labelStyle} z-20">
-          ${name}
+          ${escapeHtml(name)}
         </div>
       </div>
     `,
@@ -163,6 +170,17 @@ function MapViewHandler({ center, zoom }: { center: [number, number]; zoom: numb
   return null;
 }
 
+// 옆 패널이 열리고 닫혀 지도 크기가 바뀌면 지도를 다시 맞춘다
+function MapResizeHandler() {
+  const map = useMap();
+  useEffect(() => {
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
 // 제보 모드 커서 제어 핸들러 (확대 전: 돋보기+, 확대 완료: 핀 아이콘)
 function MapCursorHandler({ active }: { active: boolean }) {
   const map = useMap();
@@ -211,8 +229,10 @@ function MapEventsHandler({ onZoomChange, onMapClick }: MapEventsHandlerProps) {
   const map = useMapEvents({
     zoomend() {
       const z = map.getZoom();
-      // 지도 축소(Zoom Out) 발생 시 선택된 제보 피드 영역 및 모바일 피드를 자동으로 닫음 🚪
-      if (prevZoomRef.current !== null && z < prevZoomRef.current) {
+      // 사용자가 마커를 고른 뒤 지도를 축소하면 피드를 닫음. 검색·내 주변 이동으로 줌이 바뀐 경우와 내 주변 목록은 유지한다
+      const state = useScamMapStore.getState();
+      const isUserZoom = z !== state.mapZoom;
+      if (isUserZoom && prevZoomRef.current !== null && z < prevZoomRef.current && state.selectedRegionId && !state.nearby) {
         resetFeedSelections();
         setIsMobileFeedOpen(false);
       }
@@ -240,6 +260,9 @@ export default function ReadyBeforeGoMap() {
     selectedCityId,
     selectedRegionId,
     selectedRegion,
+    nearby,
+    setNearby,
+    highlightedRegionId,
     setSelectedRegionId,
     setSelectedRegion,
     setSelectedCityId,
@@ -252,6 +275,7 @@ export default function ReadyBeforeGoMap() {
     setReportCoords,
     isReportModalOpen,
     setReportModalOpen,
+    isMobileFeedOpen,
     setIsMobileFeedOpen,
     resetFeedSelections,
     setReportType,
@@ -326,31 +350,6 @@ export default function ReadyBeforeGoMap() {
     setCurrentZoom(mapZoom);
   }, [mapZoom]);
 
-  // 사이트 첫 진입 시 사용자 위치 기준 자동 포커싱 📍
-  useEffect(() => {
-    if (typeof window === "undefined" || !navigator.geolocation) return;
-
-    // 만약 이미 사용자가 필터를 선택한 상태라면 자동 위치 탐색을 건너뜁니다.
-    if (selectedCountryCode || selectedCityId || selectedRegionId) return;
-
-    // 현재 지도 중심이 기본값(방콕 [13.7563, 100.5018])이 아니면 이미 필터/지점선택 등으로 이동한 것이므로 수행하지 않음
-    const isDefaultCenter = Math.abs(mapCenter[0] - 13.7563) < 0.0001 && Math.abs(mapCenter[1] - 100.5018) < 0.0001;
-    if (!isDefaultCenter) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation([latitude, longitude]);
-        setMapCenter([latitude, longitude]);
-        setMapZoom(12); // 도시에 포커싱되도록 줌 레벨 12 설정
-      },
-      (error) => {
-        console.warn("Initial user localization failed or denied:", error);
-      },
-      { enableHighAccuracy: false, timeout: 10000 }
-    );
-  }, [selectedCountryCode, selectedCityId, selectedRegionId, mapCenter, setMapCenter, setMapZoom]);
-
   // 주소 매칭 컨펌 모달이 켜지거나 임시 핀 좌표가 잡혔을 때 바로 팝업창을 즉각 강제 오픈 🛡️
   useEffect(() => {
     if (isReportConfirmModalOpen && reportCoords && markerRef.current) {
@@ -367,6 +366,8 @@ export default function ReadyBeforeGoMap() {
     staleTime: 5 * 60 * 1000, // 5분간 fresh 캐시 유지
     gcTime: 30 * 60 * 1000,
   });
+
+  const nearbyRadiusM = nearby ? findNearbyRegions(nearby.center, regions).radiusM : null;
 
   // 지도 마커 데이터 로딩 피드백 감지 및 자동 전환 🛡️
   useEffect(() => {
@@ -715,8 +716,14 @@ export default function ReadyBeforeGoMap() {
           const { latitude, longitude } = position.coords;
           setUserLocation([latitude, longitude]);
           setMapCenter([latitude, longitude]);
-          setMapZoom(16);
-          toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
+          if (isReportMode) {
+            setMapZoom(16);
+            toast.success("현재 위치로 이동했습니다! 📍", { id: "geolocation" });
+          } else {
+            // 줌은 찾은 범위에 맞춰 홈 화면에서 정한다
+            setNearby({ center: [latitude, longitude], label: "내 주변", kind: "gps" });
+            toast.dismiss("geolocation");
+          }
         },
         (error) => {
           console.error(`Geolocation Error (highAccuracy=${highAccuracy}):`, error);
@@ -811,9 +818,9 @@ export default function ReadyBeforeGoMap() {
           line-height: inherit !important;
         }
 
-        /* 검색 버튼 아래에 줌 제어 박스 배치 🛡️ */
+        /* 검색창과 필터 아래에 줌 제어 박스 배치 🛡️ */
         .leaflet-top.leaflet-left {
-          top: 44px !important;
+          top: 116px !important;
         }
       `}</style>
 
@@ -876,7 +883,7 @@ export default function ReadyBeforeGoMap() {
 
       {/* 지도 위 제보 위치 데이터 로딩 상태 플로팅 뱃지 📍 */}
       {!isReportMode && showStatusNotice && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 dark:bg-slate-950/90 text-slate-100 px-4 py-2 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 border border-slate-700/70 select-none pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-3 max-w-[calc(100%-8rem)]">
+        <div className="absolute top-[100px] left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 dark:bg-slate-950/90 text-slate-100 px-4 py-2 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 border border-slate-700/70 select-none pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-3 max-w-[calc(100%-8rem)]">
           {statusNoticeType === "loading" ? (
             <>
               <div className="relative flex items-center justify-center shrink-0">
@@ -957,6 +964,7 @@ export default function ReadyBeforeGoMap() {
         
         <MapViewHandler center={mapCenter} zoom={mapZoom} />
         <MapCursorHandler active={isReportMode} />
+        <MapResizeHandler />
         
         <MapEventsHandler 
           onZoomChange={(zoom) => setCurrentZoom(zoom)} 
@@ -1052,20 +1060,37 @@ export default function ReadyBeforeGoMap() {
           />
         )}
 
-        {/* 구역/거리전체(region)인 경우 지도 상에 반투명 원형 범위(Circle Overlay) 렌더링 🗺️ */}
-        {selectedRegionId && selectedRegion && selectedRegion.hasRegionScope && (
+        {/* 내 주변 또는 검색한 장소 주변으로 찾은 범위 */}
+        {nearby && nearbyRadiusM !== null && (
           <Circle
-            center={[selectedRegion.latitude, selectedRegion.longitude]}
-            radius={250} // 250미터 반경
-            pathOptions={{
-              fillColor: "#a855f7", // violet-500
-              fillOpacity: 0.15,
-              color: "#d946ef", // fuchsia-500
-              weight: 1.5,
-              dashArray: "4, 6",
-            }}
+            center={nearby.center}
+            radius={nearbyRadiusM}
+            interactive={false}
+            pathOptions={{ fillColor: "#3b82f6", fillOpacity: 0.06, color: "#2563eb", weight: 1.5, dashArray: "6, 6" }}
           />
         )}
+
+        {/* 호객꾼처럼 이동하는 주의사항은 한 점이 아니라 구역으로 그린다 */}
+        {currentZoom >= 13 && regions
+          .filter((r) => r.hasRegionScope && (r.scamCount || 0) > 0)
+          .map((r) => {
+            const isActive = r.id === selectedRegionId || r.id === highlightedRegionId;
+            return (
+              <Circle
+                key={`area-${r.id}`}
+                center={[r.latitude, r.longitude]}
+                radius={REGION_AREA_RADIUS_M}
+                interactive={false}
+                pathOptions={{
+                  fillColor: "#a855f7",
+                  fillOpacity: isActive ? 0.24 : 0.12,
+                  color: "#c026d3",
+                  weight: isActive ? 2 : 1,
+                  dashArray: "4, 6",
+                }}
+              />
+            );
+          })}
 
         {/* 동적 통합 클러스터 렌더링 (제보 마커를 내 위치보다 최상위 zIndex로 레이어링) */}
         {getDynamicClusters()
@@ -1076,7 +1101,7 @@ export default function ReadyBeforeGoMap() {
             return true;
           })
           .map((cluster) => {
-            const isSelected = !!selectedRegionId && cluster.regions.some((r: any) => r.id === selectedRegionId);
+            const isSelected = cluster.regions.some((r: any) => r.id === selectedRegionId || r.id === highlightedRegionId);
 
             // 필터 활성화 시 해당 타입의 count만 표시, 전체일 때는 총 scamCount
             let displayCount = cluster.scamCount;
@@ -1100,7 +1125,9 @@ export default function ReadyBeforeGoMap() {
                   cluster.cautionCount || 0,
                   cluster.tipCount || 0,
                   isSelected,
-                  filterReportType
+                  filterReportType,
+                  // 국가·도시처럼 넓게 묶인 마커는 여러 유형이 섞이므로 지역 단위에서만 유형을 보여 준다
+                  currentZoom > 9 ? topCategoryIcons(cluster.regions) : ""
                 )}
                 zIndexOffset={isSelected ? 2000 : 1000}
                 eventHandlers={{
@@ -1111,17 +1138,31 @@ export default function ReadyBeforeGoMap() {
           })}
       </MapContainer>
 
-      {/* 현재 위치 이동 플로팅 버튼 */}
-      <button
-        onClick={handleLocateUser}
-        className="absolute top-[10px] left-[10px] z-[1000] w-[34px] h-[34px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[4px] shadow flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
-        title="현재 위치로 이동"
-      >
-        <Locate className="w-4.5 h-4.5" />
-      </button>
+      {/* 제보 위치를 고를 때 쓰는 현재 위치 이동 버튼 */}
+      {isReportMode && (
+        <button
+          onClick={handleLocateUser}
+          className="absolute top-[76px] left-[10px] z-[1000] w-[34px] h-[34px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[4px] shadow flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 cursor-pointer transition-all duration-200"
+          title="현재 위치로 이동"
+        >
+          <Locate className="w-4.5 h-4.5" />
+        </button>
+      )}
+
+      {/* 현지에서 내 주변 주의사항을 바로 확인하는 버튼 */}
+      {!isReportMode && (
+        <button
+          type="button"
+          onClick={handleLocateUser}
+          className={`absolute bottom-[84px] md:bottom-6 left-1/2 -translate-x-1/2 z-[1000] h-11 md:flex ${isMobileFeedOpen ? "hidden" : "flex"} items-center gap-2 whitespace-nowrap rounded-full bg-blue-600 px-5 text-sm font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95 cursor-pointer`}
+        >
+          <Navigation className="h-4 w-4" aria-hidden="true" />
+          내 주변 주의사항
+        </button>
+      )}
 
       {/* 지도 상단 퀵 필터 토글 칩 오버레이 🧭 */}
-      <div className="absolute top-[10px] left-[52px] z-[1000] flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg text-xs">
+      <div className={`absolute top-[60px] left-[10px] z-[1000] items-center gap-1.5 bg-slate-900/90 ${isReportMode ? "hidden" : "flex"} backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg text-xs`}>
         <button
           type="button"
           onClick={() => setFilterReportType("ALL")}
@@ -1256,7 +1297,7 @@ export default function ReadyBeforeGoMap() {
       {/* 범례 플로팅 카드 (Map Legend) 🗺️ */}
       <div className="absolute bottom-20 right-3 sm:bottom-4 sm:right-4 z-[1000] select-none">
         {isLegendOpen ? (
-          <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-[165px] animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs">
+          <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/10 text-slate-100 rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-[175px] animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs">
             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 마커 범례
@@ -1278,6 +1319,10 @@ export default function ReadyBeforeGoMap() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 border border-white/20 shrink-0 flex items-center justify-center text-[9px]">💡</div>
                 <span className="font-semibold text-slate-200">사전 꿀팁</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-purple-500/25 border border-dashed border-fuchsia-400 shrink-0"></div>
+                <span className="font-semibold text-slate-200">자주 나타나는 구역</span>
               </div>
             </div>
           </div>
