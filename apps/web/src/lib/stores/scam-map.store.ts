@@ -10,6 +10,8 @@ export interface NearbySearch {
 export interface SightingPick {
   scamId: string;
   title: string;
+  // 저장 전에 너무 먼 위치를 안내하기 위한 기준점. 나라 전체 주의사항은 없다
+  anchor: { center: [number, number]; maxDistanceM: number } | null;
 }
 
 interface ScamMapStore {

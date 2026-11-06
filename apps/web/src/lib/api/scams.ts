@@ -1,3 +1,4 @@
+import type { SightingDatePrecision } from '@community/shared-types';
 import { apiClient } from '../api-client';
 
 export interface Country {
@@ -41,6 +42,7 @@ export interface ScamSighting {
   latitude: number;
   longitude: number;
   seenOn: string;
+  seenPrecision: SightingDatePrecision;
 }
 
 export interface ScamInfo {

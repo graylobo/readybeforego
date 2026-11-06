@@ -14,6 +14,7 @@ import { formatExternalUrl } from "@/lib/utils/url";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
 import { findNearbyRegions, formatDistance, formatRadius, REGION_AREA_RADIUS_M, zoomForRadius } from "@/lib/nearby";
 import { PlaceSearch } from "@/components/map/place-search";
+import { SIGHTING_MAX_DISTANCE_FROM_CITY_M, SIGHTING_MAX_DISTANCE_FROM_REGION_M } from "@community/shared-types";
 import {
   CAUTION_CATEGORY_ITEMS,
   TIP_CATEGORY_ITEMS,
@@ -629,12 +630,26 @@ export default function Home() {
     }
     setFocusedScamId(scam.id);
     setExpandedScamIds((prev) => new Set(prev).add(scam.id));
+    // 현지에 없어도 고를 수 있도록 지도를 주의사항의 지역으로 옮긴다
     const region = allRegions.find((r) => r.id === scam.regionId);
+    const cityRegions = allRegions.filter((r) => r.cityId === scam.cityId);
+    let anchor: { center: [number, number]; maxDistanceM: number } | null = null;
     if (region) {
-      setMapCenter([region.latitude, region.longitude]);
+      anchor = { center: [region.latitude, region.longitude], maxDistanceM: SIGHTING_MAX_DISTANCE_FROM_REGION_M };
+      setMapCenter(anchor.center);
       setMapZoom(Math.max(mapZoom, 16));
+    } else if (scam.scope === "city" && cityRegions.length > 0) {
+      anchor = {
+        center: [
+          cityRegions.reduce((sum, r) => sum + r.latitude, 0) / cityRegions.length,
+          cityRegions.reduce((sum, r) => sum + r.longitude, 0) / cityRegions.length,
+        ],
+        maxDistanceM: SIGHTING_MAX_DISTANCE_FROM_CITY_M,
+      };
+      setMapCenter(anchor.center);
+      setMapZoom(13);
     }
-    setSightingPick({ scamId: scam.id, title: scam.title });
+    setSightingPick({ scamId: scam.id, title: scam.title, anchor });
   };
 
   const selectRegionFromFeed = (region: Region) => {

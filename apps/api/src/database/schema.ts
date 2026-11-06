@@ -751,6 +751,9 @@ export const scamInfoReactions = pgTable('scam_info_reactions', {
 }));
 
 // 사용자가 주의사항을 실제로 겪은 위치와 날짜. 공개되는 위치이므로 좌표는 약 100m 단위로 낮춰 저장한다
+// 뒤늦게 기록하면 정확한 날짜를 모를 수 있어, 날짜가 어느 정도로 정확한지 함께 저장한다
+export const sightingDatePrecisionEnum = pgEnum('sighting_date_precision', ['day', 'week', 'month']);
+
 export const scamSightings = pgTable('scam_sightings', {
   id: uuid('id').defaultRandom().primaryKey(),
   scamInfoId: uuid('scam_info_id')
@@ -762,6 +765,7 @@ export const scamSightings = pgTable('scam_sightings', {
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
   seenOn: date('seen_on').notNull(),
+  seenPrecision: sightingDatePrecisionEnum('seen_precision').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({

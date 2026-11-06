@@ -7,7 +7,8 @@ import { Region, ScamSighting, scamsApi } from "@/lib/api/scams";
 import { useScamMapStore } from "@/lib/stores/scam-map.store";
 import { getCountryName } from "@/lib/utils/country";
 import { NEARBY_LOCATION_THRESHOLD } from "@/lib/constants/map";
-import { findNearbyRegions, REGION_AREA_RADIUS_M, topCategoryIcons } from "@/lib/nearby";
+import { distanceMeters, findNearbyRegions, REGION_AREA_RADIUS_M, topCategoryIcons } from "@/lib/nearby";
+import { earlierMonthOptions, formatLocalDate, resolveSightingDate, SIGHTING_WHEN_OPTIONS, SightingWhen } from "@/lib/sighting-date";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -195,11 +196,6 @@ function SightingsFitHandler({ sightings, onFit }: { sightings: ScamSighting[]; 
   return null;
 }
 
-const todayLocalDate = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-};
-
 // 제보 모드 커서 제어 핸들러 (확대 전: 돋보기+, 확대 완료: 핀 아이콘)
 function MapCursorHandler({ active }: { active: boolean }) {
   const map = useMap();
@@ -319,7 +315,10 @@ export default function ReadyBeforeGoMap() {
   const [isMapGeocoding, setIsMapGeocoding] = useState(false);
   const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
   const [sightingCoords, setSightingCoords] = useState<[number, number] | null>(null);
-  const [sightingDate, setSightingDate] = useState(todayLocalDate);
+  const [sightingWhen, setSightingWhen] = useState<SightingWhen | null>(null);
+  const [sightingEarlierMonth, setSightingEarlierMonth] = useState("");
+  const [sightingExactDate, setSightingExactDate] = useState("");
+  const [sightingFarNotice, setSightingFarNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: sightings = [] } = useQuery<ScamSighting[]>({
@@ -341,11 +340,32 @@ export default function ReadyBeforeGoMap() {
     },
   });
 
-  // 새로 기록을 시작하면 이전에 고른 위치와 날짜를 비운다
+  // 새로 기록을 시작하면 이전에 고른 위치와 날짜를 비운다. 날짜에 기본값을 두지 않아 뒤늦은 기록이 오늘로 저장되지 않게 한다
   useEffect(() => {
     setSightingCoords(null);
-    setSightingDate(todayLocalDate());
+    setSightingWhen(null);
+    setSightingEarlierMonth("");
+    setSightingExactDate("");
+    setSightingFarNotice(null);
   }, [sightingPick]);
+
+  const resolvedSightingDate = resolveSightingDate(sightingWhen, {
+    earlierMonth: sightingEarlierMonth,
+    exactDate: sightingExactDate,
+  });
+
+  const isTooFarForSighting = (point: [number, number]) =>
+    !!sightingPick?.anchor && distanceMeters(sightingPick.anchor.center, point) > sightingPick.anchor.maxDistanceM;
+
+  const chooseSightingPoint = (point: [number, number]) => {
+    if (isTooFarForSighting(point)) {
+      setSightingCoords(null);
+      setSightingFarNotice("이 장소에서 너무 먼 위치예요. 실제로 겪은 곳 근처를 눌러 주세요.");
+      return;
+    }
+    setSightingFarNotice(null);
+    setSightingCoords(point);
+  };
 
   useEffect(() => {
     if (!sightingPick) return;
@@ -363,8 +383,16 @@ export default function ReadyBeforeGoMap() {
     }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setSightingCoords([coords.latitude, coords.longitude]);
-        setMapCenter([coords.latitude, coords.longitude]);
+        const point: [number, number] = [coords.latitude, coords.longitude];
+        // 여행에서 돌아와 기록하는 경우 지금 위치는 겪은 곳이 아니므로 지도를 옮기지 않고 안내만 한다
+        if (isTooFarForSighting(point)) {
+          setSightingCoords(null);
+          setSightingFarNotice("지금 계신 곳은 이 장소에서 멀어요. 지도에서 겪은 위치를 눌러 주세요.");
+          return;
+        }
+        setSightingFarNotice(null);
+        setSightingCoords(point);
+        setMapCenter(point);
         setMapZoom(16);
       },
       () => toast.error("현재 위치를 찾지 못했습니다. 지도에서 직접 눌러 주세요."),
@@ -662,7 +690,7 @@ export default function ReadyBeforeGoMap() {
   // 동적 클러스터 마커 클릭 핸들러
   const handleDynamicClusterClick = (cluster: any) => {
     if (sightingPick) {
-      setSightingCoords([cluster.latitude, cluster.longitude]);
+      chooseSightingPoint([cluster.latitude, cluster.longitude]);
       return;
     }
     if (isReportMode) {
@@ -729,7 +757,7 @@ export default function ReadyBeforeGoMap() {
   // 제보 모드 상태에서의 지도 클릭 핸들러
   const handleMapClick = (lat: number, lng: number, zoomVal: number) => {
     if (sightingPick) {
-      setSightingCoords([lat, lng]);
+      chooseSightingPoint([lat, lng]);
       return;
     }
     if (isReportMode) {
@@ -1261,22 +1289,61 @@ export default function ReadyBeforeGoMap() {
             </p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{sightingPick.title}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-semibold">
-              겪은 날
+          {sightingFarNotice && (
+            <p role="alert" className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+              {sightingFarNotice}
+            </p>
+          )}
+
+          <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer text-xs" onClick={pickCurrentLocationForSighting}>
+            <Locate className="h-3.5 w-3.5" aria-hidden="true" />
+            지금 현지에 있어요 (현재 위치)
+          </Button>
+
+          <fieldset className="space-y-1.5">
+            <legend className="text-xs font-semibold">언제 겪으셨나요?</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {SIGHTING_WHEN_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={sightingWhen === option.value}
+                  onClick={() => setSightingWhen(option.value)}
+                  className={`h-8 cursor-pointer rounded-full border px-2.5 text-xs font-semibold transition-colors ${
+                    sightingWhen === option.value
+                      ? "border-red-600 bg-red-600 text-white"
+                      : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {sightingWhen === "earlier" && (
+              <select
+                aria-label="겪은 달"
+                value={sightingEarlierMonth}
+                onChange={(event) => setSightingEarlierMonth(event.target.value)}
+                className="h-9 w-full cursor-pointer rounded-lg border border-border bg-background px-2 text-base md:text-xs"
+              >
+                <option value="">몇 월쯤인지 골라 주세요</option>
+                {earlierMonthOptions().map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            )}
+            {sightingWhen === "exact" && (
               <input
                 type="date"
-                value={sightingDate}
-                max={todayLocalDate()}
-                onChange={(event) => setSightingDate(event.target.value)}
-                className="h-8 rounded-lg border border-border bg-background px-2 text-base md:text-xs"
+                aria-label="겪은 날짜"
+                value={sightingExactDate}
+                max={formatLocalDate(new Date())}
+                onChange={(event) => setSightingExactDate(event.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-base md:text-xs"
               />
-            </label>
-            <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer text-xs" onClick={pickCurrentLocationForSighting}>
-              <Locate className="h-3.5 w-3.5" aria-hidden="true" />
-              현재 위치
-            </Button>
-          </div>
+            )}
+          </fieldset>
+
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">약 100m 단위의 위치와 날짜만 공개됩니다.</p>
             <div className="flex shrink-0 gap-1.5">
@@ -1286,13 +1353,13 @@ export default function ReadyBeforeGoMap() {
               <Button
                 type="button"
                 size="sm"
-                disabled={!sightingCoords || !sightingDate || saveSightingMutation.isPending}
+                disabled={!sightingCoords || !resolvedSightingDate || saveSightingMutation.isPending}
                 className="h-8 cursor-pointer bg-red-600 text-xs font-bold text-white hover:bg-red-700"
                 onClick={() => {
-                  if (!sightingCoords) return;
+                  if (!sightingCoords || !resolvedSightingDate) return;
                   saveSightingMutation.mutate({
                     scamId: sightingPick.scamId,
-                    sighting: { latitude: sightingCoords[0], longitude: sightingCoords[1], seenOn: sightingDate },
+                    sighting: { latitude: sightingCoords[0], longitude: sightingCoords[1], ...resolvedSightingDate },
                   });
                 }}
               >

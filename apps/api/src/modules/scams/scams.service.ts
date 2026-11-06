@@ -1,3 +1,8 @@
+import {
+  SIGHTING_MAX_DISTANCE_FROM_CITY_M,
+  SIGHTING_MAX_DISTANCE_FROM_REGION_M,
+  SightingDatePrecision,
+} from '@community/shared-types';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { ScamsRepository } from './scams.repository';
 import { getKoreanCountryName } from '@community/shared-types';
@@ -248,8 +253,6 @@ export class MapboxProvider implements GeocodingProvider {
 const SCAM_IMAGE_FOLDER = 'scams';
 
 const SIGHTING_FUTURE_MARGIN_MS = 24 * 60 * 60 * 1000;
-const SIGHTING_MAX_DISTANCE_FROM_REGION_M = 5000;
-const SIGHTING_MAX_DISTANCE_FROM_CITY_M = 50000;
 
 // 약 100m 단위. 공개되는 위치에서 개인의 정확한 동선이 드러나지 않게 한다
 const roundForPrivacy = (value: number) => Math.round(value * 1000) / 1000;
@@ -597,7 +600,7 @@ export class ScamsService {
   async saveSighting(
     scamInfoId: string,
     userId: string,
-    data: { latitude: number; longitude: number; seenOn: string },
+    data: { latitude: number; longitude: number; seenOn: string; seenPrecision: SightingDatePrecision },
   ) {
     const scam = await this.scamsRepository.findById(scamInfoId);
     if (!scam || scam.deletedAt) {
@@ -609,7 +612,16 @@ export class ScamsService {
 
     // 사용자 시간대가 서버보다 앞설 수 있어 하루의 여유를 둔다
     const seenAt = new Date(`${data.seenOn}T00:00:00Z`);
-    if (Number.isNaN(seenAt.getTime()) || seenAt.getTime() > Date.now() + SIGHTING_FUTURE_MARGIN_MS) {
+    const isRealDate = !Number.isNaN(seenAt.getTime()) && seenAt.toISOString().slice(0, 10) === data.seenOn;
+    if (!isRealDate || seenAt.getTime() > Date.now() + SIGHTING_FUTURE_MARGIN_MS) {
+      throw new BadRequestException('겪은 날짜를 다시 확인해 주세요.');
+    }
+    // seenOn은 정밀도에 맞는 기간의 첫날이어야 나중에 기간을 일관되게 계산할 수 있다
+    const isPeriodStart =
+      data.seenPrecision === 'day' ||
+      (data.seenPrecision === 'week' && seenAt.getUTCDay() === 1) ||
+      (data.seenPrecision === 'month' && seenAt.getUTCDate() === 1);
+    if (!isPeriodStart) {
       throw new BadRequestException('겪은 날짜를 다시 확인해 주세요.');
     }
 
@@ -624,6 +636,7 @@ export class ScamsService {
       latitude: roundForPrivacy(data.latitude),
       longitude: roundForPrivacy(data.longitude),
       seenOn: data.seenOn,
+      seenPrecision: data.seenPrecision,
     });
     return this.scamsRepository.findSightings(scamInfoId);
   }

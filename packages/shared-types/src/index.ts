@@ -17,3 +17,4 @@ export * from './chat';
 export * from './chat-utils';
 export * from './realtime';
 export * from './crawler';
+export * from './sighting';

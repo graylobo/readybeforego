@@ -31,53 +31,69 @@ describe('겪은 위치 기록', () => {
 
   it('좌표를 약 100m 단위로 낮춰 저장한다', async () => {
     const { service, repository } = createService(regionScam);
-    await service.saveSighting(scamId, 'user-1', { latitude: 13.75934, longitude: 100.49756, seenOn: today });
+    await service.saveSighting(scamId, 'user-1', { latitude: 13.75934, longitude: 100.49756, seenOn: today, seenPrecision: 'day' });
     expect(repository.upsertSighting).toHaveBeenCalledWith(
-      expect.objectContaining({ scamInfoId: scamId, userId: 'user-1', latitude: 13.759, longitude: 100.498, seenOn: today }),
+      expect.objectContaining({ scamInfoId: scamId, userId: 'user-1', latitude: 13.759, longitude: 100.498, seenOn: today, seenPrecision: 'day' }),
     );
   });
 
   it('구역에서 5km보다 먼 위치는 거절한다', async () => {
     const { service, repository } = createService(regionScam);
     await expect(
-      service.saveSighting(scamId, 'user-1', { latitude: 13.9, longitude: 100.4972, seenOn: today }),
+      service.saveSighting(scamId, 'user-1', { latitude: 13.9, longitude: 100.4972, seenOn: today, seenPrecision: 'day' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(repository.upsertSighting).not.toHaveBeenCalled();
   });
 
   it('도시 전체 주의사항은 도시에서 50km까지 받는다', async () => {
     const { service, repository } = createService({ ...regionScam, regionId: null, cityId: 'city-1' });
-    await service.saveSighting(scamId, 'user-1', { latitude: 13.9, longitude: 100.5018, seenOn: today });
+    await service.saveSighting(scamId, 'user-1', { latitude: 13.9, longitude: 100.5018, seenOn: today, seenPrecision: 'day' });
     expect(repository.upsertSighting).toHaveBeenCalled();
     await expect(
-      service.saveSighting(scamId, 'user-1', { latitude: 15, longitude: 100.5018, seenOn: today }),
+      service.saveSighting(scamId, 'user-1', { latitude: 15, longitude: 100.5018, seenOn: today, seenPrecision: 'day' }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('나라 전체 주의사항은 거리를 제한하지 않는다', async () => {
     const { service, repository } = createService({ ...regionScam, regionId: null, cityId: null, countryCode: 'TH' });
-    await service.saveSighting(scamId, 'user-1', { latitude: 7.88, longitude: 98.39, seenOn: today });
+    await service.saveSighting(scamId, 'user-1', { latitude: 7.88, longitude: 98.39, seenOn: today, seenPrecision: 'day' });
     expect(repository.upsertSighting).toHaveBeenCalled();
   });
 
   it('미래 날짜와 없는 날짜를 거절한다', async () => {
     const { service } = createService(regionScam);
-    for (const seenOn of ['2999-01-01', '2026-13-45']) {
+    for (const seenOn of ['2999-01-01', '2026-13-45', '2026-02-30']) {
       await expect(
-        service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn }),
+        service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn, seenPrecision: 'day' }),
       ).rejects.toBeInstanceOf(BadRequestException);
     }
   });
 
-  it('꿀팁과 삭제된 제보에는 기록할 수 없다', async () => {
+  it('정밀도를 함께 저장하고, 기간의 첫날만 받는다', async () => {
+    const { service, repository } = createService(regionScam);
+    await service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: '2024-03-01', seenPrecision: 'month' });
+    expect(repository.upsertSighting).toHaveBeenCalledWith(
+      expect.objectContaining({ seenOn: '2024-03-01', seenPrecision: 'month' }),
+    );
+    // 2024-03-04는 월요일, 2024-03-05는 화요일
+    await service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: '2024-03-04', seenPrecision: 'week' });
     await expect(
-      createService({ ...regionScam, reportType: 'TIP' }).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today }),
+      service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: '2024-03-05', seenPrecision: 'week' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      createService({ ...regionScam, deletedAt: new Date() }).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today }),
+      service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: '2024-03-15', seenPrecision: 'month' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('꿀팁과 삭제된 제보에는 기록할 수 없다', async () => {
+    await expect(
+      createService({ ...regionScam, reportType: 'TIP' }).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today, seenPrecision: 'day' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      createService({ ...regionScam, deletedAt: new Date() }).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today, seenPrecision: 'day' }),
     ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
-      createService(null).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today }),
+      createService(null).service.saveSighting(scamId, 'user-1', { ...KHAOSAN, seenOn: today, seenPrecision: 'day' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 

@@ -1,6 +1,6 @@
 import { createZodDto } from '@anatine/zod-nestjs';
 import { z } from 'zod';
-import { SCAM_MAX_IMAGE_COUNT } from '@community/shared-types';
+import { SCAM_MAX_IMAGE_COUNT, SIGHTING_DATE_PRECISIONS } from '@community/shared-types';
 
 export const CreateScamInfoBaseSchema = z.object({
   regionId: z.string().optional(),
@@ -104,6 +104,7 @@ export const SaveScamSightingSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   seenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜 형식이 올바르지 않습니다.'),
+  seenPrecision: z.enum(SIGHTING_DATE_PRECISIONS),
 });
 export class SaveScamSightingZodDto extends createZodDto(SaveScamSightingSchema) {}
 

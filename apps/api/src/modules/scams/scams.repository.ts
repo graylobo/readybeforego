@@ -132,6 +132,7 @@ export class ScamsRepository {
       latitude: schema.scamSightings.latitude,
       longitude: schema.scamSightings.longitude,
       seenOn: schema.scamSightings.seenOn,
+      seenPrecision: schema.scamSightings.seenPrecision,
     })
     .from(schema.scamSightings)
     .where(eq(schema.scamSightings.scamInfoId, scamInfoId))
@@ -149,6 +150,7 @@ export class ScamsRepository {
           latitude: data.latitude,
           longitude: data.longitude,
           seenOn: data.seenOn,
+          seenPrecision: data.seenPrecision,
           updatedAt: new Date(),
         },
       });
